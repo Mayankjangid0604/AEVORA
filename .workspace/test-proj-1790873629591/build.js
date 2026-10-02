@@ -1,0 +1,1 @@
+require('fs').writeFileSync('dist.bin', 'Mock Artifact'); console.log('Build done');

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Hotel App Core</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Grand Hotel</h1>
+    <nav>
+      <button onclick="showTab('booking')">Bookings</button>
+      <button onclick="showTab('guests')">Guests</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="booking-tab">
+      <h2>Room Booking</h2>
+      <form id="booking-form">
+        <input type="text" id="guest-name" placeholder="Guest Name" required>
+        <select id="room-type">
+          <option value="Single">Single Room ($100)</option>
+          <option value="Double">Double Room ($150)</option>
+          <option value="Suite">Suite ($250)</option>
+        </select>
+        <button type="submit">Book Room</button>
+      </form>
+      <h3>Current Bookings</h3>
+      <ul id="booking-list"></ul>
+    </section>
+
+    <section id="guests-tab" style="display:none;">
+      <h2>Guest Management</h2>
+      <ul id="guest-list"></ul>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

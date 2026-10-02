@@ -1,0 +1,44 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "aevora-api-local-safe",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/dev-api-safe.js"
+      ],
+      "port": 13000
+    },
+    {
+      "name": "aevora-api",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "turbo",
+        "run",
+        "dev",
+        "--filter=@aevora/api"
+      ],
+      "port": 13000
+    },
+    {
+      "name": "aevora-api-safe",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "cd apps\\api && set SALES_AUTO_PROCESS=false&& set ENABLE_REAL_PRODUCTION_SENDING=false&& npm run dev"
+      ],
+      "port": 13000
+    },
+    {
+      "name": "aevora-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "turbo",
+        "run",
+        "dev",
+        "--filter=@aevora/web"
+      ],
+      "port": 3001
+    }
+  ]
+}

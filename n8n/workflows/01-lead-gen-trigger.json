@@ -1,0 +1,214 @@
+{
+  "name": "AEVORA Lead Gen Trigger",
+  "nodes": [
+    {
+      "id": "trigger-manual",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "position": [240, 300],
+      "parameters": {},
+      "typeVersion": 1
+    },
+    {
+      "id": "trigger-schedule",
+      "name": "Schedule (Every 4 Hours)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [240, 500],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 4
+            }
+          ]
+        }
+      },
+      "typeVersion": 1.2
+    },
+    {
+      "id": "http-trigger",
+      "name": "Trigger AEVORA Lead Gen",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [520, 400],
+      "parameters": {
+        "url": "={{ $env.AEVORA_API_URL }}/lead-gen/trigger",
+        "method": "POST",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-integration-key",
+              "value": "={{ $env.AEVORA_INTEGRATION_KEY }}"
+            },
+            {
+              "name": "x-company-id",
+              "value": "={{ $env.AEVORA_COMPANY_ID }}"
+            }
+          ]
+        },
+        "sendBody": false,
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "typeVersion": 4.2,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "success-output",
+      "name": "Lead Gen Completed",
+      "type": "n8n-nodes-base.set",
+      "position": [800, 340],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "status",
+              "name": "status",
+              "type": "string",
+              "value": "success"
+            },
+            {
+              "id": "runId",
+              "name": "runId",
+              "type": "string",
+              "value": "={{ $json.body.id }}"
+            },
+            {
+              "id": "totalFound",
+              "name": "totalFound",
+              "type": "number",
+              "value": "={{ $json.body.totalFound }}"
+            },
+            {
+              "id": "totalNew",
+              "name": "totalNew",
+              "type": "number",
+              "value": "={{ $json.body.totalNew }}"
+            },
+            {
+              "id": "triggeredAt",
+              "name": "triggeredAt",
+              "type": "string",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "error-output",
+      "name": "Lead Gen Failed",
+      "type": "n8n-nodes-base.set",
+      "position": [800, 520],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "status",
+              "name": "status",
+              "type": "string",
+              "value": "error"
+            },
+            {
+              "id": "httpStatus",
+              "name": "httpStatus",
+              "type": "number",
+              "value": "={{ $json.statusCode }}"
+            },
+            {
+              "id": "errorMessage",
+              "name": "errorMessage",
+              "type": "string",
+              "value": "={{ $json.body?.message ?? $json.statusMessage ?? 'Unknown error' }}"
+            },
+            {
+              "id": "failedAt",
+              "name": "failedAt",
+              "type": "string",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "sticky-info",
+      "name": "Workflow Info",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [40, 220],
+      "parameters": {
+        "color": 5,
+        "width": 900,
+        "height": 400,
+        "content": "# AEVORA Lead Gen Trigger (Template #1)\n\nThis workflow triggers AEVORA's built-in lead generation.\nAEVORA handles: Google Places API, scoring, dedup, storage, safety.\n\n## Required n8n environment variables\n- `AEVORA_API_URL` — e.g. http://localhost:3000 or https://api.aevora.example\n- `AEVORA_INTEGRATION_KEY` — generate with: openssl rand -hex 32\n- `AEVORA_COMPANY_ID` — your AEVORA company UUID\n\n## Safety\n- No emails are sent by this workflow.\n- AEVORA's kill switches, safe mode, and demo email protection apply.\n- The integration key is read from env vars, never embedded in the workflow."
+      },
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Trigger AEVORA Lead Gen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule (Every 4 Hours)": {
+      "main": [
+        [
+          {
+            "node": "Trigger AEVORA Lead Gen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger AEVORA Lead Gen": {
+      "main": [
+        [
+          {
+            "node": "Lead Gen Completed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lead Gen Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "AEVORA"
+    },
+    {
+      "name": "lead-gen"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "name": "aevora",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "npm@9.5.1",
+  "workspaces": [
+    "apps/web",
+    "apps/api",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "db:migrate": "node scripts/db-migrate.js",
+    "db:local:setup": "node scripts/db-local-setup.js",
+    "db:seed": "npx ts-node -P packages/database/tsconfig.json packages/database/prisma/seed.ts",
+    "set-chairman-password": "node packages/database/update-chairman-password.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "imap": "^0.8.19",
+    "kokoro": "^1.0.0",
+    "mailparser": "^3.9.28",
+    "pg": "^8.23.0"
+  }
+}

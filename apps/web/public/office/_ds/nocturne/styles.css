@@ -1,0 +1,32 @@
+/* Minimal "Nocturne" design-system subset used by Aevora_Office_3D_v3.html (tokens + card/btn/field/input/tag). */
+:root {
+  --color-bg: #161826;
+  --color-surface: #1f2233;
+  --color-text: #eef0f8;
+  --color-divider: rgba(255, 255, 255, 0.14);
+  --color-neutral-200: #c9ccd8;
+  --color-neutral-300: #a3a7b8;
+  --color-accent-200: #c7c4ff;
+  --color-accent-300: #a5a0ff;
+  --color-accent-500: #6366f1;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --radius-md: 8px;
+  --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+body { font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--color-text); }
+.card { padding: var(--space-3); border: 1px solid var(--color-divider); border-radius: var(--radius-md); display: grid; gap: var(--space-2); }
+.card-kicker { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-accent-300); }
+.card-title { font-size: 14px; font-weight: 600; }
+.btn { font: inherit; font-size: 12px; font-weight: 500; padding: 6px 10px; border-radius: 6px; cursor: pointer; border: 1px solid var(--color-divider); }
+.btn-primary { background: var(--color-accent-500); border-color: var(--color-accent-500); color: #fff; }
+.btn-secondary { background: transparent; color: var(--color-text); }
+.btn:focus-visible, .input:focus-visible { outline: 2px solid var(--color-accent-300); outline-offset: 1px; }
+.field { display: grid; gap: var(--space-1); }
+.field label { font-size: 11px; color: var(--color-neutral-300); }
+.input { font: inherit; font-size: 12px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--color-divider); background: var(--color-bg); color: var(--color-text); }
+.tag { align-items: center; padding: 4px 12px; border-radius: 999px; font-weight: 500; }
+.tag-accent { background: color-mix(in srgb, var(--color-accent-500) 30%, var(--color-surface)); color: var(--color-text); border: 1px solid var(--color-accent-500); }

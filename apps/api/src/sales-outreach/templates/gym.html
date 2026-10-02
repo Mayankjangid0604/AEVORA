@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{{BUSINESS_NAME}} — Premium Gym</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--primary:#FF5722;--bg:#FFF8F5;--dark:#1A1A1A;--card:#fff;--gray:#666;--light-gray:#f5f5f5;--shadow:0 4px 20px rgba(0,0,0,.08)}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',sans-serif;color:var(--dark);background:var(--bg);line-height:1.6}
+h1,h2,h3,h4{font-family:'Poppins',sans-serif;font-weight:700}
+a{text-decoration:none;color:inherit}
+img{max-width:100%;display:block}
+.container{max-width:1100px;margin:0 auto;padding:0 20px}
+
+/* NAV */
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(26,26,26,.95);backdrop-filter:blur(8px);transition:all .3s}
+.nav.scrolled{background:#1A1A1A;box-shadow:0 2px 20px rgba(0,0,0,.3)}
+.nav-inner{display:flex;justify-content:space-between;align-items:center;padding:.9rem 20px;max-width:1100px;margin:0 auto}
+.nav-logo{font-family:'Poppins',sans-serif;font-weight:800;font-size:1.3rem;color:#fff}
+.nav-logo span{color:var(--primary)}
+.nav-links{display:flex;gap:1.5rem;list-style:none;align-items:center}
+.nav-links a{color:rgba(255,255,255,.8);font-size:.85rem;font-weight:500;transition:color .2s}
+.nav-links a:hover{color:var(--primary)}
+.nav-cta{background:var(--primary);color:#fff!important;padding:.5rem 1.2rem;border-radius:25px;font-weight:600;font-size:.85rem}
+.nav-cta:hover{background:#E64A19}
+.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;background:none;border:none}
+.hamburger span{width:24px;height:2px;background:#fff;transition:.3s}
+
+/* HERO */
+.hero{position:relative;min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden}
+.hero-bg{position:absolute;inset:0;background:url('https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1400&q=80') center/cover no-repeat}
+.hero-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(26,26,26,.7),rgba(26,26,26,.5))}
+.hero-content{position:relative;z-index:2;color:#fff;padding:0 20px}
+.hero h1{font-size:clamp(2.2rem,6vw,4rem);font-weight:800;line-height:1.1;margin-bottom:1rem}
+.hero h1 span{color:var(--primary)}
+.hero p{font-size:clamp(1rem,2vw,1.2rem);max-width:550px;margin:0 auto 2rem;opacity:.9;font-weight:300}
+.hero-btns{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:.5rem;font-family:'Poppins',sans-serif;font-weight:600;font-size:.95rem;padding:.85rem 2rem;border-radius:30px;border:none;cursor:pointer;transition:all .3s}
+.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:#E64A19;transform:translateY(-2px)}
+.btn-outline{background:transparent;color:#fff;border:2px solid #fff}.btn-outline:hover{background:#fff;color:var(--dark)}
+.btn-wa{background:#25D366;color:#fff}.btn-wa:hover{background:#20BD5A;transform:translateY(-2px)}
+
+/* STATS */
+.stats{background:#fff;padding:3rem 0;border-bottom:1px solid #eee}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;text-align:center}
+.stat-num{font-family:'Poppins',sans-serif;font-size:clamp(1.8rem,4vw,2.8rem);font-weight:800;color:var(--primary)}
+.stat-label{font-size:.85rem;color:var(--gray);text-transform:uppercase;letter-spacing:.1em;font-weight:500}
+
+/* SECTIONS */
+.section{padding:5rem 0}
+.section-tag{font-family:'Poppins',sans-serif;font-size:.75rem;text-transform:uppercase;letter-spacing:.15em;color:var(--primary);font-weight:600;margin-bottom:.5rem}
+.section-title{font-size:clamp(1.6rem,3.5vw,2.2rem);margin-bottom:.5rem}
+.section-sub{color:var(--gray);max-width:500px;margin-bottom:2.5rem}
+.section-header{text-align:center}.section-header .section-sub{margin-left:auto;margin-right:auto}
+
+/* ABOUT */
+.about-grid{display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center}
+.about-img{border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.about-img img{width:100%;height:350px;object-fit:cover}
+.about-text p{color:var(--gray);margin-bottom:1rem}
+.about-features{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-top:1.5rem}
+.about-feat{display:flex;align-items:center;gap:.5rem;font-size:.9rem;font-weight:500}
+.about-feat::before{content:'✓';display:flex;align-items:center;justify-content:center;width:22px;height:22px;background:var(--primary);color:#fff;border-radius:50%;font-size:.7rem;flex-shrink:0}
+
+/* SERVICES */
+.services-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.2rem}
+.service-card{background:var(--card);border-radius:12px;padding:2rem;box-shadow:var(--shadow);transition:transform .3s,box-shadow .3s}
+.service-card:hover{transform:translateY(-4px);box-shadow:0 8px 30px rgba(0,0,0,.12)}
+.service-icon{width:50px;height:50px;background:rgba(255,87,34,.1);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin-bottom:1rem}
+.service-card h3{font-size:1.05rem;margin-bottom:.4rem}
+.service-card p{font-size:.88rem;color:var(--gray)}
+
+/* PRICING */
+.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem}
+.price-card{background:var(--card);border-radius:16px;padding:2.5rem 2rem;text-align:center;box-shadow:var(--shadow);position:relative;transition:transform .3s}
+.price-card:hover{transform:translateY(-4px)}
+.price-card.featured{border:2px solid var(--primary);transform:scale(1.03)}
+.price-card.featured:hover{transform:scale(1.03) translateY(-4px)}
+.price-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--primary);color:#fff;font-family:'Poppins',sans-serif;font-size:.7rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:.35rem 1.2rem;border-radius:20px}
+.price-name{font-size:.85rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gray);margin-bottom:.8rem;font-weight:600}
+.price-amount{font-family:'Poppins',sans-serif;font-size:2.8rem;font-weight:800;line-height:1}
+.price-amount sup{font-size:1rem;font-weight:600;vertical-align:super}
+.price-period{font-size:.85rem;color:var(--gray);margin-bottom:1.5rem}
+.price-list{list-style:none;text-align:left;margin-bottom:2rem}
+.price-list li{padding:.45rem 0;font-size:.9rem;color:var(--gray);display:flex;align-items:center;gap:.6rem}
+.price-list li::before{content:'✓';color:var(--primary);font-weight:700;font-size:.8rem}
+.price-btn{width:100%;padding:.8rem;border-radius:25px;font-family:'Poppins',sans-serif;font-weight:600;font-size:.9rem;border:2px solid var(--primary);background:transparent;color:var(--primary);cursor:pointer;transition:all .3s}
+.price-btn:hover,.price-card.featured .price-btn{background:var(--primary);color:#fff}
+
+/* TRAINERS */
+.trainers-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem}
+.trainer-card{background:var(--card);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.trainer-card img{width:100%;height:280px;object-fit:cover}
+.trainer-info{padding:1.5rem;text-align:center}
+.trainer-info h3{font-size:1.1rem;margin-bottom:.2rem}
+.trainer-info .role{color:var(--primary);font-size:.85rem;font-weight:600;margin-bottom:.5rem}
+.trainer-info p{font-size:.85rem;color:var(--gray)}
+
+/* TESTIMONIALS */
+.testimonials{background:#fff}
+.test-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem}
+.test-card{background:var(--bg);border-radius:12px;padding:2rem}
+.test-stars{color:#FFC107;font-size:1rem;margin-bottom:.8rem;letter-spacing:2px}
+.test-card blockquote{font-size:.92rem;color:var(--gray);font-style:italic;margin-bottom:1rem;line-height:1.7}
+.test-author{display:flex;align-items:center;gap:.8rem}
+.test-avatar{width:42px;height:42px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Poppins',sans-serif;font-weight:700;font-size:.9rem}
+.test-name{font-weight:600;font-size:.9rem}
+.test-detail{font-size:.78rem;color:var(--gray)}
+
+/* GALLERY */
+.gallery-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem}
+.gallery-grid img{width:100%;height:220px;object-fit:cover;border-radius:10px;transition:transform .3s}
+.gallery-grid img:hover{transform:scale(1.03)}
+
+/* TIMINGS */
+.timings-table{background:var(--card);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);max-width:600px;margin:0 auto}
+.timings-table table{width:100%;border-collapse:collapse}
+.timings-table th,.timings-table td{padding:.9rem 1.5rem;text-align:left;font-size:.9rem}
+.timings-table th{background:var(--primary);color:#fff;font-family:'Poppins',sans-serif;font-weight:600}
+.timings-table tr:nth-child(even){background:var(--bg)}
+.timings-table td:last-child{font-weight:600}
+
+/* FAQ */
+.faq-list{max-width:700px;margin:0 auto}
+.faq-item{background:var(--card);border-radius:10px;margin-bottom:.8rem;box-shadow:0 2px 8px rgba(0,0,0,.04);overflow:hidden}
+.faq-q{padding:1.2rem 1.5rem;font-family:'Poppins',sans-serif;font-weight:600;font-size:.95rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}
+.faq-q::after{content:'+';font-size:1.3rem;color:var(--primary);transition:transform .3s}
+.faq-item.open .faq-q::after{transform:rotate(45deg)}
+.faq-a{max-height:0;overflow:hidden;transition:max-height .3s;padding:0 1.5rem}
+.faq-item.open .faq-a{max-height:200px;padding:0 1.5rem 1.2rem}
+.faq-a p{font-size:.88rem;color:var(--gray);line-height:1.7}
+
+/* CONTACT */
+.contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:start}
+.contact-info{display:flex;flex-direction:column;gap:1rem}
+.contact-item{display:flex;gap:1rem;align-items:flex-start}
+.contact-icon{width:42px;height:42px;background:rgba(255,87,34,.1);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0}
+.contact-item h4{font-size:.9rem;margin-bottom:.15rem}
+.contact-item p{font-size:.85rem;color:var(--gray)}
+.map-wrap{border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.map-wrap iframe{width:100%;height:300px;border:0}
+
+/* FOOTER */
+footer{background:var(--dark);color:rgba(255,255,255,.7);padding:3rem 0 1.5rem}
+.footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:2rem;margin-bottom:2rem}
+.footer-brand{font-family:'Poppins',sans-serif;font-weight:800;font-size:1.2rem;color:#fff;margin-bottom:.5rem}
+.footer-brand span{color:var(--primary)}
+footer p{font-size:.85rem;line-height:1.6}
+footer h4{color:#fff;font-size:.9rem;margin-bottom:.8rem;text-transform:uppercase;letter-spacing:.08em}
+.footer-links{list-style:none;display:flex;flex-direction:column;gap:.4rem}
+.footer-links a{font-size:.85rem;opacity:.7;transition:opacity .2s}.footer-links a:hover{opacity:1;color:var(--primary)}
+.footer-copy{text-align:center;font-size:.78rem;border-top:1px solid rgba(255,255,255,.1);padding-top:1.5rem}
+
+/* WA FLOAT */
+.wa-float{position:fixed;bottom:24px;right:24px;z-index:99;width:56px;height:56px;background:#25D366;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 15px rgba(37,211,102,.4);transition:transform .3s;cursor:pointer;text-decoration:none}
+.wa-float:hover{transform:scale(1.1)}
+.wa-float svg{width:28px;height:28px;fill:#fff}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .nav-links{display:none;position:absolute;top:100%;left:0;right:0;background:var(--dark);flex-direction:column;padding:1rem 20px;gap:.8rem}
+  .nav-links.open{display:flex}
+  .hamburger{display:flex}
+  .about-grid,.contact-grid{grid-template-columns:1fr}
+  .gallery-grid{grid-template-columns:repeat(2,1fr)}
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:1.5rem}
+  .footer-grid{grid-template-columns:1fr}
+  .about-features{grid-template-columns:1fr}
+  .price-card.featured{transform:none}
+}
+</style></head><body>
+
+<!-- NAV -->
+<nav class="nav" id="nav">
+<div class="nav-inner">
+  <a href="#" class="nav-logo">Royal <span>Fitness</span></a>
+  <button class="hamburger" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+  <ul class="nav-links">
+    <li><a href="#about">About</a></li>
+    <li><a href="#services">Programs</a></li>
+    <li><a href="#pricing">Pricing</a></li>
+    <li><a href="#trainers">Trainers</a></li>
+    <li><a href="#gallery">Gallery</a></li>
+    <li><a href="#contact">Contact</a></li>
+    <li><a href="#pricing" class="nav-cta">Join Now</a></li>
+  </ul>
+</div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+<div class="hero-bg"></div>
+<div class="hero-content">
+  <h1>Transform Your Body.<br>Transform Your <span>Life.</span></h1>
+  <p>Sikar's most trusted fitness destination — expert trainers, modern equipment, and a community that keeps you going.</p>
+  <div class="hero-btns">
+    <a href="#pricing" class="btn btn-primary">Start Your Journey</a>
+    <a href="https://wa.me/91{{PHONE}}?text=Hi%2C%20I%20want%20to%20know%20about%20gym%20membership" class="btn btn-wa">💬 WhatsApp Us</a>
+  </div>
+</div>
+</section>
+
+<!-- STATS -->
+<section class="stats">
+<div class="container">
+  <div class="stats-grid">
+    <div><div class="stat-num" data-target="500">0</div><div class="stat-label">Members</div></div>
+    <div><div class="stat-num" data-target="5">0</div><div class="stat-label">Expert Trainers</div></div>
+    <div><div class="stat-num" data-target="3">0</div><div class="stat-label">Years Running</div></div>
+    <div><div class="stat-num" data-target="50">0</div><div class="stat-label">Equipment</div></div>
+  </div>
+</div>
+</section>
+
+<!-- ABOUT -->
+<section class="section" id="about">
+<div class="container">
+  <div class="about-grid">
+    <div>
+      <div class="section-tag">About Us</div>
+      <h2 class="section-title">More Than a Gym — A Fitness Family</h2>
+      <div class="about-text">
+        <p>{{BUSINESS_NAME}} has been Sikar's go-to training ground for over 3 years. We started with a simple belief: everyone deserves access to quality fitness training, regardless of experience level.</p>
+        <p>Our 3,000 sq. ft. facility is equipped with the latest machines and free weights. Whether you're here to lose weight, build muscle, or just stay active — we've got you covered.</p>
+      </div>
+      <div class="about-features">
+        <div class="about-feat">AC Training Floor</div>
+        <div class="about-feat">Separate Ladies Section</div>
+        <div class="about-feat">Diet Consultation</div>
+        <div class="about-feat">Free Parking</div>
+      </div>
+    </div>
+    <div class="about-img">
+      <img src="https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=600&q=80" alt="{{BUSINESS_NAME}} Interior" loading="lazy">
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- SERVICES -->
+<section class="section" id="services" style="background:#fff">
+<div class="container">
+  <div class="section-header">
+    <div class="section-tag">Our Programs</div>
+    <h2 class="section-title">Training Programs for Every Goal</h2>
+    <p class="section-sub">From weight loss to bodybuilding — pick a program or let our trainers build one for you.</p>
+  </div>
+  <div class="services-grid">
+    <div class="service-card"><div class="service-icon">🏋️</div><h3>Weight Training</h3><p>Dumbbells, barbells, cable machines and power racks for serious strength building.</p></div>
+    <div class="service-card"><div class="service-icon">🏃</div><h3>Cardio Zone</h3><p>Treadmills, cross trainers, cycling and rowing machines for endurance and fat burn.</p></div>
+    <div class="service-card"><div class="service-icon">🧘</div><h3>Yoga & Stretching</h3><p>Morning yoga batches for flexibility, stress relief and mind-body connection.</p></div>
+    <div class="service-card"><div class="service-icon">💃</div><h3>Zumba</h3><p>High-energy dance fitness classes — perfect for those who hate boring cardio.</p></div>
+    <div class="service-card"><div class="service-icon">🎯</div><h3>Personal Training</h3><p>One-on-one sessions with certified trainers — custom plans, form correction, accountability.</p></div>
+    <div class="service-card"><div class="service-icon">🥗</div><h3>Diet Consultation</h3><p>Personalised meal plans based on your body type, goals and food preferences.</p></div>
+  </div>
+</div>
+</section>
+
+<!-- PRICING -->
+<section class="section" id="pricing">
+<div class="container">
+  <div class="section-header">
+    <div class="section-tag">Membership</div>
+    <h2 class="section-title">Simple, Transparent Pricing</h2>
+    <p class="section-sub">No hidden fees. No long contracts. Start training today.</p>
+  </div>
+  <div class="pricing-grid">
+    <div class="price-card">
+      <div class="price-name">Basic</div>
+      <div class="price-amount"><sup>₹</sup>500</div>
+      <div class="price-period">per month</div>
+      <ul class="price-list">
+        <li>Full gym floor access</li>
+        <li>Locker room & showers</li>
+        <li>Open all gym hours</li>
+        <li>Basic exercise guidance</li>
+      </ul>
+      <a href="https://wa.me/91{{PHONE}}?text=Hi%2C%20interested%20in%20Basic%20plan%20₹500/month" class="price-btn">Get Started</a>
+    </div>
+    <div class="price-card featured">
+      <div class="price-badge">Most Popular</div>
+      <div class="price-name">Premium</div>
+      <div class="price-amount"><sup>₹</sup>800</div>
+      <div class="price-period">per month</div>
+      <ul class="price-list">
+        <li>Everything in Basic</li>
+        <li>Group classes (Yoga, Zumba)</li>
+        <li>Monthly body assessment</li>
+        <li>Diet plan template</li>
+        <li>Priority equipment access</li>
+      </ul>
+      <a href="https://wa.me/91{{PHONE}}?text=Hi%2C%20interested%20in%20Premium%20plan%20₹800/month" class="price-btn">Get Started</a>
+    </div>
+    <div class="price-card">
+      <div class="price-name">Annual</div>
+      <div class="price-amount"><sup>₹</sup>8,000</div>
+      <div class="price-period">per year (save ₹1,600)</div>
+      <ul class="price-list">
+        <li>Everything in Premium</li>
+        <li>2 personal training sessions/month</li>
+        <li>Custom meal plan</li>
+        <li>Free gym merchandise</li>
+        <li>Guest pass (1/month)</li>
+      </ul>
+      <a href="https://wa.me/91{{PHONE}}?text=Hi%2C%20interested%20in%20Annual%20plan%20₹8000/year" class="price-btn">Get Started</a>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- TRAINERS -->
+<section class="section" id="trainers" style="background:#fff">
+<div class="container">
+  <div class="section-header">
+    <div class="section-tag">Our Team</div>
+    <h2 class="section-title">Meet Your Trainers</h2>
+    <p class="section-sub">Certified professionals who push you to be your best — safely.</p>
+  </div>
+  <div class="trainers-grid">
+    <div class="trainer-card">
+      <img src="https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=500&q=80" alt="Trainer Rajesh" loading="lazy">
+      <div class="trainer-info">
+        <h3>Rajesh Shekhawat</h3>
+        <div class="role">Head Trainer — Strength & Conditioning</div>
+        <p>8+ years experience. ISSA certified. Specialises in weight training and body transformation programs.</p>
+      </div>
+    </div>
+    <div class="trainer-card">
+      <img src="https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=500&q=80" alt="Trainer Priya" loading="lazy">
+      <div class="trainer-info">
+        <h3>Priya Kumari</h3>
+        <div class="role">Yoga & Group Fitness Instructor</div>
+        <p>5+ years experience. Certified yoga instructor. Leads Zumba, yoga and flexibility batches.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="section testimonials">
+<div class="container">
+  <div class="section-header">
+    <div class="section-tag">Testimonials</div>
+    <h2 class="section-title">What Our Members Say</h2>
+    <p class="section-sub">Real results from real people in Sikar.</p>
+  </div>
+  <div class="test-grid">
+    <div class="test-card">
+      <div class="test-stars">★★★★★</div>
+      <blockquote>"I lost 12 kg in 4 months at {{BUSINESS_NAME}}. Rajesh sir ka diet plan aur training dono perfect the. Ab confidence alag level pe hai."</blockquote>
+      <div class="test-author">
+        <div class="test-avatar">A</div>
+        <div><div class="test-name">Amit Sharma</div><div class="test-detail">Member since 2023 · Lost 12 kg</div></div>
+      </div>
+    </div>
+    <div class="test-card">
+      <div class="test-stars">★★★★★</div>
+      <blockquote>"Ladies section bahut acha hai. Clean, AC, aur Priya ma'am ki yoga class se back pain khatam ho gaya. Best gym in Sikar!"</blockquote>
+      <div class="test-author">
+        <div class="test-avatar">S</div>
+        <div><div class="test-name">Sunita Rathore</div><div class="test-detail">Member since 2024 · Yoga batch</div></div>
+      </div>
+    </div>
+    <div class="test-card">
+      <div class="test-stars">★★★★★</div>
+      <blockquote>"Pehle ghar pe workout karta tha, koi progress nahi thi. {{BUSINESS_NAME}} join kiya toh 3 mahine mein 6 kg muscle gain. Equipment top class hai."</blockquote>
+      <div class="test-author">
+        <div class="test-avatar">V</div>
+        <div><div class="test-name">Vikram Jangid</div><div class="test-detail">Member since 2024 · Muscle gain</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- GALLERY -->
+<section class="section" id="gallery">
+<div class="container">
+  <div class="section-header">
+    <div class="section-tag">Gallery</div>
+    <h2 class="section-title">Inside {{BUSINESS_NAME}}</h2>
+    <p class="section-sub">Take a look at our training space and equipment.</p>
+  </div>
+  <div class="gallery-grid">
+    <img src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=500&q=80" alt="Gym floor" loading="lazy">
+    <img src="https://images.unsplash.com/photo-1540497077202-7c8a3999166f?w=500&q=80" alt="Weight section" loading="lazy">
+    <img src="https://images.unsplash.com/photo-1558611848-73f7eb4001a1?w=500&q=80" alt="Cardio zone" loading="lazy">
+    <img src="https://images.unsplash.com/photo-1517963879433-6ad2b056d712?w=500&q=80" alt="Training" loading="lazy">
+    <img src="https://images.unsplash.com/photo-1576678927484-cc907957088c?w=500&q=80" alt="Dumbbells" loading="lazy">
+    <img src="https://images.unsplash.com/photo-1593079831268-3381b0db4a77?w=500&q=80" alt="Workout area" loading="lazy">
+  </div>
+</div>
+</section>
+
+<!-- TIMINGS -->
+<section class="section" id="timings" style="background:#fff">
+<div class="container">
+  <div class="section-header">
+    <div class="section-tag">Schedule</div>
+    <h2 class="section-title">Gym Timings</h2>
+    <p class="section-sub">We're open 6 days a week. Pick a slot that works for you.</p>
+  </div>
+  <div class="timings-table">
+    <table>
+      <tr><th>Day</th><th>Morning</th><th>Evening</th></tr>
+      <tr><td>Monday – Friday</td><td>5:30 AM – 10:00 AM</td><td>4:00 PM – 9:30 PM</td></tr>
+      <tr><td>Saturday</td><td>5:30 AM – 10:00 AM</td><td>4:00 PM – 8:00 PM</td></tr>
+      <tr><td>Sunday</td><td colspan="2" style="text-align:center;color:var(--primary);font-weight:600">Closed</td></tr>
+    </table>
+  </div>
+</div>
+</section>
+
+<!-- FAQ -->
+<section class="section" id="faq">
+<div class="container">
+  <div class="section-header">
+    <div class="section-tag">FAQ</div>
+    <h2 class="section-title">Common Questions</h2>
+    <p class="section-sub">Everything you need to know before joining.</p>
+  </div>
+  <div class="faq-list">
+    <div class="faq-item"><div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Is there a separate section for ladies?</div><div class="faq-a"><p>Yes! We have a fully separate ladies section with dedicated trainers, AC, and privacy. Morning and evening batches available.</p></div></div>
+    <div class="faq-item"><div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Can I try before joining?</div><div class="faq-a"><p>Absolutely. Walk in for a free trial session. Our trainer will guide you through the equipment and help you understand which plan suits you best.</p></div></div>
+    <div class="faq-item"><div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Do you provide diet plans?</div><div class="faq-a"><p>Yes. Our Premium and Annual members get diet plan templates. Personal diet consultation is available as an add-on for Basic members.</p></div></div>
+    <div class="faq-item"><div class="faq-q" onclick="this.parentElement.classList.toggle('open')">What equipment do you have?</div><div class="faq-a"><p>We have treadmills, cross trainers, rowing machines, power racks, Smith machine, cable crossover, full dumbbell rack (2–50 kg), leg press, and more — 50+ pieces of equipment total.</p></div></div>
+    <div class="faq-item"><div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Is parking available?</div><div class="faq-a"><p>Yes, free parking is available for both two-wheelers and four-wheelers right outside the gym.</p></div></div>
+  </div>
+</div>
+</section>
+
+<!-- CONTACT -->
+<section class="section" id="contact" style="background:#fff">
+<div class="container">
+  <div class="section-header">
+    <div class="section-tag">Contact</div>
+    <h2 class="section-title">Ready to Start?</h2>
+    <p class="section-sub">Visit us or send a message — your first session is free.</p>
+  </div>
+  <div class="contact-grid">
+    <div class="contact-info">
+      <div class="contact-item">
+        <div class="contact-icon">📍</div>
+        <div><h4>Location</h4><p>Near Bus Stand, Piprali Road, Sikar, Rajasthan 332001</p></div>
+      </div>
+      <div class="contact-item">
+        <div class="contact-icon">📞</div>
+        <div><h4>Phone</h4><p><a href="tel:+91{{PHONE}}">{{PHONE}}</a></p></div>
+      </div>
+      <div class="contact-item">
+        <div class="contact-icon">💬</div>
+        <div><h4>WhatsApp</h4><p><a href="https://wa.me/91{{PHONE}}">Chat with us</a></p></div>
+      </div>
+      <div class="contact-item">
+        <div class="contact-icon">✉️</div>
+        <div><h4>Email</h4><p>{{EMAIL}}</p></div>
+      </div>
+    </div>
+    <div class="map-wrap">
+      <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d56636.0!2d75.14!3d27.61!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x396ca5390d34f00d%3A0x4fcb7f1a70d2a3b1!2sSikar%2C%20Rajasthan!5e0!3m2!1sen!2sin!4v1700000000000" allowfullscreen loading="lazy"></iframe>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+<div class="container">
+  <div class="footer-grid">
+    <div>
+      <div class="footer-brand">Royal <span>Fitness</span></div>
+      <p>Sikar's trusted fitness destination. Building healthier, stronger people since 2021.</p>
+    </div>
+    <div>
+      <h4>Quick Links</h4>
+      <ul class="footer-links">
+        <li><a href="#about">About</a></li>
+        <li><a href="#services">Programs</a></li>
+        <li><a href="#pricing">Membership</a></li>
+        <li><a href="#contact">Contact</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Timings</h4>
+      <ul class="footer-links">
+        <li><a>Mon–Fri: 5:30 AM – 9:30 PM</a></li>
+        <li><a>Saturday: 5:30 AM – 8:00 PM</a></li>
+        <li><a>Sunday: Closed</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-copy">© 2024 {{BUSINESS_NAME}}, Sikar. Built by <strong style="color:var(--primary)">{{COMPANY_NAME}}</strong></div>
+</div>
+</footer>
+
+<!-- WA FLOAT -->
+<a href="https://wa.me/91{{PHONE}}?text=Hi%2C%20I%20want%20to%20know%20about%20gym%20membership" class="wa-float" aria-label="WhatsApp">
+<svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+</a>
+
+<script>
+// Sticky nav
+window.addEventListener('scroll',()=>{document.getElementById('nav').classList.toggle('scrolled',window.scrollY>50)});
+
+// Counter animation
+const counters=document.querySelectorAll('.stat-num');
+let counted=false;
+function animateCounters(){if(counted)return;const rect=document.querySelector('.stats').getBoundingClientRect();if(rect.top<window.innerHeight&&rect.bottom>0){counted=true;counters.forEach(c=>{const target=+c.dataset.target;const suffix=target>=100?'+':'+';let current=0;const step=Math.ceil(target/40);const timer=setInterval(()=>{current+=step;if(current>=target){c.textContent=target+suffix;clearInterval(timer)}else{c.textContent=current+suffix}},30)})}}
+window.addEventListener('scroll',animateCounters);
+animateCounters();
+
+// Close mobile menu on link click
+document.querySelectorAll('.nav-links a').forEach(a=>a.addEventListener('click',()=>document.querySelector('.nav-links').classList.remove('open')));
+</script>
+</body></html>

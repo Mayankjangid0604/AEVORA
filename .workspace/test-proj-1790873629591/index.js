@@ -1,0 +1,1 @@
+console.log("Mock"); module.exports = { status: "OK" };
