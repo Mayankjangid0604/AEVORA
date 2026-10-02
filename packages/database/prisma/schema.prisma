@@ -373,6 +373,9 @@ model Employee {
   proposedResearch           ResearchProposal[]           @relation("ProposalProposer")
   reviewedResearch           ResearchProposal[]           @relation("ProposalReviewer")
   researchProjects           ResearchProject[]            @relation("ProjectOwner")
+  researchPerspectives       ResearchPerspective[]
+  researchSyntheses          ResearchSynthesis[]
+  researchExecutions         ResearchExecution[]
   // Phase 26 relations
   ownedOpportunities         Opportunity[]                @relation("OpportunityOwner")
   assignedLeads              SalesLead[]                  @relation("LeadAssignee")
@@ -2136,6 +2139,14 @@ model ResearchProposal {
 enum ResearchProjectStatus {
   PLANNED
   ACTIVE
+  EXECUTING
+  SYNTHESIZING
+  OUTCOME_READY
+  CEO_REVIEW
+  CHAIRMAN_REVIEW
+  REVISION_REQUIRED
+  APPROVED
+  REJECTED
   PAUSED
   COMPLETED
   CANCELLED
@@ -2163,6 +2174,99 @@ model ResearchProject {
   owner                 Employee                @relation("ProjectOwner", fields: [ownerId], references: [id])
   experiments           Experiment[]
   TrainingConfiguration TrainingConfiguration[]
+  perspectives          ResearchPerspective[]
+  syntheses             ResearchSynthesis[]
+  executions            ResearchExecution[]
+}
+
+enum ResearchExecutionState {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  RETRYING
+  CANCELLED
+}
+
+model ResearchExecution {
+  id                String                 @id @default(uuid())
+  projectId         String
+  employeeId        String
+  state             ResearchExecutionState @default(PENDING)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  errorDetails      Json?                  
+  metadata          Json                   @default("{}")
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  project           ResearchProject        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employee          Employee               @relation(fields: [employeeId], references: [id])
+  
+  sources           ResearchSource[]
+  findings          ResearchFinding[]
+  perspectives      ResearchPerspective[]
+}
+
+model ResearchSource {
+  id                String            @id @default(uuid())
+  executionId       String
+  url               String?
+  title             String?
+  publisher         String?
+  sourceType        String            @default("WEB")
+  retrievalTime     DateTime          @default(now())
+  metadata          Json              @default("{}")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  execution         ResearchExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  findings          ResearchFinding[]
+}
+
+model ResearchFinding {
+  id                String            @id @default(uuid())
+  executionId       String
+  sourceId          String?
+  content           String            @db.Text
+  relevance         Float             @default(0)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  execution         ResearchExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  source            ResearchSource?   @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+}
+
+model ResearchPerspective {
+  id                String          @id @default(uuid())
+  projectId         String
+  executionId       String?
+  employeeId        String
+  roleContext       String          
+  findings          String          
+  confidence        Float           @default(0)
+  metadata          Json            @default("{}")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  project           ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  execution         ResearchExecution? @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  employee          Employee        @relation(fields: [employeeId], references: [id])
+}
+
+model ResearchSynthesis {
+  id                String          @id @default(uuid())
+  projectId         String
+  synthesizerId     String?         
+  executiveSummary  String          
+  comprehensiveReport String        
+  actionableInsights Json           @default("[]")
+  status            String          @default("DRAFT")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  project           ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  synthesizer       Employee?       @relation(fields: [synthesizerId], references: [id])
 }
 
 enum ExperimentStatus {

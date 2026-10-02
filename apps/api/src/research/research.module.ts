@@ -24,6 +24,8 @@ import { ModelOrchestratorService } from './services/model-orchestrator.service'
 import { TaskPriorityInferenceRuntime } from './inference/task-priority-inference.runtime';
 import { TaskRiskInferenceRuntime } from './inference/task-risk-inference.runtime';
 import { ResearchController } from './controllers/research.controller';
+import { ResearchExecutionService } from './services/research-execution.service';
+import { ResearchExecutionController } from './controllers/research-execution.controller';
 
 import { ProductionModule } from '../production/production.module';
 
@@ -51,8 +53,9 @@ import { ProductionModule } from '../production/production.module';
     ImprovementObservationService,
     ResearchPlanningService,
     EvaluationComparisonService,
+    ResearchExecutionService,
   ],
-  controllers: [ResearchController],
+  controllers: [ResearchController, ResearchExecutionController],
   exports: [
     ResearchProposalService,
     ResearchProjectService,
@@ -70,6 +73,7 @@ import { ProductionModule } from '../production/production.module';
     ImprovementObservationService,
     ResearchPlanningService,
     EvaluationComparisonService,
+    ResearchExecutionService,
   ]
 })
 export class ResearchModule {}
