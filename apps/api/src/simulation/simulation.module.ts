@@ -15,7 +15,7 @@ import { CeoModule } from '../ceo/ceo.module';
 import { OperatingLoopModule } from '../operating-loop/operating-loop.module';
 
 @Module({
-  imports: [forwardRef(() => AgentModule), SurvivalModule, LeadGenModule, SalesOutreachModule, DeliveryModule, CeoModule, MarketingContentModule, OperatingLoopModule],
+  imports: [forwardRef(() => AgentModule), SurvivalModule, LeadGenModule, SalesOutreachModule, DeliveryModule, forwardRef(() => CeoModule), MarketingContentModule, OperatingLoopModule],
   controllers: [SimulationController],
   providers: [SimulationService, SimulationEngineService, BusinessLoopService, PrismaService],
   exports: [SimulationService, SimulationEngineService, BusinessLoopService],

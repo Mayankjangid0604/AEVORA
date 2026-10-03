@@ -20,6 +20,7 @@ import { CompanyStateService, CompanyStateSnapshot } from '../management/company
 import { SalesPipelineService } from '../sales/sales-pipeline.service';
 import { BriefingService } from './briefing.service';
 import { ProactiveAlertService } from './proactive-alert.service';
+import { CompanyIntelligenceService } from '../company-intelligence/company-intelligence.service';
 
 export const ASSISTANT_INTENTS = [
   'STATUS_REPORT', 'COMMAND_CEO', 'NEW_VENTURE', 'FIND_LEADS', 'PAUSE_SIMULATION',
@@ -471,6 +472,7 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
     private readonly salesPipeline: SalesPipelineService,
     private readonly briefing: BriefingService,
     private readonly alerts: ProactiveAlertService,
+    private readonly companyIntelligenceService: CompanyIntelligenceService,
   ) {}
   onModuleInit() {
     // Run every 5 minutes
@@ -728,8 +730,16 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
           actions.push('succession_report_generated');
           break;
         case 'CHAIRMAN_BRIEFING': {
-          const briefingData = await this.briefing.generateBriefing(companyId);
-          response = this.briefing.formatBriefingResponse(briefingData);
+          const v9Report = await this.companyIntelligenceService.generateCompanyIntelligence(companyId);
+          // V9 Structured Intelligence Result -> Chairman response/report
+          response = `V9 Company Intelligence Briefing:\n\n` + 
+                     `Snapshot: ${new Date(v9Report.sourceFreshness.CompanyState).toLocaleString()}\n` +
+                     `Metrics:\n` +
+                     `${v9Report.metrics.map((m: any) => ` - ${m.key || m.name || JSON.stringify(m)}: ${m.value}`).join('\n')}\n\n` +
+                     `Facts:\n${v9Report.facts.map(f => `- ${f.statement}`).join('\n')}\n\n` +
+                     `Risks:\n${v9Report.risks.map(r => `- ${r.title}: ${r.count}`).join('\n')}\n\n` +
+                     `Limitations/Missing Data:\n${v9Report.missingData.map(m => `- ${m}`).join('\n')}\n\n` +
+                     `Provenance: ${v9Report.provenance.length} systems integrated.`;
           actions.push('chairman_briefing_generated');
           break;
         }

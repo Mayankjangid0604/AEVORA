@@ -5,6 +5,10 @@
     "esModuleInterop": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "strict": false
-  }
+    "strict": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "**/*"
+  ]
 }

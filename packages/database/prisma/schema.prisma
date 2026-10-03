@@ -109,6 +109,7 @@ model Company {
   trainingJobs               TrainingJob[]
   experimentPlans            ExperimentPlan[]
   improvementSignals         ImprovementSignal[]
+  improvementProposals       ImprovementProposal[]
   researchHypotheses         ResearchHypothesis[]
   modelVersions              ModelVersion[]
   modelFamilies              ModelFamily[]
@@ -7915,10 +7916,21 @@ model RdAuditEvent {
 // ─── Phase 40: Autonomous Enterprise ─────────────────────────────────────────
 
 enum AeObjectiveStatus {
-  ACTIVE
-  ACHIEVED
-  MISSED
+  DISCOVERED
+  PLANNED
+  AUTHORIZED
+  DISPATCHED
+  RUNNING
+  VERIFYING
+  COMPLETED
+  FAILED
+  RECOVERY_PENDING
+  REPLANNING
+  ESCALATED
   CANCELLED
+  ACTIVE // legacy
+  ACHIEVED // legacy
+  MISSED // legacy
 }
 
 enum AeDecisionStatus {
@@ -7942,21 +7954,36 @@ enum AeOperatingCycleStatus {
   CLOSED
 }
 
+enum AeFailureClassification {
+  TRANSIENT_FAILURE
+  RECOVERABLE_FAILURE
+  AUTHORIZATION_FAILURE
+  VALIDATION_FAILURE
+  DEPENDENCY_FAILURE
+  PERMANENT_FAILURE
+  UNKNOWN_FAILURE
+}
+
 model AeEnterpriseObjective {
-  id          String            @id @default(uuid())
-  companyId   String
-  company     Company           @relation("AeCompany", fields: [companyId], references: [id])
-  title       String
-  description String?
-  status      AeObjectiveStatus @default(ACTIVE)
-  priority    Int               @default(50)
-  dueDate     DateTime?
-  domainRefs  Json?
-  isAdvisory  Boolean           @default(true)
-  createdBy   String
-  approvedBy  String?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id                  String                    @id @default(uuid())
+  companyId           String
+  company             Company                   @relation("AeCompany", fields: [companyId], references: [id])
+  title               String
+  description         String?
+  status              AeObjectiveStatus         @default(DISCOVERED)
+  priority            Int                       @default(50)
+  dueDate             DateTime?
+  domainRefs          Json?
+  isAdvisory          Boolean                   @default(true)
+  createdBy           String
+  approvedBy          String?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  failureClass        AeFailureClassification?
+  failureReason       String?
+  recoveryAttempts    Int                       @default(0)
+  replanningAttempts  Int                       @default(0)
 
   @@index([companyId, status])
 }
@@ -9083,4 +9110,65 @@ model TaskResult {
   output    Json     @default("{}")
   errors    Json     @default("[]")
   createdAt DateTime @default(now())
+}
+
+// ==========================================
+// PHASE V10: CONTINUOUS IMPROVEMENT & SELF-EVOLUTION
+// ==========================================
+
+enum ImprovementStatus {
+  DETECTED
+  DRAFT
+  PROPOSED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  EXECUTING
+  COMPLETED
+  FAILED
+  ROLLED_BACK
+  ARCHIVED
+}
+
+model ImprovementProposal {
+  id             String            @id @default(uuid())
+  companyId      String
+  title          String
+  description    String
+  problem        String
+  observedSignal String
+  hypothesis     String
+  proposedChange String
+  expectedImpact String
+  expectedMetric String
+  baseline       Float
+  target         Float
+  confidence     Float
+  risk           String // LOW, MEDIUM, HIGH, CRITICAL
+  priority       String // LOW, NORMAL, HIGH, URGENT
+  source         String // e.g. "SystemMetrics", "UserFeedback"
+  status         ImprovementStatus @default(DETECTED)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  approvedAt     DateTime?
+  approvedBy     String?
+  executedAt     DateTime?
+  completedAt    DateTime?
+  rolledBackAt   DateTime?
+
+  // Relationships
+  company  Company              @relation(fields: [companyId], references: [id])
+  outcomes ImprovementOutcome[]
+}
+
+model ImprovementOutcome {
+  id                    String   @id @default(uuid())
+  improvementProposalId String
+  measurementWindow     String // e.g. "7 Days", "Immediate"
+  actualResult          Float
+  comparison            String // "EXCEEDED", "MET", "FAILED"
+  learnedLesson         String
+  createdAt             DateTime @default(now())
+
+  proposal ImprovementProposal @relation(fields: [improvementProposalId], references: [id])
 }

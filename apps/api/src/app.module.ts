@@ -74,9 +74,12 @@ import { MarketingContentModule } from './marketing-content/marketing-content.mo
 import { VoiceModule } from './voice/voice.module';
 import { ChairmanMailModule } from './notifications/chairman-mail.module';
 import { BrowserAiModule } from './browser-ai/browser-ai.module';
+import { AutomationOrchestrationModule } from './automation-orchestration/automation-orchestration.module';
+import { ContinuousImprovementModule } from './continuous-improvement/continuous-improvement.module';
 
 @Module({
   imports: [
+    ContinuousImprovementModule,
     PrismaModule,
     EconomyModule,
     CompanyModule,
@@ -150,6 +153,7 @@ import { BrowserAiModule } from './browser-ai/browser-ai.module';
     VoiceModule,
     ChairmanMailModule,
     BrowserAiModule,
+    AutomationOrchestrationModule,
   ],
   controllers: [HealthController],
   providers: [],

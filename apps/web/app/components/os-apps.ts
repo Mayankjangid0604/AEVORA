@@ -61,6 +61,7 @@ export const OS_APPS: { section: string; items: OsApp[] }[] = [
       { href: '/communication', label: 'Communication', icon: ChatCircle },
       { href: '/knowledge', label: 'Knowledge Base', icon: BookOpen },
       { href: '/research', label: 'AI Lab', icon: Flask },
+      { href: '/improvement', label: 'Improvement (V10)', icon: ChartLine },
     ],
   },
   {

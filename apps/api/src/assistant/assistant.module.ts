@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CompanyIntelligenceModule } from '../company-intelligence/company-intelligence.module';
 import { AssistantService } from './assistant.service';
 import { AssistantController } from './assistant.controller';
 import { ResponseCacheService } from './response-cache.service';
@@ -18,7 +19,7 @@ import { CommunicationModule } from '../communication/communication.module';
 import { ManagementModule } from '../management/management.module';
 import { SalesModule } from '../sales/sales.module';
 @Module({
-  imports: [PrismaModule, DevicesModule, SimulationModule, CeoModule, LeadGenModule, IdeasModule, MarketingContentModule, SalesOutreachModule, VoiceModule, BoardroomModule, CommunicationModule, ManagementModule, SalesModule],
+  imports: [PrismaModule, DevicesModule, SimulationModule, CeoModule, LeadGenModule, IdeasModule, MarketingContentModule, SalesOutreachModule, VoiceModule, BoardroomModule, CommunicationModule, ManagementModule, SalesModule, CompanyIntelligenceModule],
   providers: [AssistantService, ResponseCacheService, BriefingService, ProactiveAlertService],
   controllers: [AssistantController],
   exports: [AssistantService, ResponseCacheService, BriefingService, ProactiveAlertService],
