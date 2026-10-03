@@ -1,11 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, XCircle, Clock, PlayCircle, RotateCcw, AlertTriangle } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
+
+const Card = ({ children, className }: any) => <div className={className}>{children}</div>;
+const CardContent = ({ children, className }: any) => <div className={className}>{children}</div>;
+const CardDescription = ({ children, className }: any) => <div className={className}>{children}</div>;
+const CardHeader = ({ children, className }: any) => <div className={className}>{children}</div>;
+const CardTitle = ({ children, className }: any) => <h2 className={className}>{children}</h2>;
+const CardFooter = ({ children, className }: any) => <div className={className}>{children}</div>;
+const Button = ({ children, onClick, className }: any) => <button onClick={onClick} className={className}>{children}</button>;
+const Badge = ({ children, className }: any) => <span className={className}>{children}</span>;
+const useToast = () => ({ toast: (msg: any) => console.log(msg) });
 
 export default function ImprovementDashboard() {
   const [proposals, setProposals] = useState<any[]>([]);

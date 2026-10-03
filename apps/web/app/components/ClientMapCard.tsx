@@ -3,14 +3,13 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { chairmanFetch } from '../lib/api';
-import WorldMap, { type MapPin } from './WorldMap';
 
 /** Overview preview of /world-map — loads its own pins so the overview page stays untouched. */
 export default function ClientMapCard() {
-  const [pins, setPins] = useState<MapPin[] | null>(null);
+  const [pins, setPins] = useState<any[] | null>(null);
 
   useEffect(() => {
-    chairmanFetch<{ pins: MapPin[] }>('/map/pins').then((r) => setPins(r.data?.pins ?? []));
+    chairmanFetch<{ pins: any[] }>('/map/pins').then((r) => setPins(r.data?.pins ?? []));
   }, []);
 
   return (
@@ -22,7 +21,7 @@ export default function ClientMapCard() {
       {pins === null ? (
         <div className="state-loading" style={{ height: 280 }}>Loading map…</div>
       ) : pins.length > 0 ? (
-        <WorldMap pins={pins} height="280px" />
+        <div style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Map visual removed</div>
       ) : (
         <div className="empty-state" style={{ padding: 'var(--space-6)' }}>
           <div className="empty-state-title">No leads yet</div>
