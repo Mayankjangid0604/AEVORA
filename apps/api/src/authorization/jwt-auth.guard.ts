@@ -9,10 +9,11 @@ export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 export const QUERY_TOKEN_KEY = 'queryToken';
 export const StreamTokenAuth = () => SetMetadata(QUERY_TOKEN_KEY, true);
 export const STREAM_TOKEN_TTL = '60s';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private jwtService: JwtService, private reflector: Reflector) {}
+  constructor(private jwtService: JwtService, private reflector: Reflector, private prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (context.getType() !== 'http') return true;
@@ -43,6 +44,22 @@ export class JwtAuthGuard implements CanActivate {
     }
     // A stream token only opens a stream (query param), and a session token never travels in a URL.
     if ((token === query) !== (payload?.purpose === 'sse')) throw new UnauthorizedException('Wrong token type for this route');
+    
+    // V8 Explicit Company Context Resolution
+    const requestedCompanyId = request.headers['x-company-id'];
+    if (requestedCompanyId && payload.actorRole === 'CHAIRMAN') {
+      // Chairman must actually own the company
+      const company = await this.prisma.company.findFirst({
+        where: { id: requestedCompanyId, chairmanId: payload.actorId }
+      });
+      if (!company) {
+        throw new UnauthorizedException('Unauthorized company context access');
+      }
+      payload.companyId = requestedCompanyId;
+    } else if (requestedCompanyId && payload.companyId !== requestedCompanyId) {
+      throw new UnauthorizedException('Unauthorized company context access');
+    }
+
     request.user = payload;
     return true;
   }

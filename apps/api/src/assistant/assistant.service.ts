@@ -530,8 +530,42 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
     const deduped = merged.filter(e => { const k = `${e.type}:${e.id}`; if (seen.has(k)) return false; seen.add(k); return true; });
     this.entityCache.set(companyId, deduped.slice(0, 5));
   }
-  async processMessage(message: string, companyId: string): Promise<AssistantResult> {
+  async processMessage(message: string, companyId: string | undefined, chairmanId: string): Promise<AssistantResult> {
     this.logger.log(`Assistant received: "${message.substring(0, 80)}"`);
+    
+    // V8 Explicit Company Context Resolution
+    if (!companyId) {
+      const companies = await this.prisma.company.findMany({ where: { chairmanId, status: 'ACTIVE' } });
+      let matchedCompanyId = null;
+      let matchCount = 0;
+      for (const comp of companies) {
+         if (message.toLowerCase().includes(comp.name.toLowerCase())) {
+            matchedCompanyId = comp.id;
+            matchCount++;
+         }
+      }
+      
+      const clarResp = matchCount > 1 
+        ? "I found multiple companies matching your request. Please clarify which one you mean."
+        : "Please specify which company you are referring to (e.g. 'How is Company A doing?').";
+        
+      if (matchCount === 1) {
+         companyId = matchedCompanyId!;
+      } else {
+         const incoming = await this.prisma.assistantMessage.create({
+           data: { from: 'CHAIRMAN', to: 'ASSISTANT', content: message, status: 'DONE', intent: { intent: "UNKNOWN" } as any, result: { actions: ['clarification_needed'] } },
+         });
+         await this.prisma.assistantMessage.create({ 
+           data: { from: 'ASSISTANT', to: 'CHAIRMAN', content: clarResp, intent: { intent: "UNKNOWN" } as any, result: { actions: ['clarification_needed'] }, status: 'DONE' } 
+         });
+         this.realtime.broadcastToUser(chairmanId, 'assistant.reply', { response: clarResp, intent: "UNKNOWN", actions: ['clarification_needed'] });
+         return {
+           response: clarResp, intent: "UNKNOWN", actions: ['clarification_needed'],
+           routing: { targetType: 'UNKNOWN', targetName: null, department: null, riskLevel: 'LOW', requiresApproval: false, confidence: 'LOW', taskId: null, approvalRequired: false, status: 'clarification_needed', errorCode: null },
+         };
+      }
+    }
+
     const incoming = await this.prisma.assistantMessage.create({
       data: { companyId, from: 'CHAIRMAN', to: 'ASSISTANT', content: message, status: 'PROCESSING' },
     });

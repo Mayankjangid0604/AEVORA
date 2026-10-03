@@ -5,16 +5,29 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:130
 /** For pages that call fetch directly: JSON + the Chairman's bearer token. */
 export function authHeaders(): Record<string, string> {
   const token = getToken();
-  return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  return { 
+    'Content-Type': 'application/json', 
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(_companyId ? { 'x-company-id': _companyId } : {})
+  };
 }
 
 let _jwtToken: string | null = null;
+let _companyId: string | null = null;
 
 export function setToken(token: string) {
   _jwtToken = token;
   if (typeof window !== 'undefined') {
     localStorage.setItem('aevora_jwt', token);
   }
+}
+
+export function setCompanyHeader(companyId: string | null) {
+  _companyId = companyId;
+}
+
+export function getCompanyHeader(): string | null {
+  return _companyId;
 }
 
 export function getToken(): string | null {
@@ -51,6 +64,9 @@ export async function chairmanFetch<T = any>(path: string, opts: FetchOptions = 
     };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
+    }
+    if (_companyId) {
+      headers['x-company-id'] = _companyId;
     }
 
     const res = await fetch(`${API_BASE}${path}`, {

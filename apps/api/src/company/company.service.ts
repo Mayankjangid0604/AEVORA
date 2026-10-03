@@ -6,7 +6,7 @@ import { CompanyStatus } from '@prisma/client';
 export class CompanyService {
   constructor(private prisma: PrismaService) {}
 
-  async createCompany(name: string, legalName: string, description: string, chairmanId: string) {
+  async createCompany(name: string, legalName: string, description: string, chairmanId: string, groupId?: string) {
     return this.prisma.$transaction(async (tx) => {
       const company = await tx.company.create({
         data: {
@@ -14,9 +14,35 @@ export class CompanyService {
           legalName,
           description,
           chairmanId,
+          groupId,
           status: CompanyStatus.ACTIVE,
+          departments: {
+            create: [{ name: 'Executive' }]
+          }
         },
+        include: { departments: true }
       });
+
+      const executiveDept = company.departments.find(d => d.name === 'Executive');
+      if (executiveDept) {
+        await tx.employee.create({
+          data: {
+            name: 'CEO',
+            identitySeed: `${company.id}-ceo-seed`,
+            status: 'ACTIVE',
+            company: { connect: { id: company.id } },
+            department: { connect: { id: executiveDept.id } },
+            role: {
+              create: {
+                title: 'CEO',
+                level: 1,
+                accessLevel: 'MANAGEMENT',
+                company: { connect: { id: company.id } },
+              }
+            }
+          }
+        });
+      }
 
       await tx.companyEvent.create({
         data: {

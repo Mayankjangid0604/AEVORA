@@ -39,11 +39,25 @@ model Chairman {
   credentialSalt   String?
   hashAlgorithm    String?
   workFactor       Int?
+  groups           AevoraGroup[]
   companies        Company[]
   connectedDevices ConnectedDevice[]
   chairmanCommands ChairmanCommand[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
+}
+
+model AevoraGroup {
+  id                String             @id @default(uuid())
+  name              String
+  description       String?
+  status            CompanyStatus      @default(ACTIVE)
+  chairmanId        String
+  chairman          Chairman           @relation(fields: [chairmanId], references: [id])
+  companies         Company[]
+  assistantMessages AssistantMessage[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 }
 
 model Company {
@@ -52,6 +66,8 @@ model Company {
   legalName                  String?
   description                String?
   status                     CompanyStatus               @default(ACTIVE)
+  groupId                    String?
+  group                      AevoraGroup?                @relation(fields: [groupId], references: [id])
   chairmanId                 String
   chairman                   Chairman                    @relation(fields: [chairmanId], references: [id])
   departments                Department[]
@@ -712,12 +728,12 @@ model Task {
   intelligenceSessions IntelligenceSession[]
   assistanceRequests   AssistanceRequest[]
   feedbacks            ModelFeedback[]
-  type                 TaskType     @default(STANDARD)
+  type                 TaskType              @default(STANDARD)
   parentTaskId         String?
-  parentTask           Task?        @relation("SubTasks", fields: [parentTaskId], references: [id])
-  subTasks             Task[]       @relation("SubTasks")
+  parentTask           Task?                 @relation("SubTasks", fields: [parentTaskId], references: [id])
+  subTasks             Task[]                @relation("SubTasks")
   departmentId         String?
-  department           Department?  @relation("DepartmentTasks", fields: [departmentId], references: [id])
+  department           Department?           @relation("DepartmentTasks", fields: [departmentId], references: [id])
 }
 
 model TaskDependency {
@@ -2189,84 +2205,84 @@ enum ResearchExecutionState {
 }
 
 model ResearchExecution {
-  id                String                 @id @default(uuid())
-  projectId         String
-  employeeId        String
-  state             ResearchExecutionState @default(PENDING)
-  startedAt         DateTime?
-  completedAt       DateTime?
-  errorDetails      Json?                  
-  metadata          Json                   @default("{}")
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
+  id           String                 @id @default(uuid())
+  projectId    String
+  employeeId   String
+  state        ResearchExecutionState @default(PENDING)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  errorDetails Json?
+  metadata     Json                   @default("{}")
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
 
-  project           ResearchProject        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  employee          Employee               @relation(fields: [employeeId], references: [id])
-  
-  sources           ResearchSource[]
-  findings          ResearchFinding[]
-  perspectives      ResearchPerspective[]
+  project  ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employee Employee        @relation(fields: [employeeId], references: [id])
+
+  sources      ResearchSource[]
+  findings     ResearchFinding[]
+  perspectives ResearchPerspective[]
 }
 
 model ResearchSource {
-  id                String            @id @default(uuid())
-  executionId       String
-  url               String?
-  title             String?
-  publisher         String?
-  sourceType        String            @default("WEB")
-  retrievalTime     DateTime          @default(now())
-  metadata          Json              @default("{}")
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  id            String   @id @default(uuid())
+  executionId   String
+  url           String?
+  title         String?
+  publisher     String?
+  sourceType    String   @default("WEB")
+  retrievalTime DateTime @default(now())
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  execution         ResearchExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
-  findings          ResearchFinding[]
+  execution ResearchExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  findings  ResearchFinding[]
 }
 
 model ResearchFinding {
-  id                String            @id @default(uuid())
-  executionId       String
-  sourceId          String?
-  content           String            @db.Text
-  relevance         Float             @default(0)
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  id          String   @id @default(uuid())
+  executionId String
+  sourceId    String?
+  content     String   @db.Text
+  relevance   Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  execution         ResearchExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
-  source            ResearchSource?   @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  execution ResearchExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  source    ResearchSource?   @relation(fields: [sourceId], references: [id], onDelete: SetNull)
 }
 
 model ResearchPerspective {
-  id                String          @id @default(uuid())
-  projectId         String
-  executionId       String?
-  employeeId        String
-  roleContext       String          
-  findings          String          
-  confidence        Float           @default(0)
-  metadata          Json            @default("{}")
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  id          String   @id @default(uuid())
+  projectId   String
+  executionId String?
+  employeeId  String
+  roleContext String
+  findings    String
+  confidence  Float    @default(0)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  project           ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  execution         ResearchExecution? @relation(fields: [executionId], references: [id], onDelete: Cascade)
-  employee          Employee        @relation(fields: [employeeId], references: [id])
+  project   ResearchProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  execution ResearchExecution? @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  employee  Employee           @relation(fields: [employeeId], references: [id])
 }
 
 model ResearchSynthesis {
-  id                String          @id @default(uuid())
-  projectId         String
-  synthesizerId     String?         
-  executiveSummary  String          
-  comprehensiveReport String        
-  actionableInsights Json           @default("[]")
-  status            String          @default("DRAFT")
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  id                  String   @id @default(uuid())
+  projectId           String
+  synthesizerId       String?
+  executiveSummary    String
+  comprehensiveReport String
+  actionableInsights  Json     @default("[]")
+  status              String   @default("DRAFT")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  project           ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  synthesizer       Employee?       @relation(fields: [synthesizerId], references: [id])
+  project     ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  synthesizer Employee?       @relation(fields: [synthesizerId], references: [id])
 }
 
 enum ExperimentStatus {
@@ -8266,17 +8282,19 @@ model WeMarketState {
 
 // Phase 44 Part 2 — Assistant layer (Chairman <-> Assistant <-> CEO) and queued PC automation tasks.
 model AssistantMessage {
-  id        String   @id @default(cuid())
-  companyId String
+  id        String       @id @default(cuid())
+  companyId String?
+  groupId   String?
+  group     AevoraGroup? @relation(fields: [groupId], references: [id])
   from      String // CHAIRMAN | ASSISTANT | CEO | EMPLOYEE | SYSTEM
   to        String // CHAIRMAN | ASSISTANT | CEO | DEPARTMENT | BROADCAST
   content   String
   intent    Json?
   result    Json?
-  status    String   @default("PENDING") // PENDING | PROCESSING | DONE | FAILED
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  company   Company  @relation(fields: [companyId], references: [id])
+  status    String       @default("PENDING") // PENDING | PROCESSING | DONE | FAILED
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  company   Company?     @relation(fields: [companyId], references: [id])
 
   @@index([companyId, createdAt])
 }

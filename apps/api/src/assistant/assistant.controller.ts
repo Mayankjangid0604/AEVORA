@@ -20,7 +20,7 @@ export class AssistantController {
     const message = body?.message?.trim();
     if (!message) throw new BadRequestException('message is required');
     if (message.length > 2000) throw new BadRequestException('message too long (max 2000 characters)');
-    return this.assistant.processMessage(message, req.user.companyId);
+    return this.assistant.processMessage(message, req.user.companyId, req.user.actorId);
   }
 
   @Post('voice/transcribe')

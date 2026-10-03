@@ -27,28 +27,94 @@ export default function OverviewPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [groupReport, setGroupReport] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [isGroupMode, setIsGroupMode] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      chairmanFetch<Survival>('/survival/status'),
-      chairmanFetch<SimState>('/simulation/status'),
-      chairmanFetch<Lead[]>('/lead-gen/leads'),
-      chairmanFetch<Project[]>('/delivery/projects'),
-      chairmanFetch<FeedItem[]>('/ceo/feed'),
-    ]).then(([s, st, l, p, f]) => {
-      setSurvival(s.data);
-      setSim(st.data);
-      setLeads(l.data ?? []);
-      setProjects(p.data ?? []);
-      setFeed((f.data ?? []).slice(0, 5));
-      setError(s.error ?? st.error ?? l.error ?? p.error ?? f.error);
-      setLoaded(true);
-    });
+    const companyId = localStorage.getItem('aevora_company_id');
+    setIsGroupMode(!companyId);
+
+    if (!companyId) {
+      // Fetch group report
+      chairmanFetch<any[]>('/groups').then(r => {
+        if (r.data && r.data.length > 0) {
+          chairmanFetch<any>(`/groups/${r.data[0].id}/report`).then(reportRes => {
+            setGroupReport(reportRes.data);
+            setLoaded(true);
+          });
+        } else {
+          setLoaded(true);
+        }
+      });
+    } else {
+      // Company specific fetch
+      Promise.all([
+        chairmanFetch<Survival>('/survival/status'),
+        chairmanFetch<SimState>('/simulation/status'),
+        chairmanFetch<Lead[]>('/lead-gen/leads'),
+        chairmanFetch<Project[]>('/delivery/projects'),
+        chairmanFetch<FeedItem[]>('/ceo/feed'),
+      ]).then(([s, st, l, p, f]) => {
+        setSurvival(s.data);
+        setSim(st.data);
+        setLeads(l.data ?? []);
+        setProjects(p.data ?? []);
+        setFeed((f.data ?? []).slice(0, 5));
+        setError(s.error ?? st.error ?? l.error ?? p.error ?? f.error);
+        setLoaded(true);
+      });
+    }
   }, []);
 
   if (!loaded) return <div className="state-loading">Loading overview…</div>;
+
+  if (isGroupMode) {
+    return (
+      <>
+        <div className="page-header flex-between" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
+          <div>
+            <h1 className="page-title">Group Overview</h1>
+            <p className="page-desc">SAAHVIK Tech — {groupReport?.groupName || 'Group Dashboard'}</p>
+          </div>
+        </div>
+
+        <div className="metrics-grid">
+          <div className="stat-card">
+            <div className="stat-label">Companies</div>
+            <div className="stat-value">{groupReport?.companyCount || 0}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">Total Employees</div>
+            <div className="stat-value">{groupReport?.totalEmployees || 0}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">Active Projects</div>
+            <div className="stat-value">{groupReport?.activeProjects || 0}</div>
+          </div>
+        </div>
+
+        <section className="card" style={{ marginTop: 'var(--space-6)' }}>
+          <h3 style={{ fontSize: 'var(--text-base)', marginBottom: 'var(--space-4)' }}>Company Status</h3>
+          <table className="table">
+            <thead>
+              <tr><th>Company</th><th>Simulation</th><th>Employees</th></tr>
+            </thead>
+            <tbody>
+              {groupReport?.companies?.map((c: any) => (
+                <tr key={c.id}>
+                  <td>{c.name}</td>
+                  <td>{c.simulationStatus} (Tick: {c.tick})</td>
+                  <td>{c.employees}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </>
+    );
+  }
 
   const openProjects = projects.filter((p) => OPEN_PROJECT.includes(p.status));
   const weekRevenue = projects

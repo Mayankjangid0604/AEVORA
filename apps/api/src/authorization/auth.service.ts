@@ -62,7 +62,6 @@ export class AuthService {
           access_token: await this.jwtService.signAsync({
             actorId: chairman.id,
             actorRole: 'CHAIRMAN',
-            companyId: chairman.companies[0]?.id,
           }),
         };
       } else {

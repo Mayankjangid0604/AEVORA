@@ -2,10 +2,12 @@ import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SimulationService } from '../simulation/simulation.service';
 import { CeoAutonomousService } from '../ceo/ceo-autonomous.service';
+import { ModelGateway, ModelTier } from '@aevora/model-gateway';
 
 @Injectable()
 export class ChairmanCommandService {
   private readonly logger = new Logger(ChairmanCommandService.name);
+  private readonly gateway = new ModelGateway();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -14,38 +16,55 @@ export class ChairmanCommandService {
   ) {}
 
   async submitCommand(companyId: string, chairmanId: string, text: string) {
+    const prompt = `
+You are the Chairman Assistant NLP router.
+Analyze the following request from the Chairman.
+Distinguish between information requests, actions, and approvals.
+Do not reinterpret actions as approvals. Do not bypass the hierarchy.
+
+Determine the following fields:
+- targetEntity (CEO, SYSTEM, SALES, RESEARCH, MARKETING)
+- requestedAction (PAUSE_COMPANY, RESUME_COMPANY, VIEW_REPORT, ASK_CEO, UPDATE_SALES, DANGEROUS_ACTION, VIEW_RESEARCH, VIEW_MARKETING, CLARIFY_REQUEST, UNKNOWN)
+- riskLevel (LOW, MEDIUM, HIGH)
+- requiresApproval (true for HIGH risk actions, false otherwise. Information requests are always LOW and false)
+
+Request: "${text}"
+
+Respond in JSON format ONLY:
+{
+  "targetEntity": string,
+  "requestedAction": string,
+  "riskLevel": "LOW" | "MEDIUM" | "HIGH",
+  "requiresApproval": boolean
+}
+`;
+
     let targetEntity = 'SYSTEM';
     let requestedAction = 'UNKNOWN';
     let riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
     let requiresApproval = false;
 
-    const lower = text.toLowerCase();
-    if (lower.includes('pause')) {
+    try {
+      const response = await this.gateway.callWithTier(
+        ModelTier.LOCAL_COMPLEX,
+        prompt,
+        undefined,
+        { json: true }
+      );
+      
+      const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+
+      targetEntity = parsed.targetEntity || 'SYSTEM';
+      requestedAction = parsed.requestedAction || 'UNKNOWN';
+      riskLevel = parsed.riskLevel || 'LOW';
+      requiresApproval = parsed.requiresApproval || false;
+    } catch (e) {
+      this.logger.error('Failed to parse Chairman intent via NLP, falling back to safe defaults.');
       targetEntity = 'SYSTEM';
-      requestedAction = 'PAUSE_COMPANY';
-      riskLevel = 'HIGH';
-      requiresApproval = true;
-    } else if (lower.includes('resume')) {
-      targetEntity = 'SYSTEM';
-      requestedAction = 'RESUME_COMPANY';
-      riskLevel = 'MEDIUM';
-    } else if (lower.includes('revenue') || lower.includes('report') || lower.includes('show me')) {
-      targetEntity = 'SYSTEM';
-      requestedAction = 'VIEW_REPORT';
+      requestedAction = 'CLARIFY_REQUEST';
       riskLevel = 'LOW';
-    } else if (lower.includes('ceo')) {
-      targetEntity = 'CEO';
-      requestedAction = 'ASK_CEO';
-      riskLevel = 'LOW';
-    } else if (lower.includes('sales')) {
-      targetEntity = 'SALES';
-      requestedAction = 'UPDATE_SALES';
-      riskLevel = 'MEDIUM';
-    } else if (lower.includes('terminate') || lower.includes('spend') || lower.includes('delete')) {
-      targetEntity = 'SYSTEM';
-      requestedAction = 'DANGEROUS_ACTION';
-      riskLevel = 'HIGH';
-      requiresApproval = true;
+      requiresApproval = false;
     }
 
     const command = await this.prisma.chairmanCommand.create({
@@ -94,7 +113,7 @@ export class ChairmanCommandService {
     if (!command) return;
 
     try {
-      let executionNotes = null;
+      let executionNotes: string | null = null;
 
       if (command.requestedAction === 'PAUSE_COMPANY') {
          await this.simulationService.pause(command.companyId);
@@ -129,6 +148,28 @@ export class ChairmanCommandService {
          } else {
             executionNotes = 'No active CEO found.';
          }
+      } else if (command.requestedAction === 'VIEW_RESEARCH') {
+         const latestResearch = await this.prisma.researchProject.findMany({
+            where: { companyId: command.companyId },
+            orderBy: { createdAt: 'desc' },
+            take: 3
+         });
+         executionNotes = 'Latest Research Projects: ' + latestResearch.map(r => r.name + ' (' + r.status + ')').join(', ');
+         if (!latestResearch.length) executionNotes = 'No research found.';
+      } else if (command.requestedAction === 'VIEW_MARKETING') {
+         const latestCampaigns = await this.prisma.marketingCampaign.findMany({
+            where: { companyId: command.companyId },
+            orderBy: { createdAt: 'desc' },
+            take: 3
+         });
+         executionNotes = 'Latest Marketing Campaigns: ' + latestCampaigns.map(c => c.name + ' (' + c.status + ')').join(', ');
+         if (!latestCampaigns.length) executionNotes = 'No marketing campaigns found.';
+      } else if (command.requestedAction === 'CLARIFY_REQUEST') {
+         executionNotes = 'Request is ambiguous or requires clarification.';
+         return await this.prisma.chairmanCommand.update({
+            where: { id: commandId },
+            data: { status: 'FAILED', executionNotes }
+         });
       } else if (command.requestedAction === 'DANGEROUS_ACTION') {
          executionNotes = 'Action rejected by system constraints.';
          return await this.prisma.chairmanCommand.update({
@@ -153,7 +194,6 @@ export class ChairmanCommandService {
       });
     }
   }
-
 
   /** V key in the office: interrupt every active agent's current work and hand them a new URGENT task. */
   async broadcastCommand(companyId: string, text: string) {

@@ -13,6 +13,7 @@ import { VenturesModule } from './ventures/ventures.module';
 import { HealthController } from './health.controller';
 import { EconomyModule } from './economy/economy.module';
 import { CompanyModule } from './company/company.module';
+import { GroupModule } from './group/group.module';
 import { DepartmentModule } from './department/department.module';
 import { EmployeeModule } from './employee/employee.module';
 import { RoleModule } from './role/role.module';
@@ -79,6 +80,7 @@ import { BrowserAiModule } from './browser-ai/browser-ai.module';
     PrismaModule,
     EconomyModule,
     CompanyModule,
+    GroupModule,
     DepartmentModule,
     EmployeeModule,
     RoleModule,

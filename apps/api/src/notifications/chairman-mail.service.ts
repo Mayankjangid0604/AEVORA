@@ -145,6 +145,9 @@ export class ChairmanMailService implements OnModuleInit, OnModuleDestroy {
   /** What the answer does, by thread type. */
   private async act(companyId: string, mail: { event: string; ref: string; title: string; data: any }, text: string): Promise<string> {
     const d = (mail.data ?? {}) as any;
+    const company = await this.prisma.company.findUnique({ where: { id: companyId }, select: { chairmanId: true } });
+    const actorId = company?.chairmanId || '';
+
     if (FYI_ACK.test(text)) return 'Noted — I have closed this one.';
 
     if (mail.event.startsWith('inbound.') && d.messageId) {
@@ -177,7 +180,7 @@ export class ChairmanMailService implements OnModuleInit, OnModuleDestroy {
       return 'I passed your answer to ARIA (CEO). She will use it in her next review.';
     }
 
-    const r = await this.assistant.processMessage(`About ${mail.ref} ("${mail.title}"): ${text}`, companyId);
+    const r = await this.assistant.processMessage(`About ${mail.ref} ("${mail.title}"): ${text}`, companyId, actorId);
     return r.response;
   }
 

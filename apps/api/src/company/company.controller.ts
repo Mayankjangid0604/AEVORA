@@ -16,8 +16,8 @@ export class CompanyController {
   }
 
   @Post()
-  async create(@Body() body: { name: string; legalName: string; description: string; chairmanId: string }) {
-    return this.companyService.createCompany(body.name, body.legalName, body.description, body.chairmanId);
+  async create(@Body() body: { name: string; legalName: string; description: string; chairmanId: string; groupId?: string }) {
+    return this.companyService.createCompany(body.name, body.legalName, body.description, body.chairmanId, body.groupId);
   }
 
   @Patch(':id')

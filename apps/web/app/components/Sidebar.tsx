@@ -11,6 +11,7 @@ import {
   Flask, Sun, Moon, SignOut, type Icon,
 } from '@phosphor-icons/react';
 import { chairmanFetch, clearToken } from '../lib/api';
+import CompanyContextSelector from './CompanyContextSelector';
 
 type Theme = 'light' | 'dark';
 
@@ -102,6 +103,8 @@ export default function Sidebar() {
         <div className="sidebar-logo-name">AEVORA</div>
         <div className="sidebar-logo-sub">SAAHVIK Tech</div>
       </div>
+
+      <CompanyContextSelector />
 
       <nav aria-label="Main">
         {NAV.map((group) => (
