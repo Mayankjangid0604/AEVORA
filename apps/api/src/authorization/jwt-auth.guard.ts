@@ -47,15 +47,24 @@ export class JwtAuthGuard implements CanActivate {
     
     // V8 Explicit Company Context Resolution
     const requestedCompanyId = request.headers['x-company-id'];
-    if (requestedCompanyId && payload.actorRole === 'CHAIRMAN') {
-      // Chairman must actually own the company
-      const company = await this.prisma.company.findFirst({
-        where: { id: requestedCompanyId, chairmanId: payload.actorId }
-      });
-      if (!company) {
-        throw new UnauthorizedException('Unauthorized company context access');
+    if (payload.actorRole === 'CHAIRMAN') {
+      if (requestedCompanyId) {
+        const company = await this.prisma.company.findFirst({
+          where: { id: requestedCompanyId, chairmanId: payload.actorId }
+        });
+        if (!company) {
+          throw new UnauthorizedException('Unauthorized company context access');
+        }
+        payload.companyId = requestedCompanyId;
+      } else {
+        const company = await this.prisma.company.findFirst({
+          where: { chairmanId: payload.actorId },
+          select: { id: true }
+        });
+        if (company) {
+          payload.companyId = company.id;
+        }
       }
-      payload.companyId = requestedCompanyId;
     } else if (requestedCompanyId && payload.companyId !== requestedCompanyId) {
       throw new UnauthorizedException('Unauthorized company context access');
     }
