@@ -231,7 +231,8 @@ export class WorldStateGatewayService {
   }
 
   async createSnapshot(companyId: string, scope: 'GLOBAL'|'COMPANY'|'STREAM' = 'COMPANY', scopeKey = companyId): Promise<WorldSnapshot> {
-    const state = await this.getState(companyId);
+    const fullState = await this.getState(companyId);
+    const state = scope === 'STREAM' ? { ...fullState, entities: fullState.entities.filter((e) => e.streamKey === scopeKey) } : fullState;
     const snapshotId = randomUUID();
     await this.prisma.$executeRawUnsafe(
       'INSERT INTO "v12_world_snapshot" ("snapshot_id","company_id","scope","scope_key","global_checkpoint","stream_versions","state","created_at") VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())',
