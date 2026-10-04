@@ -76,10 +76,12 @@ import { ChairmanMailModule } from './notifications/chairman-mail.module';
 import { BrowserAiModule } from './browser-ai/browser-ai.module';
 import { AutomationOrchestrationModule } from './automation-orchestration/automation-orchestration.module';
 import { ContinuousImprovementModule } from './continuous-improvement/continuous-improvement.module';
+import { WorldStateGatewayModule } from './world-state-gateway/world-state-gateway.module';
 
 @Module({
   imports: [
     ContinuousImprovementModule,
+    WorldStateGatewayModule,
     PrismaModule,
     EconomyModule,
     CompanyModule,
