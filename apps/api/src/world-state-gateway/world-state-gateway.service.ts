@@ -55,7 +55,7 @@ export class WorldStateGatewayService {
       );
       return;
     }
-    if (row.status === 'DEGRADED') throw new ServiceUnavailableException('V12 World-State Gateway is in degraded read-only mode');
+    if (row.status === 'DEGRADED' || row.status === 'STALE' || row.status === 'FAILED') throw new ServiceUnavailableException('V12 World-State Gateway is read-only while reconciliation is unsafe');
   }
 
   async listCompanyIds(): Promise<string[]> { const rows = await this.prisma.company.findMany({ select: { id: true } }); return rows.map((r) => r.id); }\n\n  async getState(companyId: string): Promise<WorldState> {
