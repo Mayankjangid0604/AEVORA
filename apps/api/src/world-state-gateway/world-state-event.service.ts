@@ -1,4 +1,5 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { StructuredLoggerService } from '../logger/structured-logger.service';
 import { V12EventEnvelope, V12EventType, V12EntityType, WorldBaselinePayload } from '@aevora/shared';
 import * as crypto from 'crypto';
 import { Subject, Observable } from 'rxjs';
@@ -48,12 +49,13 @@ const RECENT_BROADCAST_CAP = 10_000;
 
 @Injectable()
 export class WorldStateEventService implements OnModuleInit {
-  private readonly logger = new Logger(WorldStateEventService.name);
+  private readonly logger: StructuredLoggerService;
 
   // Per-company isolation: sequence counters, live streams and a serial commit queue.
   private companySequences: Map<string, number> = new Map();
   private companyStreams: Map<string, Subject<V12EventEnvelope>> = new Map();
   private companyQueues: Map<string, Promise<unknown>> = new Map();
+  private globalStream = new Subject<{ companyId: string, event: V12EventEnvelope }>();
   private recentlyBroadcast = new Set<string>();
   private failures$ = new Subject<SpatialHistoryPersistenceError>();
   private health: SpatialHistoryHealth = { sequencesSeeded: false, committed: 0, recovered: 0, duplicates: 0, failures: 0 };
@@ -61,7 +63,10 @@ export class WorldStateEventService implements OnModuleInit {
   private readonly maxAttempts = Math.max(1, Number(process.env.V12_HISTORY_PERSIST_MAX_ATTEMPTS || 3));
   private readonly backoffMs = Math.max(0, Number(process.env.V12_HISTORY_PERSIST_BACKOFF_MS ?? 100));
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, logger: StructuredLoggerService) {
+    this.logger = logger;
+    this.logger.setContext(WorldStateEventService.name);
+  }
 
   async onModuleInit() {
     await this.seedSequences();
@@ -89,6 +94,10 @@ export class WorldStateEventService implements OnModuleInit {
     return this.streamFor(companyId).asObservable();
   }
 
+  public getGlobalStream(): Observable<{ companyId: string, event: V12EventEnvelope }> {
+    return this.globalStream.asObservable();
+  }
+
   public getCurrentSequence(companyId: string): number {
     return this.companySequences.get(companyId) ?? 0;
   }
@@ -107,7 +116,12 @@ export class WorldStateEventService implements OnModuleInit {
    * broadcast and a SpatialHistoryPersistenceError is thrown (and published on persistenceFailures()).
    */
   public broadcastEvent<T>(companyId: string, event: V12EventEnvelope<T>): Promise<HistoryCommitResult> {
-    this.logger.debug(`[V12 Event] ${event.eventType} for entity ${event.entityId} (Company: ${companyId})`);
+    this.logger.log(`[V12 Event] Enqueuing ${event.eventType} for entity ${event.entityId} (Company: ${companyId})`, '', {
+      eventId: event.eventId,
+      eventType: event.eventType,
+      entityId: event.entityId,
+      correlationId: event.correlationId,
+    });
     return this.enqueue(companyId, () => this.commit(companyId, event));
   }
 
@@ -140,7 +154,8 @@ export class WorldStateEventService implements OnModuleInit {
     payload: T,
     companyId: string,
     causationId?: string,
-    correlationId?: string
+    correlationId?: string,
+    accessibilityCue?: string
   ): V12EventEnvelope<T> {
     const nextSeq = this.getCurrentSequence(companyId) + 1;
     this.companySequences.set(companyId, nextSeq);
@@ -155,6 +170,7 @@ export class WorldStateEventService implements OnModuleInit {
       authoritativeTimestamp: Date.now(),
       correlationId,
       causationId,
+      accessibilityCue,
       payload
     };
   }
@@ -199,6 +215,14 @@ export class WorldStateEventService implements OnModuleInit {
             payload: (event.payload ?? {}) as any,
           },
         });
+        this.logger.log(`Persisted spatial event ${event.eventId}`, '', {
+          eventId: event.eventId,
+          sequence: event.sequence,
+          eventType: event.eventType,
+          entityId: event.entityId,
+          correlationId: event.correlationId,
+          causationId: event.causationId,
+        });
         status = 'COMMITTED';
       } catch (e: any) {
         lastError = e;
@@ -232,7 +256,9 @@ export class WorldStateEventService implements OnModuleInit {
     } else {
       this.health[status === 'COMMITTED' ? 'committed' : 'recovered']++;
       this.markBroadcast(event.eventId);
-      this.streamFor(companyId).next((liveEvent ?? event) as V12EventEnvelope);
+      const toEmit = (liveEvent ?? event) as V12EventEnvelope;
+      this.streamFor(companyId).next(toEmit);
+      this.globalStream.next({ companyId, event: toEmit });
     }
     return { status, eventId: event.eventId, sequence: event.sequence, attempts };
   }

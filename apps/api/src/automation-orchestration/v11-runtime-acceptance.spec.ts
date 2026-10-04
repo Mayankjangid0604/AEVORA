@@ -65,6 +65,7 @@ describe('V11 Enterprise Orchestrator - Real Runtime Acceptance', () => {
   });
 
   afterAll(async () => {
+    if (!prisma) return;
     await prisma.intelligenceOutcome.deleteMany({});
     await prisma.intelligenceSession.deleteMany({ where: { companyId: testCompanyId } });
     await prisma.taskResult.deleteMany({ where: { task: { companyId: testCompanyId } } });

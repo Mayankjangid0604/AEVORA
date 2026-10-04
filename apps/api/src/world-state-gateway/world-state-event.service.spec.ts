@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { WorldStateEventService, SpatialHistoryPersistenceError } from './world-state-event.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { StructuredLoggerService } from '../logger/structured-logger.service';
 import { V12EventType, V12EntityType, V12EventEnvelope } from '@aevora/shared';
 import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
@@ -43,7 +44,11 @@ describe('WorldStateEventService', () => {
   beforeEach(async () => {
     prisma = makePrisma();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [WorldStateEventService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        WorldStateEventService, 
+        { provide: PrismaService, useValue: prisma },
+        { provide: StructuredLoggerService, useValue: { log: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn(), setContext: jest.fn() } }
+      ],
     }).compile();
 
     service = module.get<WorldStateEventService>(WorldStateEventService);

@@ -43,6 +43,8 @@ export interface V12IntentContext {
   currentFloorId?: string;
   currentRoomId?: string;
   selectedEntityId?: string;
+  correlationId?: string;
+  timestamp?: number;
   selectedEmployeeId?: string;
   selectedVehicleId?: string;
   currentCameraMode?: string;
@@ -51,22 +53,36 @@ export interface V12IntentContext {
 }
 
 export interface V12ExecutiveAssistantContext {
+  actorId?: string;
+  actorRole?: string;
   currentCompanyId?: string;
+  currentSiteId?: string;
   currentBuildingId?: string;
   currentFloorId?: string;
   currentRoomId?: string;
+  currentSpatialEntityId?: string;
+  selectedCompanyId?: string;
+  selectedEmployeeId?: string;
+  selectedDepartmentId?: string;
+  selectedTeamId?: string;
+  selectedProjectId?: string;
+  selectedTaskId?: string;
+  currentMeetingId?: string;
   selectedEntityId?: string;
   selectedEntityType?: string;
   currentCameraMode?: string;
   currentVehicleId?: string;
   currentOccupants?: string[];
   currentCompanyScope?: string;
+  sessionContext?: any;
+  currentCommandId?: string;
   timestamp: string;
   correlationId: string;
+  causationId?: string;
 }
 
 export interface V12AssistantResponse {
-  status: 'SUCCESS' | 'AMBIGUOUS' | 'UNSUPPORTED' | 'UNAUTHORIZED' | 'NOT_FOUND' | 'ERROR' | 'REPLAY_READ_ONLY';
+  status: 'SUCCESS' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'NOT_FOUND' | 'AMBIGUOUS' | 'UNSUPPORTED' | 'VALIDATION_ERROR' | 'BACKEND_FAILURE' | 'CONFLICT' | 'REPLAY_READ_ONLY' | 'TEMPORARILY_UNAVAILABLE' | 'ERROR';
   correlationId: string;
   responseText: string;
   structuredData?: any;

@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
-import { WorldEntity, V12EntityType } from '@aevora/shared';
+import React, { useMemo, useRef } from 'react';
+import { WorldEntity, V12EntityType, MovementState } from '@aevora/shared';
 import * as THREE from 'three';
+import { useFrame } from '@react-three/fiber';
 
 import { DigitalHuman } from './DigitalHuman';
 import { DigitalVehicle } from './DigitalVehicle';
@@ -9,9 +10,12 @@ interface EntityMeshProps {
   entity: WorldEntity;
   isSelected: boolean;
   onSelect: (id: string) => void;
+  movementState?: MovementState;
+  pathNodes?: { x: number, y: number, z: number }[];
 }
 
-export function EntityMesh({ entity, isSelected, onSelect }: EntityMeshProps) {
+export function EntityMesh({ entity, isSelected, onSelect, movementState, pathNodes }: EntityMeshProps) {
+  const groupRef = useRef<THREE.Group>(null);
   const { position, rotation, scale } = entity.transform || { 
     position: { x: 0, y: 0, z: 0 }, 
     rotation: { x: 0, y: 0, z: 0, w: 1 }, 
@@ -24,6 +28,30 @@ export function EntityMesh({ entity, isSelected, onSelect }: EntityMeshProps) {
   // Convert generic quaternion to THREE.Quaternion
   const quat = useMemo(() => new THREE.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w), [rotation]);
   const euler = useMemo(() => new THREE.Euler().setFromQuaternion(quat), [quat]);
+
+  useFrame(() => {
+    if (movementState?.movementState === 'MOVING' && pathNodes && pathNodes.length > 0 && groupRef.current) {
+      const totalSegments = Math.max(1, pathNodes.length - 1);
+      const scaledProgress = movementState.progress * totalSegments;
+      const index = Math.max(0, Math.min(Math.floor(scaledProgress), pathNodes.length - 2));
+      
+      if (index >= 0 && index < pathNodes.length - 1) {
+        const start = pathNodes[index];
+        const end = pathNodes[index + 1];
+        const localProgress = Math.max(0, Math.min(1, scaledProgress - index));
+        
+        groupRef.current.position.x = start.x + (end.x - start.x) * localProgress;
+        groupRef.current.position.y = start.y + (end.y - start.y) * localProgress;
+        groupRef.current.position.z = start.z + (end.z - start.z) * localProgress;
+
+        const dir = new THREE.Vector3(end.x - start.x, 0, end.z - start.z).normalize();
+        if (dir.lengthSq() > 0.001) {
+           const targetRotation = Math.atan2(dir.x, dir.z);
+           groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, targetRotation, 0.1);
+        }
+      }
+    }
+  });
 
   const handleClick = (e: any) => {
     e.stopPropagation();
@@ -113,6 +141,7 @@ export function EntityMesh({ entity, isSelected, onSelect }: EntityMeshProps) {
 
   return (
     <group 
+      ref={groupRef}
       position={[position.x, position.y, position.z]}
       rotation={euler}
       scale={[scale.x, scale.y, scale.z]}

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WorldStateGatewayService } from './world-state-gateway.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorldStateEventService } from './world-state-event.service';
+import { StructuredLoggerService } from '../logger/structured-logger.service';
 
 describe('WorldStateGatewayService', () => {
   let service: WorldStateGatewayService;
@@ -36,6 +37,10 @@ describe('WorldStateGatewayService', () => {
             broadcastEvent: jest.fn(),
             getCurrentSequence: jest.fn().mockReturnValue(100),
           },
+        },
+        {
+          provide: StructuredLoggerService,
+          useValue: { log: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn(), setContext: jest.fn() },
         },
       ],
     }).compile();

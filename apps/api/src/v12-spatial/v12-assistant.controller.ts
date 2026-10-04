@@ -15,6 +15,13 @@ export class V12AssistantController {
   ): Promise<V12AssistantResponse> {
     // JWT payloads carry `actorId` (see AuthService); `id` is kept as a fallback.
     const userId = req.user.actorId ?? req.user.id;
+
+    // Security Embodiment: Client-provided companyId cannot override authenticated company context
+    if (req.user.companyId) {
+      if (!body.context) body.context = { timestamp: new Date().toISOString(), correlationId: '' };
+      body.context.currentCompanyId = req.user.companyId;
+    }
+
     return this.assistantAdapter.processQuestion(userId, body.intent, body.context, body.parameters, body.mode);
   }
 }

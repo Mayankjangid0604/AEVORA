@@ -1,8 +1,0 @@
-{
-  "name": "project-test-proj-1790876532798",
-  "version": "1.0.0",
-  "scripts": {
-    "test": "node test.js",
-    "build": "node build.js"
-  }
-}

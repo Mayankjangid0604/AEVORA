@@ -202,9 +202,13 @@ export class WorldStateConsumer {
     this.eventSource!.onmessage = (event) => {
       try {
         const envelope: V12EventEnvelope = JSON.parse(event.data);
+        if (!envelope || typeof envelope !== 'object') throw new Error('Invalid envelope format');
+        if (typeof envelope.sequence !== 'number' || isNaN(envelope.sequence)) throw new Error('Missing or invalid sequence');
+        if (!envelope.eventType || typeof envelope.eventType !== 'string') throw new Error('Missing eventType');
+        if (!envelope.entityId || typeof envelope.entityId !== 'string') throw new Error('Missing entityId');
         this.handleEvent(envelope);
       } catch (err) {
-        console.error('Failed to parse incoming event', err);
+        console.error('Failed to parse incoming event or invalid schema', err);
       }
     };
     

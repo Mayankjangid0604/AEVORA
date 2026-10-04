@@ -92,7 +92,7 @@ describe('WorldStateEventTranslationService', () => {
       V12EventType.ENTITY_UPDATED,
       'v12_person_emp-1',
       V12EntityType.PERSON,
-      { currentActivity: 'TASK_ASSIGNED' },
+      { currentActivity: 'WORKING', originalEvent: 'TASK_ASSIGNED' },
       'comp-1',
       'evt-456'
     );

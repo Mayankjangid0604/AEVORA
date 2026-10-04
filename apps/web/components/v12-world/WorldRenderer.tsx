@@ -46,9 +46,16 @@ export function WorldRenderer({ entities, topology, nodes, movementStates, viewM
           </mesh>
 
           {/* Render Spatial Entities */}
-          {entities.map(entity => (
-            <EntityMesh key={entity.id} entity={entity} isSelected={entity.id === selectedEntityId} onSelect={onSelectEntity} />
-          ))}
+          {entities.map(entity => {
+            const movement = movementStates.get(entity.id);
+            const pathNodes = movement?.path?.map(nodeId => {
+              const node = nodes.find(n => n.id === nodeId);
+              return node ? { x: node.position.x, y: node.position.y, z: node.position.z } : null;
+            }).filter(n => n !== null) as { x: number, y: number, z: number }[] | undefined;
+            return (
+              <EntityMesh key={entity.id} entity={entity} isSelected={entity.id === selectedEntityId} onSelect={onSelectEntity} movementState={movement} pathNodes={pathNodes} />
+            );
+          })}
 
           {/* Render Route Visualization */}
           {routePoints.length > 1 && (

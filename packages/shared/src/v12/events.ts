@@ -39,5 +39,6 @@ export interface V12EventEnvelope<T = any> {
   authoritativeTimestamp: number;
   correlationId?: string;
   causationId?: string;
+  accessibilityCue?: string;
   payload: T;
 }

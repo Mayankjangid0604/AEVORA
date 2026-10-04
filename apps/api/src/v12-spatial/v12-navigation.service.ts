@@ -1,15 +1,71 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorldStateEventService } from '../world-state-gateway/world-state-event.service';
 
 @Injectable()
-export class V12NavigationService {
+export class V12NavigationService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(V12NavigationService.name);
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(WorldStateEventService) private readonly eventService: WorldStateEventService
   ) {}
+
+  private tickInterval: NodeJS.Timeout | null = null;
+
+  async onModuleInit() {
+    this.tickInterval = setInterval(() => this.tick(), 1000);
+  }
+
+  onModuleDestroy() {
+    if (this.tickInterval) {
+      clearInterval(this.tickInterval);
+      this.tickInterval = null;
+    }
+  }
+
+  private async tick() {
+    try {
+      const movingEntities = await this.prisma.v12SpatialMovementState.findMany({
+        where: { movementState: 'MOVING' }
+      });
+
+      for (const entity of movingEntities) {
+        const newProgress = Math.min(1.0, entity.progress + 0.2); // 5 second flat travel time placeholder
+        const isArrived = newProgress >= 1.0;
+        
+        const updated = await this.prisma.v12SpatialMovementState.update({
+          where: { entityId: entity.entityId },
+          data: {
+            progress: newProgress,
+            movementState: isArrived ? 'ARRIVED' : 'MOVING',
+            currentNodeId: isArrived ? entity.destinationNodeId : entity.currentNodeId,
+            timestamp: new Date()
+          }
+        });
+
+        // Broadcast progress or arrival
+        const emp = await this.prisma.employee.findUnique({ where: { id: entity.entityId }});
+        if (emp && emp.companyId) {
+            const envelope = this.eventService.createEventEnvelope(
+                isArrived ? 'MOVEMENT_ARRIVED' : 'MOVEMENT_PROGRESS',
+                entity.entityId,
+                'PERSON' as any,
+                { movementState: updated },
+                emp.companyId,
+                undefined,
+                undefined,
+                isArrived ? `${emp.name} has arrived at their destination.` : undefined
+            );
+            await this.eventService.broadcastEvent(emp.companyId, envelope).catch(e => {
+                this.logger.error(`Failed to broadcast movement for ${entity.entityId}`, e);
+            });
+        }
+      }
+    } catch (err) {
+      this.logger.error('Error in movement tick loop', err);
+    }
+  }
 
   /**
    * Deterministic pathfinding algorithm using Dijkstra.
@@ -202,7 +258,10 @@ export class V12NavigationService {
         entityId,
         'PERSON' as any,
         { movementState: newState },
-        emp.companyId
+        emp.companyId,
+        context?.intentId,
+        context?.correlationId,
+        `${emp.name} is now moving to their destination.`
     );
     // Persist-then-broadcast; a SpatialHistoryPersistenceError propagates to the caller.
     await this.eventService.broadcastEvent(emp.companyId, envelope);
@@ -235,7 +294,10 @@ export class V12NavigationService {
             entityId,
             'PERSON' as any,
             { movementState: state },
-            emp.companyId
+            emp.companyId,
+            undefined,
+            undefined,
+            `${emp.name}'s movement was blocked.`
          );
          await this.eventService.broadcastEvent(emp.companyId, envelope);
      }

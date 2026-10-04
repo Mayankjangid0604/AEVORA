@@ -47,26 +47,31 @@ export class JwtAuthGuard implements CanActivate {
     
     // V8 Explicit Company Context Resolution
     const requestedCompanyId = request.headers['x-company-id'];
-    if (payload.actorRole === 'CHAIRMAN') {
-      if (requestedCompanyId) {
-        const company = await this.prisma.company.findFirst({
-          where: { id: requestedCompanyId, chairmanId: payload.actorId }
-        });
-        if (!company) {
-          throw new UnauthorizedException('Unauthorized company context access');
+    
+    // If it's a stream token, it already has the tightly-bound companyId from when it was generated.
+    // Do not overwrite it.
+    if (payload.purpose !== 'sse') {
+      if (payload.actorRole === 'CHAIRMAN') {
+        if (requestedCompanyId) {
+          const company = await this.prisma.company.findFirst({
+            where: { id: requestedCompanyId, chairmanId: payload.actorId }
+          });
+          if (!company) {
+            throw new UnauthorizedException('Unauthorized company context access');
+          }
+          payload.companyId = requestedCompanyId;
+        } else {
+          const company = await this.prisma.company.findFirst({
+            where: { chairmanId: payload.actorId },
+            select: { id: true }
+          });
+          if (company) {
+            payload.companyId = company.id;
+          }
         }
-        payload.companyId = requestedCompanyId;
-      } else {
-        const company = await this.prisma.company.findFirst({
-          where: { chairmanId: payload.actorId },
-          select: { id: true }
-        });
-        if (company) {
-          payload.companyId = company.id;
-        }
+      } else if (requestedCompanyId && payload.companyId !== requestedCompanyId) {
+        throw new UnauthorizedException('Unauthorized company context access');
       }
-    } else if (requestedCompanyId && payload.companyId !== requestedCompanyId) {
-      throw new UnauthorizedException('Unauthorized company context access');
     }
 
     request.user = payload;

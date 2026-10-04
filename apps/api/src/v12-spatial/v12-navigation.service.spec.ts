@@ -85,7 +85,7 @@ describe('V12NavigationService Determinism', () => {
   });
 
   it('should create blocked movement state if path not found', async () => {
-      mockPrisma.employee.findUnique.mockResolvedValue({ id: 'emp-1', companyId: 'comp-1' });
+      mockPrisma.employee.findUnique.mockResolvedValue({ id: 'emp-1', companyId: 'comp-1', name: 'Test Emp' });
       mockPrisma.v12NavigationNode.findFirst.mockResolvedValueOnce({ id: 'dest-node', isTraversable: true });
       mockPrisma.v12SpatialMovementState.findUnique.mockResolvedValue({ entityId: 'emp-1', currentNodeId: 'start-node' });
       mockPrisma.v12NavigationNode.findMany.mockResolvedValue([
@@ -104,7 +104,10 @@ describe('V12NavigationService Determinism', () => {
           'emp-1',
           expect.any(String),
           expect.any(Object),
-          'comp-1'
+          'comp-1',
+          undefined,
+          undefined,
+          "Test Emp's movement was blocked."
       );
   });
 });

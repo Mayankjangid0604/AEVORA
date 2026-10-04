@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { 
   V12IntentType, 
   V12ExecutiveAssistantContext, 
@@ -12,10 +12,11 @@ import { DepartmentService } from '../department/department.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { V12NavigationService } from './v12-navigation.service';
 import { ReplaySessionService } from '../world-state-gateway/replay-session.service';
+import { AuthorizationService } from '../authorization/authorization.service';
+import { StructuredLoggerService } from '../logger/structured-logger.service';
 
 @Injectable()
 export class V12AssistantAdapter {
-  private readonly logger = new Logger(V12AssistantAdapter.name);
 
   constructor(
     private readonly intelligenceService: CompanyIntelligenceService,
@@ -24,6 +25,8 @@ export class V12AssistantAdapter {
     private readonly prisma: PrismaService,
     private readonly navigationService: V12NavigationService,
     private readonly replaySessions: ReplaySessionService,
+    private readonly authService: AuthorizationService,
+    private readonly logger: StructuredLoggerService
   ) {}
 
   async processQuestion(
@@ -45,6 +48,25 @@ export class V12AssistantAdapter {
         responseText: intent === V12IntentType.NAVIGATE_TO
           ? 'Movement commands are disabled while viewing historical replay.'
           : 'Live enterprise lookups are disabled during replay; inspect the historical state on the replay timeline instead.',
+      };
+    }
+
+    if (!context.currentCompanyId) {
+      return {
+        status: 'UNAUTHORIZED',
+        correlationId: context.correlationId,
+        responseText: 'No company context provided for assistant execution.',
+      };
+    }
+
+    try {
+      await this.authService.checkPermission(userId, 'V12_ASSISTANT_ACCESS', context.currentCompanyId);
+    } catch (e: any) {
+      this.logger.warn(`Unauthorized V12 assistant intent ${intent} from user ${userId}: ${e.message}`);
+      return {
+        status: 'UNAUTHORIZED',
+        correlationId: context.correlationId,
+        responseText: 'You are not authorized to access this company context.',
       };
     }
 
@@ -202,53 +224,54 @@ export class V12AssistantAdapter {
     // Resolution Layer
     if (parameters.targetName) {
       const lower = parameters.targetName.toLowerCase();
-      // Try to resolve as department name
-      const departments = await this.prisma.department.findMany({ where: { companyId: context.currentCompanyId } });
-      const dept = departments.find(d => d.name.toLowerCase().includes(lower) || lower.includes(d.name.toLowerCase()));
       
-      if (dept) {
-        // Find a space for this department
+      let candidates: { type: string, id: string, name: string }[] = [];
+
+      // Find departments
+      const departments = await this.prisma.department.findMany({ where: { companyId: context.currentCompanyId } });
+      const matchedDepts = departments.filter(d => d.name.toLowerCase().includes(lower) || lower.includes(d.name.toLowerCase()));
+      for (const dept of matchedDepts) {
         const space = await this.prisma.v12SpatialRoom.findFirst({ where: { departmentId: dept.id } });
         if (space) {
           const node = await this.prisma.v12NavigationNode.findFirst({ where: { entityId: space.id } });
-          if (node) {
-            destNodeId = node.id;
-            destName = dept.name;
-          }
+          if (node) candidates.push({ type: 'department', id: node.id, name: dept.name });
         }
       }
 
-      if (!destNodeId) {
-        // Try room directly
-        const rooms = await this.prisma.v12SpatialRoom.findMany({});
-        const room = rooms.find(r => r.name?.toLowerCase().includes(lower));
-        if (room) {
-           const node = await this.prisma.v12NavigationNode.findFirst({ where: { entityId: room.id } });
-           if (node) {
-             destNodeId = node.id;
-             destName = room.name || 'the room';
-           }
-        }
+      // Find rooms
+      const rooms = await this.prisma.v12SpatialRoom.findMany({});
+      const matchedRooms = rooms.filter(r => r.name?.toLowerCase().includes(lower));
+      for (const room of matchedRooms) {
+        const node = await this.prisma.v12NavigationNode.findFirst({ where: { entityId: room.id } });
+        if (node) candidates.push({ type: 'room', id: node.id, name: room.name || 'the room' });
       }
       
-      if (!destNodeId) {
-         // Try employee (e.g. CEO)
-         const employees = await this.prisma.employee.findMany({ where: { companyId: context.currentCompanyId }, include: { role: true } });
-         const emp = employees.find(e => 
-           e.name.toLowerCase().includes(lower) || 
-           e.role.title.toLowerCase().includes(lower)
-         );
-         if (emp) {
-            // Find their workspace
-            const ws = await this.prisma.v12SpatialWorkspace.findFirst({ where: { employeeId: emp.id } });
-            if (ws) {
-               const node = await this.prisma.v12NavigationNode.findFirst({ where: { entityId: ws.roomId } });
-               if (node) {
-                  destNodeId = node.id;
-                  destName = `${emp.name}'s office`;
-               }
-            }
-         }
+      // Find employees
+      const employees = await this.prisma.employee.findMany({ where: { companyId: context.currentCompanyId }, include: { role: true } });
+      const matchedEmps = employees.filter(e => 
+        e.name.toLowerCase().includes(lower) || 
+        e.role.title.toLowerCase().includes(lower)
+      );
+      for (const emp of matchedEmps) {
+        const ws = await this.prisma.v12SpatialWorkspace.findFirst({ where: { employeeId: emp.id } });
+        if (ws) {
+          const node = await this.prisma.v12NavigationNode.findFirst({ where: { entityId: ws.roomId } });
+          if (node) candidates.push({ type: 'employee', id: node.id, name: `${emp.name}'s office` });
+        }
+      }
+
+      // Deduplicate candidates by node ID
+      const uniqueCandidates = Array.from(new Map(candidates.map(c => [c.id, c])).values());
+
+      if (uniqueCandidates.length > 1) {
+        return {
+          status: 'AMBIGUOUS',
+          correlationId: context.correlationId,
+          responseText: `I found multiple matching destinations for '${parameters.targetName}'. Please be more specific.`,
+        };
+      } else if (uniqueCandidates.length === 1) {
+        destNodeId = uniqueCandidates[0].id;
+        destName = uniqueCandidates[0].name;
       }
     } else if (context.selectedEntityId) {
       // Navigate to selected entity
@@ -270,7 +293,7 @@ export class V12AssistantAdapter {
     try {
       // In this setup, we assume the user issuing the command is the entity moving (e.g., the Chairman)
       const chairmanId = userId; // or map from user to employee
-      const state = await this.navigationService.requestEntityMovement(chairmanId, destNodeId, { intentSource: 'ASSISTANT' });
+      const state = await this.navigationService.requestEntityMovement(chairmanId, destNodeId, { intentSource: 'ASSISTANT', correlationId: context.correlationId });
       
       if (state && state.movementState === 'BLOCKED') {
          return {

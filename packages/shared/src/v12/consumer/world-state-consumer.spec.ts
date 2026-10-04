@@ -247,4 +247,104 @@ describe('WorldStateConsumer', () => {
     expect(consumer.getEntity('ent-1')).toBeUndefined();
     expect(consumer.getEntity('ent-2')).toBeDefined();
   });
+
+  it('should ignore malformed poison pill events and not corrupt sequence', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        version: 'v12',
+        sequence: 100,
+        entities: {}
+      })
+    });
+    
+    const consumer = new WorldStateConsumer({
+      companyId: 'company-123',
+      apiBaseUrl: 'http://localhost:3000',
+      fetchFn: fetchMock,
+      EventSourceClass: MockEventSource
+    });
+    
+    await consumer.connect();
+    await new Promise(r => setTimeout(r, 20));
+    
+    const es = (consumer as any).eventSource as MockEventSource;
+    
+    // Poison pill 1: Bad JSON string
+    if (es.onmessage) es.onmessage({ data: 'not-json' });
+    
+    // Poison pill 2: Missing sequence
+    es.emitMessage({
+      eventId: 'evt-bad-1',
+      eventType: V12EventType.ENTITY_CREATED,
+      entityId: 'ent-bad-1'
+      // missing sequence
+    });
+
+    // Poison pill 3: Missing eventType
+    es.emitMessage({
+      eventId: 'evt-bad-2',
+      entityId: 'ent-bad-2',
+      sequence: 101
+    });
+
+    // Valid event after poison pill
+    es.emitMessage({
+      eventId: 'evt-valid-1',
+      eventType: V12EventType.ENTITY_CREATED,
+      entityId: 'ent-valid-1',
+      sequence: 101,
+      payload: { id: 'ent-valid-1' }
+    });
+
+    expect(consumer.getSequence()).toBe(101); // Valid sequence updated correctly
+    expect(consumer.getEntity('ent-valid-1')).toBeDefined(); // Valid event processed
+    expect(consumer.getEntity('ent-bad-1')).toBeUndefined();
+  });
+  
+  it('Multi-Viewer Consistency: should converge independent consumers to identical authoritative world state', async () => {
+    const snapshot = {
+      version: 'v12',
+      sequence: 100,
+      timestamp: Date.now(),
+      entities: {
+        'entity-A': { id: 'entity-A', type: V12EntityType.PERSON, name: 'Alice' }
+      }
+    };
+    
+    // Independent fetch mocks returning the exact same snapshot
+    const fetchMock1 = jest.fn().mockResolvedValue({ ok: true, json: async () => snapshot });
+    const fetchMock2 = jest.fn().mockResolvedValue({ ok: true, json: async () => snapshot });
+
+    const consumer1 = new WorldStateConsumer({ companyId: 'comp-1', apiBaseUrl: 'http://test1', fetchFn: fetchMock1, EventSourceClass: MockEventSource });
+    const consumer2 = new WorldStateConsumer({ companyId: 'comp-1', apiBaseUrl: 'http://test2', fetchFn: fetchMock2, EventSourceClass: MockEventSource });
+    
+    await Promise.all([consumer1.connect(), consumer2.connect()]);
+    
+    const eventSequence = [
+      {
+        eventId: 'evt-1', eventType: V12EventType.ENTITY_CREATED, sequence: 101, entityId: 'entity-B', entityType: V12EntityType.PERSON,
+        payload: { name: 'Bob' }, authoritativeTimestamp: Date.now()
+      },
+      {
+        eventId: 'evt-2', eventType: V12EventType.ENTITY_UPDATED, sequence: 102, entityId: 'entity-A', entityType: V12EntityType.PERSON,
+        payload: { name: 'Alice 2' }, authoritativeTimestamp: Date.now()
+      }
+    ];
+
+    // Feed same events to both consumers
+    for (const evt of eventSequence) {
+      (consumer1 as any).handleEvent(evt);
+      (consumer2 as any).handleEvent(evt);
+    }
+
+    // Verify independent consumers converged exactly
+    const entities1 = Object.fromEntries(consumer1.getEntities());
+    const entities2 = Object.fromEntries(consumer2.getEntities());
+    expect(entities1).toEqual(entities2);
+    expect(consumer1.getSequence()).toBe(102);
+    expect(consumer2.getSequence()).toBe(102);
+    expect(entities1['entity-A'].name).toBe('Alice 2');
+    expect(entities1['entity-B'].name).toBe('Bob');
+  });
 });

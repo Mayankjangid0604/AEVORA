@@ -1,11 +1,43 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger, Inject, OnModuleInit, OnModuleDestroy, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { WorldStateEventService } from '../world-state-gateway/world-state-event.service';
+import { Subscription } from 'rxjs';
+import { V12EntityType } from '@aevora/shared';
 
 @Injectable()
-export class V12SpatialService {
+export class V12SpatialService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(V12SpatialService.name);
+  private sub: Subscription;
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    private readonly worldStateEventService: WorldStateEventService
+  ) {}
+
+  onModuleInit() {
+    this.sub = this.worldStateEventService.getGlobalStream().subscribe(({ companyId, event }) => {
+      try {
+        if (event.entityType === V12EntityType.PERSON) {
+          const empId = event.entityId.replace('v12_person_', '');
+          this.triggerEmployeeReconciliation(empId);
+        } else if (
+          event.entityType === V12EntityType.COMPANY ||
+          event.entityType === V12EntityType.DEPARTMENT_SPACE ||
+          event.entityType === V12EntityType.ROOM
+        ) {
+          this.triggerCompanyReconciliation(companyId);
+        }
+      } catch (err: any) {
+        this.logger.error(`Failed to handle spatial consequence for event ${event.eventId}: ${err.message}`, err.stack);
+      }
+    });
+  }
+
+  onModuleDestroy() {
+    if (this.sub) {
+      this.sub.unsubscribe();
+    }
+  }
 
   async seedSaahvikWorld() {
     this.logger.log('Seeding Saahvik World (Idempotent)...');
@@ -127,9 +159,9 @@ export class V12SpatialService {
           name: `${company.name} Campus`, 
           cityId: city.id, 
           companyId: company.id,
-          posX: Math.random() * 1000, 
+          posX: companyId.charCodeAt(0) * 10 + companyId.charCodeAt(1), 
           posY: 0, 
-          posZ: Math.random() * 1000 
+          posZ: companyId.charCodeAt(companyId.length - 1) * 10 + companyId.charCodeAt(companyId.length - 2) 
         }
       });
     }
@@ -290,5 +322,17 @@ export class V12SpatialService {
       await this.reconcileCompanySpatialPresence(company.id);
     }
     this.logger.log('Spatial backfill completed.');
+  }
+
+  triggerEmployeeReconciliation(employeeId: string) {
+    this.reconcileEmployeeSpatialPresence(employeeId).catch(err => {
+      this.logger.error(`[RESILIENCE] Spatial reconciliation failed for employee ${employeeId}. Dispatched for background retry.`, err?.stack || String(err));
+    });
+  }
+
+  triggerCompanyReconciliation(companyId: string) {
+    this.reconcileCompanySpatialPresence(companyId).catch(err => {
+      this.logger.error(`[RESILIENCE] Spatial reconciliation failed for company ${companyId}. Dispatched for background retry.`, err?.stack || String(err));
+    });
   }
 }

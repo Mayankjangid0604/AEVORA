@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { StructuredLoggerService } from '../logger/structured-logger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { 
   WorldSnapshot, 
@@ -26,12 +27,16 @@ import { WorldStateEventService } from './world-state-event.service';
 
 @Injectable()
 export class WorldStateGatewayService {
-  private readonly logger = new Logger(WorldStateGatewayService.name);
+  private readonly logger: StructuredLoggerService;
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly eventService: WorldStateEventService
-  ) {}
+    private readonly eventService: WorldStateEventService,
+    logger: StructuredLoggerService
+  ) {
+    this.logger = logger;
+    this.logger.setContext(WorldStateGatewayService.name);
+  }
 
   private getDefaultTransform(): Transform {
     return {
@@ -206,8 +211,8 @@ export class WorldStateGatewayService {
    * Generates a deterministic initial world snapshot from Aevora Truth.
    * Maps Company -> CompanyEntity, Employee -> Person.
    */
-  public async generateSnapshot(companyId: string): Promise<WorldSnapshot> {
-    this.logger.log(`Generating V12 World Snapshot for company: ${companyId}`);
+  public async generateSnapshot(companyId: string, viewportEntityId?: string): Promise<WorldSnapshot> {
+    this.logger.log(`Generating V12 World Snapshot`, '', { companyId, viewportEntityId });
     const entities: Record<string, WorldEntity> = {};
 
     // 1. Fetch Authoritative State
@@ -297,7 +302,45 @@ export class WorldStateGatewayService {
       isEnabled: edge.isEnabled
     }));
 
-    // Return the snapshot
+    // 5. Viewport Culling
+    if (viewportEntityId && entities[viewportEntityId]) {
+      const visibleEntities: Record<string, WorldEntity> = {};
+      
+      const includeWithChildren = (id: string) => {
+        if (!entities[id] || visibleEntities[id]) return;
+        visibleEntities[id] = entities[id];
+        for (const childId of Object.keys(entities)) {
+          if (entities[childId].parentId === id) {
+            includeWithChildren(childId);
+          }
+        }
+      };
+
+      const includeParents = (id: string) => {
+        let current = entities[id];
+        while (current && current.parentId && entities[current.parentId]) {
+          current = entities[current.parentId];
+          visibleEntities[current.id] = current;
+        }
+      };
+
+      includeWithChildren(viewportEntityId);
+      includeParents(viewportEntityId);
+      
+      const companyEntityId = `v12_company_${companyId}`;
+      if (entities[companyEntityId]) visibleEntities[companyEntityId] = entities[companyEntityId];
+
+      return {
+        version: '1.0.0',
+        sequence: this.eventService.getCurrentSequence(companyId),
+        timestamp: Date.now(),
+        entities: visibleEntities,
+        topology: topologyEdges,
+        navigationNodes
+      };
+    }
+
+    // Return the full snapshot
     return {
       version: '1.0.0',
       sequence: this.eventService.getCurrentSequence(companyId),

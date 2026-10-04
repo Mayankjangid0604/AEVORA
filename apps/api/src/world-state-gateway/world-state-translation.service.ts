@@ -75,7 +75,7 @@ export class WorldStateEventTranslationService implements OnModuleInit, OnModule
            V12EventType.ENTITY_UPDATED,
            `v12_person_${payload.employeeId}`,
            V12EntityType.PERSON,
-           { currentActivity: companyEvent.type },
+           { currentActivity: 'WORKING', originalEvent: companyEvent.type },
            companyEvent.companyId,
            companyEvent.id
          );
@@ -84,19 +84,121 @@ export class WorldStateEventTranslationService implements OnModuleInit, OnModule
     }
     
     // Handle location movement (EMPLOYEE_MOVEMENT_STARTED, EMPLOYEE_ARRIVED)
-    if (companyEvent.type === 'EMPLOYEE_MOVEMENT_STARTED' || companyEvent.type === 'EMPLOYEE_ARRIVED') {
+    if (companyEvent.type === 'EMPLOYEE_MOVEMENT_STARTED') {
         const payload = companyEvent.payload as any;
         if (payload && payload.employeeId) {
           const envelope = this.eventService.createEventEnvelope(
             V12EventType.ENTITY_UPDATED,
             `v12_person_${payload.employeeId}`,
             V12EntityType.PERSON,
-            { currentActivity: companyEvent.type, locationId: payload.locationId },
+            { currentActivity: 'TRAVELING', locationId: payload.locationId },
             companyEvent.companyId,
             companyEvent.id
           );
           this.emit(companyEvent.companyId, envelope);
         }
+    }
+    
+    if (companyEvent.type === 'EMPLOYEE_ARRIVED') {
+        const payload = companyEvent.payload as any;
+        if (payload && payload.employeeId) {
+          const envelope = this.eventService.createEventEnvelope(
+            V12EventType.ENTITY_UPDATED,
+            `v12_person_${payload.employeeId}`,
+            V12EntityType.PERSON,
+            { currentActivity: 'IDLE', locationId: payload.locationId },
+            companyEvent.companyId,
+            companyEvent.id
+          );
+          this.emit(companyEvent.companyId, envelope);
+        }
+    }
+
+    if (companyEvent.type === 'EMPLOYEE_TRANSFERRED' || companyEvent.type === 'EMPLOYEE_PROMOTED' || companyEvent.type === 'EMPLOYEE_TERMINATED' || companyEvent.type === 'EMPLOYEE_REHIRED' || companyEvent.type === 'EMPLOYEE_SUSPENDED' || companyEvent.type === 'EMPLOYEE_ON_HOLD' || companyEvent.type === 'EMPLOYEE_REACTIVATED') {
+      const payload = companyEvent.payload as any;
+      if (payload && payload.employeeId) {
+        const envelope = this.eventService.createEventEnvelope(
+          V12EventType.ENTITY_UPDATED,
+          `v12_person_${payload.employeeId}`,
+          V12EntityType.PERSON,
+          { statusChanged: companyEvent.type, ...payload },
+          companyEvent.companyId,
+          companyEvent.id
+        );
+        this.emit(companyEvent.companyId, envelope);
+      }
+    }
+
+    if (companyEvent.type === 'COMPANY_CREATED' || companyEvent.type === 'COMPANY_PAUSED' || companyEvent.type === 'COMPANY_RESUMED' || companyEvent.type === 'COMPANY_CLOSED') {
+      const envelope = this.eventService.createEventEnvelope(
+        companyEvent.type === 'COMPANY_CREATED' ? V12EventType.ENTITY_CREATED : V12EventType.ENTITY_UPDATED,
+        `v12_company_${companyEvent.companyId}`,
+        V12EntityType.COMPANY,
+        { statusChanged: companyEvent.type, ...(companyEvent.payload as any) },
+        companyEvent.companyId,
+        companyEvent.id
+      );
+      this.emit(companyEvent.companyId, envelope);
+    }
+
+    if (companyEvent.type === 'DEPARTMENT_CREATED' || companyEvent.type === 'DEPARTMENT_CHANGED') {
+      const payload = companyEvent.payload as any;
+      if (payload && payload.departmentId) {
+        const envelope = this.eventService.createEventEnvelope(
+          companyEvent.type === 'DEPARTMENT_CREATED' ? V12EventType.ENTITY_CREATED : V12EventType.ENTITY_UPDATED,
+          `v12_department_${payload.departmentId}`,
+          V12EntityType.DEPARTMENT_SPACE,
+          payload,
+          companyEvent.companyId,
+          companyEvent.id
+        );
+        this.emit(companyEvent.companyId, envelope);
+      }
+    }
+
+    if (companyEvent.type === 'PROJECT_CREATED') {
+      const payload = companyEvent.payload as any;
+      if (payload && payload.projectId) {
+        const envelope = this.eventService.createEventEnvelope(
+          V12EventType.ENTITY_CREATED,
+          `v12_project_${payload.projectId}`,
+          V12EntityType.ROOM,
+          payload,
+          companyEvent.companyId,
+          companyEvent.id
+        );
+        this.emit(companyEvent.companyId, envelope);
+      }
+    }
+
+    if (companyEvent.type === 'TASK_COMPLETED') {
+      const payload = companyEvent.payload as any;
+      if (payload && payload.employeeId) {
+        const envelope = this.eventService.createEventEnvelope(
+          V12EventType.ENTITY_UPDATED,
+          `v12_person_${payload.employeeId}`,
+          V12EntityType.PERSON,
+          { currentActivity: 'TASK_COMPLETED', taskId: payload.taskId },
+          companyEvent.companyId,
+          companyEvent.id
+        );
+        this.emit(companyEvent.companyId, envelope);
+      }
+    }
+
+    if (companyEvent.type === 'MEETING_CREATED') {
+      const payload = companyEvent.payload as any;
+      if (payload && payload.meetingId) {
+        const envelope = this.eventService.createEventEnvelope(
+          V12EventType.ENTITY_CREATED,
+          `v12_meeting_${payload.meetingId}`,
+          V12EntityType.MEETING_ROOM,
+          payload,
+          companyEvent.companyId,
+          companyEvent.id
+        );
+        this.emit(companyEvent.companyId, envelope);
+      }
     }
   }
 

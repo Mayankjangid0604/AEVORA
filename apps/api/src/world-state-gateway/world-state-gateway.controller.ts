@@ -56,9 +56,9 @@ export class WorldStateGatewayController {
   }
 
   @Get('snapshot/:companyId')
-  async getSnapshot(@Request() req, @Param('companyId') companyId: string): Promise<WorldSnapshot> {
+  async getSnapshot(@Request() req, @Param('companyId') companyId: string, @Query('viewportEntityId') viewportEntityId?: string): Promise<WorldSnapshot> {
     this.scope(req, companyId);
-    return this.gatewayService.generateSnapshot(companyId);
+    return this.gatewayService.generateSnapshot(companyId, viewportEntityId);
   }
 
   /** CURRENT (no target) | HISTORICAL | NOT_AVAILABLE */
@@ -149,11 +149,12 @@ export class WorldStateGatewayController {
     return this.replaySessions.get(actorId);
   }
 
-  /** LIVE stream only. Replay never flows through here. EventSource authenticates with a short-lived stream token. */
   @StreamTokenAuth()
   @Sse('stream/:companyId')
-  stream(@Request() req, @Param('companyId') companyId: string): Observable<MessageEvent> {
+  stream(@Request() req, @Param('companyId') companyId: string, @Query('viewportEntityId') viewportEntityId?: string): Observable<MessageEvent> {
     this.scope(req, companyId);
+    // In a full implementation, the stream can be filtered by gatewayService.isInViewport(companyId, event.entityId, viewportEntityId).
+    // For now, we emit delta events. The snapshot provides the initial culled state.
     return this.eventService.getCompanyStream(companyId).pipe(
       map((event) => {
         return {

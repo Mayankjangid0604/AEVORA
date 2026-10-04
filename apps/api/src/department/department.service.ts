@@ -11,7 +11,7 @@ export class DepartmentService {
     const company = await this.prisma.company.findUnique({ where: { id: companyId }});
     if (!company) throw new NotFoundException('Company not found');
 
-    return this.prisma.$transaction(async (tx) => {
+    const res = await this.prisma.$transaction(async (tx) => {
       const dept = await tx.department.create({
         data: {
           name,
@@ -28,6 +28,7 @@ export class DepartmentService {
       });
       return dept;
     });
+    return res;
   }
 
   async listDepartments(companyId: string) {
@@ -42,9 +43,10 @@ export class DepartmentService {
 
   async updateDepartment(id: string, name: string) {
     await this.getDepartment(id);
-    return this.prisma.department.update({
+    const res = await this.prisma.department.update({
       where: { id },
       data: { name },
     });
+    return res;
   }
 }

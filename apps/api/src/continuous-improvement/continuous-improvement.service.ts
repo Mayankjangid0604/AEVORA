@@ -98,7 +98,9 @@ export class ContinuousImprovementService {
 
     // Simulate completion
     setTimeout(() => {
-      this.completeProposal(id).catch(console.error);
+      this.completeProposal(id).catch(err => {
+        this.logger.error(`[RESILIENCE] Failed to complete proposal ${id} asynchronously. Retry logic would handle this.`, err?.stack || String(err));
+      });
     }, 5000);
 
     return executed;

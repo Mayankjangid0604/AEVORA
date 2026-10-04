@@ -1,11 +1,10 @@
 import { Injectable, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { V12SpatialService } from '../v12-spatial/v12-spatial.service';
 import { CompanyStatus } from '@prisma/client';
 
 @Injectable()
 export class CompanyService {
-  constructor(@Inject(PrismaService) private prisma: PrismaService, @Inject(V12SpatialService) private v12SpatialService: V12SpatialService) {}
+  constructor(@Inject(PrismaService) private prisma: PrismaService) {}
 
   async createCompany(name: string, legalName: string, description: string, chairmanId: string, groupId?: string) {
     const res = await this.prisma.$transaction(async (tx) => {
@@ -55,7 +54,6 @@ export class CompanyService {
 
       return company;
     });
-    this.v12SpatialService.reconcileCompanySpatialPresence(res.id).catch(console.error);
     return res;
   }
 
@@ -74,7 +72,6 @@ export class CompanyService {
       where: { id },
       data: updates,
     });
-    this.v12SpatialService.reconcileCompanySpatialPresence(res.id).catch(console.error);
     return res;
   }
 
@@ -92,7 +89,6 @@ export class CompanyService {
       });
       return updated;
     });
-    this.v12SpatialService.reconcileCompanySpatialPresence(res.id).catch(console.error);
     return res;
   }
 
@@ -110,7 +106,6 @@ export class CompanyService {
       });
       return updated;
     });
-    this.v12SpatialService.reconcileCompanySpatialPresence(res.id).catch(console.error);
     return res;
   }
 
@@ -128,7 +123,6 @@ export class CompanyService {
       });
       return updated;
     });
-    this.v12SpatialService.reconcileCompanySpatialPresence(res.id).catch(console.error);
     return res;
   }
 }

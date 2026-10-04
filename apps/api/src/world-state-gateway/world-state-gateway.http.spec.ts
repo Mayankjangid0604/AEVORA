@@ -11,14 +11,17 @@ import { WorldStateGatewayService } from './world-state-gateway.service';
 import { WorldStateEventService } from './world-state-event.service';
 import { WorldStateReplayService } from './world-state-replay.service';
 import { ReplaySessionService } from './replay-session.service';
+import { StructuredLoggerService } from '../logger/structured-logger.service';
 import { V12CommandController } from '../v12-spatial/v12-command.controller';
 import { V12CommandAdapter } from '../v12-spatial/v12-command.adapter';
 import { V12AssistantController } from '../v12-spatial/v12-assistant.controller';
 import { V12AssistantAdapter } from '../v12-spatial/v12-assistant.adapter';
 import { V12NavigationService } from '../v12-spatial/v12-navigation.service';
+import { AuthorizationService } from '../authorization/authorization.service';
 import { CompanyIntelligenceService } from '../company-intelligence/company-intelligence.service';
 import { EmployeeService } from '../employee/employee.service';
 import { DepartmentService } from '../department/department.service';
+import { MeetingService } from '../communication/meeting.service';
 import { FakeHistoryStore, fullEntity, historyRow } from './testing/history-store.fixture';
 
 /**
@@ -27,7 +30,7 @@ import { FakeHistoryStore, fullEntity, historyRow } from './testing/history-stor
  */
 describe('V12 world-state over HTTP (auth, company isolation, historical reconstruction, replay security)', () => {
   const SECRET = 'v12-e2e-test-secret';
-  let app: INestApplication;
+  let app: any;
   let jwt: JwtService;
   let store: FakeHistoryStore;
   let T: number;
@@ -73,10 +76,13 @@ describe('V12 world-state over HTTP (auth, company isolation, historical reconst
         ReplaySessionService,
         V12CommandAdapter,
         V12AssistantAdapter,
+        { provide: StructuredLoggerService, useValue: { log: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn(), setContext: jest.fn() } },
+        { provide: AuthorizationService, useValue: { checkPermission: jest.fn().mockResolvedValue(true) } },
         { provide: V12NavigationService, useValue: navigation },
         { provide: EmployeeService, useValue: employees },
         { provide: DepartmentService, useValue: { getDepartment: jest.fn() } },
         { provide: CompanyIntelligenceService, useValue: intel },
+        { provide: MeetingService, useValue: { scheduleMeeting: jest.fn(), startMeeting: jest.fn() } },
       ],
     }).compile();
 

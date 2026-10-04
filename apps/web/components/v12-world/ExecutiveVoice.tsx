@@ -238,6 +238,12 @@ export function ExecutiveVoice({ entities, selectedEntityId, onSelectEntity, vie
          } else if (data.status === 'REPLAY_READ_ONLY') {
            setState(V12VoiceState.REJECTED);
            setAssistantResponse(`REPLAY_READ_ONLY: ${data.responseText}`);
+         } else if (data.status === 'NOT_FOUND') {
+           setState(V12VoiceState.FAILED);
+           setAssistantResponse(data.responseText);
+         } else if (data.status === 'UNAUTHORIZED' || data.status === 'FORBIDDEN') {
+           setState(V12VoiceState.REJECTED);
+           setAssistantResponse(data.responseText);
          } else {
            setState(V12VoiceState.FAILED);
            setAssistantResponse(data.responseText || "An error occurred.");
@@ -279,15 +285,18 @@ export function ExecutiveVoice({ entities, selectedEntityId, onSelectEntity, vie
          if (data.status === 'UNSUPPORTED') {
            setState(V12VoiceState.UNSUPPORTED);
            setAssistantResponse("The backend does not currently support that action.");
-         } else if (data.status === 'ACCEPTED') {
+         } else if (data.status === 'ACCEPTED' || data.status === 'SUCCESS') {
            setState(V12VoiceState.EXECUTING);
            setAssistantResponse("Authorization approved. Executing...");
-         } else if (data.status === 'REJECTED') {
+         } else if (data.status === 'REJECTED' || data.status === 'UNAUTHORIZED' || data.status === 'FORBIDDEN') {
            setState(V12VoiceState.REJECTED);
            setAssistantResponse("I couldn't complete that request because you are not authorized.");
          } else if (data.status === 'REPLAY_READ_ONLY') {
            setState(V12VoiceState.REJECTED);
            setAssistantResponse(`REPLAY_READ_ONLY: ${data.message || 'commands are disabled during replay.'}`);
+         } else if (data.status === 'NOT_FOUND') {
+           setState(V12VoiceState.FAILED);
+           setAssistantResponse(data.message || "Target not found.");
          } else {
            setState(V12VoiceState.FAILED);
            setAssistantResponse(data.message || "Command failed.");

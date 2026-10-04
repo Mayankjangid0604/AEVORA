@@ -28,7 +28,7 @@ export class EmployeeService {
     const dept = await this.prisma.department.findUnique({ where: { id: data.departmentId } });
     if (!dept || dept.companyId !== companyId) throw new BadRequestException('Invalid department for this company');
 
-    return this.prisma.$transaction(async (tx) => {
+    const res = await this.prisma.$transaction(async (tx) => {
       const salary = data.salary > 0 ? data.salary : bandSalaryAC(await tx.role.findUnique({ where: { id: data.roleId } }));
       const emp = await tx.employee.create({
         data: {
@@ -66,6 +66,7 @@ export class EmployeeService {
 
       return emp;
     });
+    return res;
   }
 
   private async _updateStatus(actorId: string, id: string, newStatus: EmployeeStatus, eventType: string) {
@@ -79,7 +80,7 @@ export class EmployeeService {
       throw new BadRequestException('A terminated employee can only be rehired (ACTIVE)');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const res = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.employee.update({
         where: { id },
         data: { 
@@ -108,6 +109,7 @@ export class EmployeeService {
 
       return updated;
     });
+    return res;
   }
 
   async holdEmployee(actorId: string, id: string) {
@@ -133,7 +135,7 @@ export class EmployeeService {
     await this.auth.checkPermission(actorId, 'HIRE_EMPLOYEE', emp.companyId);
     if (emp.status !== EmployeeStatus.TERMINATED) throw new BadRequestException('Only terminated employees can be rehired');
 
-    return this.prisma.$transaction(async (tx) => {
+    const res = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.employee.update({
         where: { id },
         data: { status: EmployeeStatus.ACTIVE, terminationDate: null },
@@ -146,6 +148,7 @@ export class EmployeeService {
       });
       return updated;
     });
+    return res;
   }
 
   async transferEmployee(actorId: string, id: string, newDepartmentId: string) {
@@ -155,7 +158,7 @@ export class EmployeeService {
     const dept = await this.prisma.department.findUnique({ where: { id: newDepartmentId }});
     if (!dept || dept.companyId !== emp.companyId) throw new BadRequestException('Cannot transfer across companies or to invalid department');
 
-    return this.prisma.$transaction(async (tx) => {
+    const res = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.employee.update({
         where: { id },
         data: { departmentId: newDepartmentId },
@@ -168,13 +171,14 @@ export class EmployeeService {
       });
       return updated;
     });
+    return res;
   }
 
   async promoteEmployee(actorId: string, id: string, newRoleId: string) {
     const emp = await this.getEmployee(id);
     await this.auth.checkPermission(actorId, 'CHANGE_ROLE', emp.companyId);
 
-    return this.prisma.$transaction(async (tx) => {
+    const res = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.employee.update({
         where: { id },
         data: { roleId: newRoleId },
@@ -187,6 +191,7 @@ export class EmployeeService {
       });
       return updated;
     });
+    return res;
   }
 
   async getHistory(id: string) {
