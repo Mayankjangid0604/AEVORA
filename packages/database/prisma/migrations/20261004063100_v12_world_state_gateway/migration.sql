@@ -90,3 +90,14 @@ CREATE TABLE "v12_gateway_command_request" (
   "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX "v12_gateway_command_company_idx" ON "v12_gateway_command_request" ("company_id","created_at");
+
+
+CREATE OR REPLACE FUNCTION "v12_reject_world_event_mutation"() RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'V12 world history is append-only';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "v12_world_event_append_only"
+BEFORE UPDATE OR DELETE ON "v12_world_event"
+FOR EACH ROW EXECUTE FUNCTION "v12_reject_world_event_mutation"();
