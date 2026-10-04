@@ -1,13 +1,14 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { V12SpatialService } from '../v12-spatial/v12-spatial.service';
 import { CompanyStatus } from '@prisma/client';
 
 @Injectable()
 export class CompanyService {
-  constructor(private prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private prisma: PrismaService, @Inject(V12SpatialService) private v12SpatialService: V12SpatialService) {}
 
   async createCompany(name: string, legalName: string, description: string, chairmanId: string, groupId?: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const res = await this.prisma.$transaction(async (tx) => {
       const company = await tx.company.create({
         data: {
           name,
@@ -54,6 +55,8 @@ export class CompanyService {
 
       return company;
     });
+    this.v12SpatialService.reconcileCompanySpatialPresence(res.id).catch(console.error);
+    return res;
   }
 
   async getCompany(id: string) {
@@ -67,17 +70,19 @@ export class CompanyService {
   }
 
   async updateCompany(id: string, updates: { name?: string; legalName?: string; description?: string }) {
-    return this.prisma.company.update({
+    const res = await this.prisma.company.update({
       where: { id },
       data: updates,
     });
+    this.v12SpatialService.reconcileCompanySpatialPresence(res.id).catch(console.error);
+    return res;
   }
 
   async pauseCompany(id: string) {
     const company = await this.getCompany(id);
     if (company.status !== CompanyStatus.ACTIVE) throw new BadRequestException('Company must be ACTIVE to pause');
 
-    return this.prisma.$transaction(async (tx) => {
+    const res = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.company.update({
         where: { id },
         data: { status: CompanyStatus.PAUSED },
@@ -87,13 +92,15 @@ export class CompanyService {
       });
       return updated;
     });
+    this.v12SpatialService.reconcileCompanySpatialPresence(res.id).catch(console.error);
+    return res;
   }
 
   async resumeCompany(id: string) {
     const company = await this.getCompany(id);
     if (company.status !== CompanyStatus.PAUSED) throw new BadRequestException('Company must be PAUSED to resume');
 
-    return this.prisma.$transaction(async (tx) => {
+    const res = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.company.update({
         where: { id },
         data: { status: CompanyStatus.ACTIVE },
@@ -103,13 +110,15 @@ export class CompanyService {
       });
       return updated;
     });
+    this.v12SpatialService.reconcileCompanySpatialPresence(res.id).catch(console.error);
+    return res;
   }
 
   async closeCompany(id: string) {
     const company = await this.getCompany(id);
     if (company.status === CompanyStatus.CLOSED) throw new BadRequestException('Company is already CLOSED');
 
-    return this.prisma.$transaction(async (tx) => {
+    const res = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.company.update({
         where: { id },
         data: { status: CompanyStatus.CLOSED },
@@ -119,5 +128,7 @@ export class CompanyService {
       });
       return updated;
     });
+    this.v12SpatialService.reconcileCompanySpatialPresence(res.id).catch(console.error);
+    return res;
   }
 }

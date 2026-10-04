@@ -76,6 +76,8 @@ import { ChairmanMailModule } from './notifications/chairman-mail.module';
 import { BrowserAiModule } from './browser-ai/browser-ai.module';
 import { AutomationOrchestrationModule } from './automation-orchestration/automation-orchestration.module';
 import { ContinuousImprovementModule } from './continuous-improvement/continuous-improvement.module';
+import { WorldStateGatewayModule } from './world-state-gateway/world-state-gateway.module';
+import { V12SpatialModule } from './v12-spatial/v12-spatial.module';
 
 @Module({
   imports: [
@@ -154,6 +156,8 @@ import { ContinuousImprovementModule } from './continuous-improvement/continuous
     ChairmanMailModule,
     BrowserAiModule,
     AutomationOrchestrationModule,
+    WorldStateGatewayModule,
+    V12SpatialModule,
   ],
   controllers: [HealthController],
   providers: [],

@@ -9172,3 +9172,318 @@ model ImprovementOutcome {
 
   proposal ImprovementProposal @relation(fields: [improvementProposalId], references: [id])
 }
+
+// ==========================================
+// PHASE V12: SAAHVIK SPATIAL WORLD FOUNDATION
+// ==========================================
+
+model V12SpatialWorld {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  regions     V12SpatialRegion[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model V12SpatialRegion {
+  id          String   @id @default(uuid())
+  worldId     String
+  world       V12SpatialWorld @relation(fields: [worldId], references: [id])
+  name        String
+  description String?
+  countries   V12SpatialCountry[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posX Float @default(0)
+  posY Float @default(0)
+  posZ Float @default(0)
+  rotX Float @default(0)
+  rotY Float @default(0)
+  rotZ Float @default(0)
+  rotW Float @default(1)
+  scaleX Float @default(1)
+  scaleY Float @default(1)
+  scaleZ Float @default(1)
+}
+
+model V12SpatialCountry {
+  id          String   @id @default(uuid())
+  regionId    String
+  region      V12SpatialRegion @relation(fields: [regionId], references: [id])
+  name        String
+  description String?
+  cities      V12SpatialCity[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posX Float @default(0)
+  posY Float @default(0)
+  posZ Float @default(0)
+  rotX Float @default(0)
+  rotY Float @default(0)
+  rotZ Float @default(0)
+  rotW Float @default(1)
+  scaleX Float @default(1)
+  scaleY Float @default(1)
+  scaleZ Float @default(1)
+}
+
+model V12SpatialCity {
+  id          String   @id @default(uuid())
+  countryId   String
+  country     V12SpatialCountry @relation(fields: [countryId], references: [id])
+  name        String
+  description String?
+  sites       V12SpatialSite[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posX Float @default(0)
+  posY Float @default(0)
+  posZ Float @default(0)
+  rotX Float @default(0)
+  rotY Float @default(0)
+  rotZ Float @default(0)
+  rotW Float @default(1)
+  scaleX Float @default(1)
+  scaleY Float @default(1)
+  scaleZ Float @default(1)
+}
+
+model V12SpatialSite {
+  id          String   @id @default(uuid())
+  cityId      String
+  city        V12SpatialCity @relation(fields: [cityId], references: [id])
+  name        String
+  description String?
+  
+  companyId   String?  
+  
+  buildings   V12SpatialBuilding[]
+  parkingAreas V12SpatialParkingArea[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posX Float @default(0)
+  posY Float @default(0)
+  posZ Float @default(0)
+  rotX Float @default(0)
+  rotY Float @default(0)
+  rotZ Float @default(0)
+  rotW Float @default(1)
+  scaleX Float @default(1)
+  scaleY Float @default(1)
+  scaleZ Float @default(1)
+}
+
+model V12SpatialBuilding {
+  id          String   @id @default(uuid())
+  siteId      String
+  site        V12SpatialSite @relation(fields: [siteId], references: [id])
+  name        String
+  description String?
+  floors      V12SpatialFloor[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posX Float @default(0)
+  posY Float @default(0)
+  posZ Float @default(0)
+  rotX Float @default(0)
+  rotY Float @default(0)
+  rotZ Float @default(0)
+  rotW Float @default(1)
+  scaleX Float @default(1)
+  scaleY Float @default(1)
+  scaleZ Float @default(1)
+}
+
+model V12SpatialFloor {
+  id          String   @id @default(uuid())
+  buildingId  String
+  building    V12SpatialBuilding @relation(fields: [buildingId], references: [id])
+  name        String
+  level       Int      @default(0)
+  rooms       V12SpatialRoom[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posX Float @default(0)
+  posY Float @default(0)
+  posZ Float @default(0)
+  rotX Float @default(0)
+  rotY Float @default(0)
+  rotZ Float @default(0)
+  rotW Float @default(1)
+  scaleX Float @default(1)
+  scaleY Float @default(1)
+  scaleZ Float @default(1)
+}
+
+model V12SpatialRoom {
+  id          String   @id @default(uuid())
+  floorId     String
+  floor       V12SpatialFloor @relation(fields: [floorId], references: [id])
+  name        String
+  type        String   @default("ROOM") // LOBBY, RECEPTION, CORRIDOR, EXECUTIVE_OFFICE, OFFICE, DEPARTMENT_SPACE, WORKSPACE_AREA, MEETING_ROOM, CONFERENCE_ROOM, COMMON_AREA, SERVICE_AREA, CHAIRMAN_OFFICE, CEO_OFFICE, MD_OFFICE, HEAD_OFFICE
+  
+  departmentId String? 
+  
+  workspaces  V12SpatialWorkspace[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posX Float @default(0)
+  posY Float @default(0)
+  posZ Float @default(0)
+  rotX Float @default(0)
+  rotY Float @default(0)
+  rotZ Float @default(0)
+  rotW Float @default(1)
+  scaleX Float @default(1)
+  scaleY Float @default(1)
+  scaleZ Float @default(1)
+}
+
+model V12SpatialWorkspace {
+  id          String   @id @default(uuid())
+  roomId      String
+  room        V12SpatialRoom @relation(fields: [roomId], references: [id])
+  name        String
+  
+  employeeId  String?  @unique
+  companyId   String?
+  departmentId String?
+  floorId     String?
+  buildingId  String?
+  
+  isActive    Boolean  @default(true)
+  isOccupied  Boolean  @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posX Float @default(0)
+  posY Float @default(0)
+  posZ Float @default(0)
+  rotX Float @default(0)
+  rotY Float @default(0)
+  rotZ Float @default(0)
+  rotW Float @default(1)
+  scaleX Float @default(1)
+  scaleY Float @default(1)
+  scaleZ Float @default(1)
+}
+
+model V12SpatialParkingArea {
+  id          String   @id @default(uuid())
+  siteId      String
+  site        V12SpatialSite @relation(fields: [siteId], references: [id])
+  name        String
+  capacity    Int      @default(0)
+  availableSpots Int   @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posX Float @default(0)
+  posY Float @default(0)
+  posZ Float @default(0)
+  rotX Float @default(0)
+  rotY Float @default(0)
+  rotZ Float @default(0)
+  rotW Float @default(1)
+  scaleX Float @default(1)
+  scaleY Float @default(1)
+  scaleZ Float @default(1)
+}
+
+model V12SpatialTopologyEdge {
+  id          String   @id @default(uuid())
+  sourceId    String
+  sourceType  String
+  targetId    String
+  targetType  String
+  
+  distance    Float    @default(1.0)
+  traversalType String @default("WALK") // WALK, STAIRS, ELEVATOR, DOORWAY, CORRIDOR, BUILDING_EXIT, BUILDING_ENTRY
+  accessibility String @default("ALL") // ALL, STAFF, EXECUTIVE
+  isEnabled   Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model V12NavigationNode {
+  id          String   @id @default(uuid()) // Deterministic ID
+  entityId    String   // Reference to spatial entity (e.g. Room ID, Corridor ID)
+  entityType  String
+  
+  posX        Float    @default(0)
+  posY        Float    @default(0)
+  posZ        Float    @default(0)
+  
+  floorId     String?
+  buildingId  String?
+  siteId      String?
+  
+  nodeType    String   @default("WAYPOINT")
+  isTraversable Boolean @default(true)
+  metadata    Json     @default("{}")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model V12SpatialMovementState {
+  id              String   @id @default(uuid())
+  entityId        String   @unique // The moving entity, e.g. Employee ID
+  entityType      String   @default("EMPLOYEE")
+  
+  currentLocationId String
+  currentLocationType String
+  
+  currentNodeId   String?
+  destinationNodeId String?
+  
+  path            Json     @default("[]") // Array of node IDs
+  
+  movementState   String   @default("IDLE") // IDLE, MOVING, ARRIVED, WAITING, BLOCKED, INTERRUPTED, UNKNOWN
+  movementMode    String   @default("WALK")
+  progress        Float    @default(0.0) // 0 to 1
+  blockedReason   String?
+  
+  intentSource    String?  // The Aevora authoritative reason (e.g. MEETING, TASK)
+  intentId        String?  // ID of the reason
+  
+  timestamp       DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// V12 spatial history: append-only projection log for world replay. This is NOT enterprise business data;
+// it has its own retention boundary (V12_SPATIAL_HISTORY_RETENTION_DAYS) independent of business-record retention.
+model V12SpatialHistoryEvent {
+  id                     String   @id @default(uuid())
+  eventId                String   @unique // idempotency key
+  sequence               BigInt   // contiguous per company; deterministic replay order
+  schemaVersion          String   @default("1.0.0")
+  eventType              String   // V12EventType incl. WORLD_BASELINE anchors
+  authoritativeTimestamp DateTime
+  companyId              String
+  entityId               String
+  entityType             String
+  correlationId          String?
+  causationId            String?
+  payload                Json
+  createdAt              DateTime @default(now())
+
+  @@unique([companyId, sequence])
+  @@index([companyId, authoritativeTimestamp, sequence])
+  @@index([companyId, entityId, sequence])
+  @@index([companyId, eventType, sequence])
+  @@index([companyId, correlationId])
+  @@index([companyId, causationId])
+}

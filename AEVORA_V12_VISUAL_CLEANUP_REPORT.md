@@ -1,4 +1,4 @@
-# AEVORA V12 VISUAL CLEANUP REPORT
+z# AEVORA V12 VISUAL CLEANUP REPORT
 
 ## 1. Previous visual architecture identified
 - **3D World / GameShell Engine:** The root application wrapper (`GameShell.tsx`) was loading an iframe to an external 3D engine/scene (`Aevora_Office_3D_v3.html`).

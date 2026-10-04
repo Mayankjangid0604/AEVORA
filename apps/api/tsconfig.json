@@ -1,5 +1,5 @@
 {
-  "exclude": ["**/*.spec.ts", "**/*.e2e-spec.ts", "test/**", "dist", "scripts"],
+  "exclude": ["**/*.spec.ts", "**/*.e2e-spec.ts", "**/testing/**", "test/**", "dist", "scripts"],
   "compilerOptions": {
     "module": "commonjs",
     "declaration": true,

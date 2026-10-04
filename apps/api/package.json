@@ -6,7 +6,8 @@
     "build": "node ../../node_modules/@nestjs/cli/bin/nest.js build",
     "dev": "nest start --watch",
     "start": "nest start",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "test": "jest"
   },
   "dependencies": {
     "@aevora/database": "*",
