@@ -272,10 +272,14 @@ export class WorldStateGatewayService {
     try {
       const authoritative = await this.prisma.companyEvent.count({ where: { companyId } });
       const materialized = Number((await this.getCheckpoint(companyId)).globalCheckpoint);
-      const status = materialized >= authoritative ? 'HEALTHY' : 'STALE';
+      const gaps = await this.prisma.$queryRawUnsafe<SqlRow[]>(
+        'SELECT "stream_key" FROM "v12_world_event" WHERE "company_id"=$1 GROUP BY "stream_key" HAVING COUNT(*) <> MAX("stream_sequence")',
+        companyId,
+      );
+      const status = gaps.length > 0 ? 'DEGRADED' : materialized >= authoritative ? 'HEALTHY' : 'STALE';
       await this.prisma.$executeRawUnsafe(
-        'UPDATE "v12_world_reconciliation_state" SET "status"=$2,"authoritative_checkpoint"=$3,"materialized_checkpoint"=$4,"last_audit_at"=NOW(),"last_error"=NULL WHERE "company_id"=$1',
-        companyId, status, authoritative, materialized,
+        'UPDATE "v12_world_reconciliation_state" SET "status"=$2,"authoritative_checkpoint"=$3,"materialized_checkpoint"=$4,"last_audit_at"=NOW(),"last_error"=$5 WHERE "company_id"=$1',
+        companyId, status, authoritative, materialized, gaps.length ? 'sequence gap detected' : null,
       );
       return this.getReconciliation(companyId);
     } catch (error: any) {
