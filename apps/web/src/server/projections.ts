@@ -3,7 +3,7 @@
  * (e.g. Employee.salary, identitySeed, performance scores). Only the listed fields ever reach the browser.
  * A projection returning `undefined` means "not found" (the BFF answers 404).
  */
-import type { AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance } from '@/lib/types';
+import type { TaskDetail, TaskSummary, AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance } from '@/lib/types';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -136,10 +136,38 @@ function session(v: unknown): IntelligenceSessionView | undefined {
   };
 }
 
+function taskSummary(v: Obj): TaskSummary {
+  return {
+    id: v.id as string, title: v.title as string, status: str(v.status) ?? 'UNKNOWN', priority: str(v.priority) ?? 'UNKNOWN',
+    type: str(v.type) ?? 'UNKNOWN', progress: num(v.progress), dueAt: str(v.dueAt), createdAt: str(v.createdAt),
+    completedAt: str(v.completedAt), assignedEmployeeId: str(v.assignedEmployeeId),
+  };
+}
+const isTask = (v: unknown): v is Obj => isObj(v) && !!str(v.id) && !!str(v.title);
+
+/** Only tasks owned by the selected company context are returned (a multi-company Chairman stays in context). */
+function tasksInContext(v: unknown, companyId?: string): TaskSummary[] {
+  return arr(v).filter(isTask).filter((t) => t.companyId === companyId).map(taskSummary);
+}
+
+function taskInContext(v: unknown, companyId?: string): TaskDetail | undefined {
+  if (!isTask(v) || v.companyId !== companyId) return undefined;
+  const ids = (rows: unknown, key: string) => arr(rows).filter(isObj).map((d) => str(d[key])).filter((x): x is string => !!x);
+  return {
+    ...taskSummary(v),
+    description: str(v.description), estimatedEffort: num(v.estimatedEffort), actualEffort: num(v.actualEffort),
+    startedAt: str(v.startedAt), updatedAt: str(v.updatedAt), goalId: str(v.goalId), projectId: str(v.projectId),
+    departmentId: str(v.departmentId), parentTaskId: str(v.parentTaskId),
+    dependsOn: ids(v.dependencies, 'dependsOnId'),
+    requiredBy: ids(v.dependentOn, 'taskId'),
+  };
+}
+
 const list = <T>(one: (v: unknown) => T | undefined) => (v: unknown): T[] =>
   (Array.isArray(v) ? v : []).map(one).filter((x): x is T => x !== undefined);
 
-export type Projection = (body: unknown) => unknown;
+/** companyId = the explicit company context of the request (for context-ownership checks). */
+export type Projection = (body: unknown, companyId?: string) => unknown;
 
 export const projections = {
   departments: list(department),
@@ -154,4 +182,6 @@ export const projections = {
   proposals: list(proposal),
   assistanceRequests: list(assistanceRequest),
   session,
+  employeeTasks: tasksInContext,
+  task: taskInContext,
 } satisfies Record<string, Projection>;

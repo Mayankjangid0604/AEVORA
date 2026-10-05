@@ -83,7 +83,7 @@ describe('BFF project routes', () => {
   });
   it.each([
     'projects/p1/requirements', 'projects/p1/team', 'projects/p1/plans', 'projects/plans/x/approve', 'projects/p1/milestones',
-    'chairman/projects/p1/tasks', 'tasks/t1', 'employees/e1/tasks', 'delivery/projects', 'delivery/formal/p1/package',
+    'chairman/projects/p1/tasks', 'tasks/t1/start', 'tasks', 'delivery/projects', 'delivery/formal/p1/package',
     'chairman/projects/p1/extra', 'chairman/financials', 'project',
   ])('%s stays blocked (404, no backend call)', async (p) => {
     expect((await call(p, { 'x-aevora-company': 'A' })).status).toBe(404);
@@ -150,7 +150,8 @@ describe('project rendering', () => {
   });
   it('project keys are company-partitioned; Tasks remains blocked in the registry', () => {
     expect(companyKeys.projects('A', 'list')).not.toEqual(companyKeys.projects('B', 'list'));
-    expect(COMPANY_DOMAINS.find((d) => d.slug === 'tasks')?.status).toBe('blocked');
+    // Slice 6 opened Tasks (read-only, by assignee) after its own audit.
+    expect(COMPANY_DOMAINS.find((d) => d.slug === 'tasks')?.status).toBe('ready');
     expect(COMPANY_DOMAINS.find((d) => d.slug === 'projects')?.status).toBe('ready');
   });
 });

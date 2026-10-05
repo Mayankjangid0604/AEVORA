@@ -44,6 +44,10 @@ const ROUTES: RouteRule[] = [
   { pattern: new RegExp(`^intelligence/company/(${ID})/proposals$`), company: true, pathCompany: true, project: projections.proposals },
   { pattern: new RegExp(`^intelligence/company/(${ID})/assistance-requests$`), company: true, pathCompany: true, project: projections.assistanceRequests },
   { pattern: new RegExp(`^intelligence/sessions/${ID}$`), company: true, project: projections.session },
+  // Slice 6: Tasks by assignee (TaskController; employee/task company-bound since Slice 1; projection also keeps
+  // only rows whose companyId equals the selected company). There is no company-wide task listing endpoint.
+  { pattern: new RegExp(`^employees/${ID}/tasks$`), company: true, project: projections.employeeTasks },
+  { pattern: new RegExp(`^tasks/${ID}$`), company: true, project: projections.task },
 ];
 
 const noStore = { 'Cache-Control': 'no-store' };
@@ -67,7 +71,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ path: strin
   if (!r.ok) {
     res = NextResponse.json(r.error, { status: r.status, headers: noStore });
   } else {
-    const body = rule.project ? rule.project(r.data) : r.data;
+    const body = rule.project ? rule.project(r.data, companyId) : r.data;
     res = body === undefined
       ? NextResponse.json({ status: 404, kind: 'not_found', message: 'Not found' }, { status: 404, headers: noStore })
       : NextResponse.json(body, { status: r.status, headers: noStore });

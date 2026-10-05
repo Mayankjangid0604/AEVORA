@@ -152,3 +152,37 @@ export interface IntelligenceSessionView {
   assessments: { id: string; summary: string; recommendation: string; createdAt: string }[];
   proposals: { id: string; title: string; status: string }[];
 }
+
+/**
+ * GET /employees/:id/tasks and GET /tasks/:id, projected. Not forwarded: createdBy (raw actor id),
+ * requiredCapability, companyId, the TaskResult output/errors JSON and any other backend field.
+ * `progress` is the backend's own recorded value.
+ */
+export interface TaskSummary {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  type: string;
+  progress: number | null;
+  dueAt: string | null;
+  createdAt: string | null;
+  completedAt: string | null;
+  assignedEmployeeId: string | null;
+}
+
+export interface TaskDetail extends TaskSummary {
+  description: string | null;
+  estimatedEffort: number | null;
+  actualEffort: number | null;
+  startedAt: string | null;
+  updatedAt: string | null;
+  goalId: string | null;
+  projectId: string | null;
+  departmentId: string | null;
+  parentTaskId: string | null;
+  /** Prerequisite task ids (this task depends on them). */
+  dependsOn: string[];
+  /** Task ids that depend on this task. */
+  requiredBy: string[];
+}

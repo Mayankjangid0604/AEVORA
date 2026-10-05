@@ -5,7 +5,7 @@ export interface AuthUser { actorId: string; actorRole: string; companyId?: stri
 
 /** Company-owned models whose rows can be addressed by id from a route. */
 export type CompanyScopedModel = 'department' | 'employee' | 'task' | 'goal' | 'improvementProposal' | 'operatingLoopCycle' | 'ceoAutonomousDecision'
-  | 'improvementSignal' | 'researchHypothesis' | 'experimentPlan' | 'project';
+  | 'improvementSignal' | 'researchHypothesis' | 'experimentPlan' | 'project' | 'computeWorker';
 
 /** Project children that carry only projectId (no companyId). */
 export type ProjectChildModel = 'projectRequirement' | 'projectPlan' | 'projectAssignment' | 'projectDelivery';
@@ -118,5 +118,32 @@ export class AuthorizationService {
     if (!row) throw new NotFoundException('Resource not found');
     await this.assertResourceAccess(user, 'project', row.projectId);
     return row.projectId;
+  }
+
+  /** Agents have no companyId; ownership is the agent's employee's company. Missing/foreign -> 404. */
+  async assertAgentAccess(user: AuthUser, agentId: string): Promise<string> {
+    const agent = typeof agentId === 'string' && agentId
+      ? await this.prisma.agent.findUnique({ where: { id: agentId }, select: { employee: { select: { companyId: true } } } })
+      : null;
+    if (!agent) throw new NotFoundException('Resource not found');
+    try {
+      await this.assertCompanyAccess(user, agent.employee.companyId);
+    } catch {
+      throw new NotFoundException('Resource not found');
+    }
+    return agent.employee.companyId;
+  }
+
+  /** Training jobs belong to the company of their training run. Missing/foreign -> 404. */
+  async assertTrainingJobAccess(user: AuthUser, jobId: string): Promise<void> {
+    const job = typeof jobId === 'string' && jobId
+      ? await this.prisma.trainingJob.findUnique({ where: { id: jobId }, select: { trainingRun: { select: { companyId: true } } } })
+      : null;
+    if (!job) throw new NotFoundException('Resource not found');
+    try {
+      await this.assertCompanyAccess(user, job.trainingRun.companyId);
+    } catch {
+      throw new NotFoundException('Resource not found');
+    }
   }
 }

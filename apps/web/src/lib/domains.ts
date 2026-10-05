@@ -19,7 +19,7 @@ export const COMPANY_DOMAINS: Domain[] = [
   { slug: 'ceo', label: 'AI CEO', status: 'not-built', endpoints: ['GET /ceo/operating-state', 'GET /ceo/feed'], note: REVIEW },
   { slug: 'organization', label: 'Organization', status: 'ready', endpoints: ['GET /organization/departments', 'GET /organization/departments/:id', 'GET /organization/employees', 'GET /organization/employee/:id', 'GET /workforce/profiles', 'GET /workforce/profiles/:employeeId'], note: 'Read-only. Departments and workforce from the backend; salary and credential fields are never sent to the browser.' },
   { slug: 'projects', label: 'Projects', status: 'ready', endpoints: ['GET /chairman/projects', 'GET /chairman/projects/:id'], note: 'Read-only, Chairman only. Tasks, deliveries and financial figures are not forwarded to the browser.' },
-  { slug: 'tasks', label: 'Tasks', status: 'blocked', endpoints: ['GET /tasks/:id', 'GET /employees/:id/tasks'], note: 'Isolation fixed in V14 slice 1, but no company-wide task listing endpoint exists yet.' },
+  { slug: 'tasks', label: 'Tasks', status: 'ready', endpoints: ['GET /employees/:id/tasks', 'GET /tasks/:id'], note: 'Read-only, by assignee. No company-wide task listing exists; unassigned tasks are not available.' },
   { slug: 'research', label: 'Research', status: 'not-built', endpoints: ['GET /chairman/research/*', 'GET /research/:id'], note: REVIEW },
   { slug: 'marketing', label: 'Marketing', status: 'not-built', endpoints: ['GET /marketing/*'], note: REVIEW },
   { slug: 'sales', label: 'Sales', status: 'not-built', endpoints: ['GET /sales/*', 'GET /outreach/*'], note: REVIEW },

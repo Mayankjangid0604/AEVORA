@@ -106,7 +106,7 @@ describe('BFF proxy', () => {
   });
   it('routes outside the verified allowlist are 404 (blocked domains are unreachable)', async () => {
     jar.set(SESSION_COOKIE, JWT);
-    for (const p of ['tasks/t1', 'operating-loop/A/dashboard', 'continuous-improvement/company/A/proposals', 'companies',
+    for (const p of ['tasks/t1/complete', 'operating-loop/A/dashboard', 'continuous-improvement/company/A/proposals', 'companies',
       'chairman/operating-loop/cycles', 'chairman/simulation', 'chairman/world', 'chairman/financials', 'organization/employee/e1/kpis',
       'outreach/process', 'outreach/inbound/poll-email', 'ceo/notify-test', 'world-state/snapshot/A']) {
       expect((await bffCall(p)).status).toBe(404);

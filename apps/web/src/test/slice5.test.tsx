@@ -105,7 +105,7 @@ describe('BFF intelligence routes', () => {
   it.each([
     `company-intelligence/group/${A}`, 'foundation-intelligence/datasets', 'foundation-intelligence/model-versions', 'foundation-intelligence/analytics/summary',
     'chairman/research/inference', 'chairman/knowledge', 'chairman/knowledge/k1', 'research/r1', 'v12-assistant/ask', 'assistant/message', 'intelligence/sessions',
-    `intelligence/company/${A}/other`, 'tasks/t1',
+    `intelligence/company/${A}/other`, 'tasks/t1/cancel',
   ])('%s stays blocked (404, no backend call)', async (p) => {
     expect((await call(p, { 'x-aevora-company': A })).status).toBe(404);
     expect(fetchMock).not.toHaveBeenCalled();
