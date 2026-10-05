@@ -1,3 +1,4 @@
+import { AuthorizationService } from '../authorization/authorization.service';
 import {
   BadRequestException, Body, Controller, Get, Headers, NotFoundException, Param, Post, Query, RawBodyRequest, Req, Request, Res, UnauthorizedException, UseGuards,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ export class DeliveryController {
     private readonly worker: DeliveryAgentWorker,
     private readonly payments: InvoiceAndPaymentService,
     private readonly formalDelivery: FormalDeliveryService,
+    private readonly authz: AuthorizationService,
   ) {}
 
   @Get('projects')
@@ -63,20 +65,24 @@ export class DeliveryController {
 
   @Post('formal/:projectId/package')
   @Roles('CHAIRMAN', 'MANAGEMENT')
-  packageDelivery(@Request() req, @Param('projectId') projectId: string, @Body() body: { summary: string; deliverables: string }) {
-    return this.formalDelivery.packageDelivery(projectId, req.user?.id || 'system', body.summary, body.deliverables);
+  async packageDelivery(@Request() req, @Param('projectId') projectId: string, @Body() body: { summary: string; deliverables: string }) {
+    // V14 slice 4: bind to the caller's company; record the real actor (the JWT has actorId, never `id`).
+    await this.authz.assertResourceAccess(req.user, 'project', projectId);
+    return this.formalDelivery.packageDelivery(projectId, req.user.actorId, body.summary, body.deliverables);
   }
 
   @Post('formal/deliveries/:id/accept')
   @Roles('CHAIRMAN', 'MANAGEMENT', 'CLIENT')
-  acceptDelivery(@Request() req, @Param('id') id: string) {
-    return this.formalDelivery.acceptDelivery(id, req.user.id || req.user.companyId);
+  async acceptDelivery(@Request() req, @Param('id') id: string) {
+    await this.authz.assertProjectChildAccess(req.user, 'projectDelivery', id);
+    return this.formalDelivery.acceptDelivery(id, req.user.actorId);
   }
 
   @Post('formal/deliveries/:id/revise')
   @Roles('CHAIRMAN', 'MANAGEMENT', 'CLIENT')
-  requestFormalRevision(@Request() req, @Param('id') id: string, @Body() body: { changesRequested: string }) {
-    return this.formalDelivery.requestRevision(id, req.user.id || req.user.companyId, body.changesRequested);
+  async requestFormalRevision(@Request() req, @Param('id') id: string, @Body() body: { changesRequested: string }) {
+    await this.authz.assertProjectChildAccess(req.user, 'projectDelivery', id);
+    return this.formalDelivery.requestRevision(id, req.user.actorId, body.changesRequested);
   }
 
   /** Public sample link sent to the client. AI-generated HTML → served with CSP sandbox (no scripts, opaque origin). */

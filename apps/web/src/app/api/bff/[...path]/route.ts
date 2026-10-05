@@ -29,6 +29,9 @@ const ROUTES: RouteRule[] = [
   { pattern: new RegExp(`^organization/employee/${ID}$`), company: true, project: projections.employee },
   { pattern: /^workforce\/profiles$/, company: true, project: projections.provenanceList },
   { pattern: new RegExp(`^workforce/profiles/${ID}$`), company: true, project: projections.provenance },
+  // Slice 4: Projects (ChairmanController, CHAIRMAN-only, getCompanyForChairman; detail 404s foreign ids).
+  { pattern: /^chairman\/projects$/, company: true, project: projections.projects },
+  { pattern: new RegExp(`^chairman/projects/${ID}$`), company: true, project: projections.project },
 ];
 
 const noStore = { 'Cache-Control': 'no-store' };

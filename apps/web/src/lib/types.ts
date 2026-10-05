@@ -73,3 +73,34 @@ export interface EmployeeSummary {
 
 /** GET /workforce/profiles(/:employeeId), projected to the backend-recorded worker type only. */
 export interface WorkerProvenance { employeeId: string; workerType: string }
+
+/**
+ * GET /chairman/projects, projected by the BFF. Financial fields (quotedPrice, revenue, cost, margin,
+ * financialStatus), opportunity/proposal ids and full employee rows never leave the server.
+ * Project has no owner or department field in the backend, so none is shown.
+ */
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  type: string;
+  status: string;
+  startDate: string | null;
+  targetEndDate: string | null;
+  client: { name: string } | null;
+  /** Number of project assignments the backend returned (all statuses). */
+  assignmentCount: number;
+}
+
+export interface ProjectMilestone { id: string; name: string; sequence: number; dueAt: string | null; status: string }
+export interface ProjectRisk { id: string; title: string; severity: number; status: string }
+export interface ProjectRequirement { id: string; title: string; priority: string; status: string }
+export interface ProjectTeamMember { employeeId: string; name: string; role: string; allocation: number; status: string }
+
+/** GET /chairman/projects/:id, projected. Tasks, deliveries, plans, revenue and cost records are not forwarded. */
+export interface ProjectDetail extends Omit<ProjectSummary, 'assignmentCount'> {
+  milestones: ProjectMilestone[];
+  risks: ProjectRisk[];
+  requirements: ProjectRequirement[];
+  team: ProjectTeamMember[];
+}

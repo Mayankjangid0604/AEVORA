@@ -5,4 +5,5 @@ export const companyKeys = {
   all: (companyId: string) => ['company', companyId] as const,
   chairman: (companyId: string, view: ChairmanView) => ['company', companyId, 'chairman', view] as const,
   org: (companyId: string, ...parts: string[]) => ['company', companyId, 'org', ...parts] as const,
+  projects: (companyId: string, ...parts: string[]) => ['company', companyId, 'projects', ...parts] as const,
 };

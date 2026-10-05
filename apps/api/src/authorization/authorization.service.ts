@@ -5,7 +5,10 @@ export interface AuthUser { actorId: string; actorRole: string; companyId?: stri
 
 /** Company-owned models whose rows can be addressed by id from a route. */
 export type CompanyScopedModel = 'department' | 'employee' | 'task' | 'goal' | 'improvementProposal' | 'operatingLoopCycle' | 'ceoAutonomousDecision'
-  | 'improvementSignal' | 'researchHypothesis' | 'experimentPlan';
+  | 'improvementSignal' | 'researchHypothesis' | 'experimentPlan' | 'project';
+
+/** Project children that carry only projectId (no companyId). */
+export type ProjectChildModel = 'projectRequirement' | 'projectPlan' | 'projectAssignment' | 'projectDelivery';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -105,5 +108,15 @@ export class AuthorizationService {
     if (!role || (role.companyId !== null && role.companyId !== companyId)) {
       throw new BadRequestException('Role is not available in this company');
     }
+  }
+
+  /** Resolves a project child row to its project, then applies the project's company check (404 if missing/foreign). */
+  async assertProjectChildAccess(user: AuthUser, model: ProjectChildModel, id: string): Promise<string> {
+    const row = typeof id === 'string' && id
+      ? await (this.prisma[model] as any).findUnique({ where: { id }, select: { projectId: true } })
+      : null;
+    if (!row) throw new NotFoundException('Resource not found');
+    await this.assertResourceAccess(user, 'project', row.projectId);
+    return row.projectId;
   }
 }

@@ -16,7 +16,7 @@ export function SystemState({ kind, title, detail }: { kind: ErrorKind | 'empty'
   const c = COPY[kind] ?? COPY.error;
   return (
     <div role={kind === 'empty' ? 'status' : 'alert'} data-state={kind} className="rounded-lg border border-border bg-surface p-6">
-      <h2 className="text-base font-semibold text-text">{title ?? c.title}</h2>
+      <p className="text-base font-semibold text-text">{title ?? c.title}</p>
       <p className="mt-1 text-sm text-muted">{detail ?? c.body}</p>
     </div>
   );
