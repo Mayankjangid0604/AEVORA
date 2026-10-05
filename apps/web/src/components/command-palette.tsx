@@ -36,7 +36,7 @@ export function CommandPalette() {
         type="button"
         onClick={() => dialog.current?.showModal()}
         aria-haspopup="dialog"
-        className="flex items-center gap-2 rounded-control border border-border bg-bg px-3 py-1.5 text-sm text-muted hover:text-text"
+        className="flex items-center gap-2 whitespace-nowrap rounded-control border border-border bg-bg px-3 py-1.5 text-sm text-muted hover:text-text"
       >
         <span>Go to…</span>
         <kbd className="hidden rounded border border-border px-1 text-[10px] sm:inline">Ctrl K</kbd>

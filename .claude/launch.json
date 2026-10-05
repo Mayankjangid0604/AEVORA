@@ -4,14 +4,24 @@
     {
       "name": "aevora-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace=@aevora/web"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--workspace=@aevora/web"
+      ],
       "port": 3000
     },
     {
       "name": "aevora-api-safe",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start", "--workspace=@aevora/api"],
-      "env": { "AEVORA_ENV_OVERRIDE": "C:/Users/mayan/AppData/Local/Temp/claude/F--Aevora/50f83512-3aaa-4b22-bcbb-15ba656d5493/scratchpad/v14-verify.env" },
+      "runtimeArgs": [
+        "run",
+        "start",
+        "--workspace=@aevora/api"
+      ],
+      "env": {
+        "AEVORA_ENV_OVERRIDE": "../../scripts/safe-local.env"
+      },
       "port": 13000
     }
   ]

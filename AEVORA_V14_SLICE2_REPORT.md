@@ -163,3 +163,79 @@ Also confirmed:
 ## 16. V14/V15 boundary verification
 
 2D enterprise web only. No 3D, WebXR, world engine, office rooms, spatial navigation, simulation or V12/V15 imports (scan test + grep). No spatial metaphors in copy or layout. Simulation/world/office-room routes stay unreachable through the BFF.
+
+---
+
+## 17. LIVE VERIFICATION (from `2791c58`)
+
+> This section supersedes the "NOT VERIFIED" markers in §§5–13 for everything listed here.
+
+**PostgreSQL availability:** reachable on `localhost:5432` (TCP probe). Not started, migrated, seeded or modified by this pass.
+
+**Startup (exactly as specified):** API from `apps/api` with `AEVORA_ENV_OVERRIDE=../../scripts/safe-local.env npm run start --workspace=@aevora/api` (the log confirmed the overrides: SAFE_MODE, sending disabled, inbox/lead-gen/agent cycles off). Web with `npm run dev --workspace=@aevora/web`. `.claude/launch.json` `aevora-api-safe` now runs exactly this command; it previously pointed at an expired scratchpad file.
+
+**Credentials:** the local test Chairman from the repo's own fixture (`scripts/test-api-capabilities.js`). No credential, token or secret is reproduced in this report.
+
+| Area | Result |
+|---|---|
+| `/login` | ✓ loads; unauthenticated `/company/x` → `/login?next=%2Fcompany%2Fx` |
+| Invalid credentials | ✓ 401 "Invalid credentials", no cookie set |
+| Valid credentials | ✓ **LIVE LOGIN = VERIFIED**: 200 `{"ok":true}`, then navigated to the safe `next` |
+| Cookie flags | ✓ `aevora_session`: `HttpOnly; SameSite=strict; Path=/; Max-Age=3600`. `Secure` absent only because this is a dev build (`NODE_ENV!=production`), as designed |
+| Token exposure | ✓ none in URL, login body, other BFF bodies (regex scan), `localStorage` (0), `sessionStorage` (0) or `document.cookie` (empty) |
+| `GET /auth/companies` | ✓ actor has **1** company, which matches the backend exactly (same id, name, status). No fabricated entries |
+| One-company flow | ✓ `/` → direct entry into that company |
+| Explicit selection | ✓ `/?choose=1` lists exactly the backend company (one link, backend id) |
+| Zero / multi-company | not applicable: the actor has exactly one company; no records were created to test these (covered by unit tests) |
+| Company context | ✓ name, status and legal name rendered from the backend; breadcrumb correct; BFF forwarded `X-Company-Id` (own company 200) |
+| URL manipulation | ✓ foreign UUID → "You do not have access to this company.", no data, no fallback, **session preserved** (next `/` still signed in); malformed `..%2F..%2Fapi` → 404 |
+| Header manipulation via BFF | ✓ foreign `x-aevora-company` → 403 (backend guard); missing → 400 "Company context required"; `../x` → 400 |
+| Chairman Home vs API | ✓ checked against direct API calls with a fresh token: employees 4/4 active, projects 0/0, active alerts 0, pending decisions 0 (backend has 1 decision, not PROPOSED, correctly excluded), activity 87 events (first entries identical). Attention panel: "Nothing needs attention" matches 0 alerts |
+| Section states live | success ✓ (overview, activity); empty ✓ (decisions, attention); loading: skeletons observed only transiently (local backend responds fast); backend-error state: not re-run live this pass (live-verified in Slice 2 with the backend down; unit-tested per status) |
+| Non-Chairman role path | **not live-tested**: no non-Chairman credentials exist in project fixtures, and no user was created |
+| Shell | ✓ rail with `aria-current` (Home, then AI CEO after navigating); context bar; user menu (Radix `menu`/`menuitem`, keyboard open + activate); Ctrl+K opens a **modal** native dialog with focus in the input; filter "ceo" + Enter navigates; Escape closes; skip link is the first Tab stop with a 2px focus outline |
+| Responsive / themes | ✓ 1440×900 dark: rail + workspace + Attention aside. 375×812 light: rail hidden, palette serves as navigation, no horizontal scroll, light tokens applied |
+| **Defect found and fixed** | at 375 px the header's "Go to…" button and user-menu label wrapped to two lines. Fix: `whitespace-nowrap` on the palette button; user-menu trigger truncates, and the role label is hidden below `sm`. Header height re-measured at 55 px (single line) |
+| Logout | ✓ via keyboard user menu: POST, back to `/login`; protected route → `/login?next=…`; `/api/bff/auth/me` → 401 "Not authenticated"; `GET /api/auth/logout` → 405; no loop |
+| Forged / invalid session | ✓ forged cookie on a protected route → one redirect to `/login?reason=expired&next=…` ("Your session ended"); plain `/login` with the forged cookie → `/login?reason=expired`, renders, no loop |
+| Blocked routes via BFF | ✓ `chairman/operating-loop/cycles`, `outreach/process`, `chairman/simulation` → 404 "Not available" |
+| Spatial / V15 behaviour | none observed |
+
+**Browser console:** only expected network errors:
+- 401 from the invalid login
+- 403, 400, 400, 404 ×3, 403 and 405 from the deliberate manipulation probes
+- 401 from `/api/bff/auth/me` after logout
+
+There were no React, hydration or uncaught errors and no security warnings. Web and API server logs had **zero** errors.
+
+**Accessibility (manual check, not automated axe):**
+- Skip link works and is first in focus order.
+- `:focus-visible` gives a 2px solid outline.
+- Landmarks: `nav` Primary, `header`, `main`, breadcrumb `nav`, `aside` Attention.
+- The command palette is a labelled modal dialog: input focused, Escape closes, focus restored by the platform.
+- The user menu exposes `aria-haspopup=menu` and `menuitem`, and works by keyboard.
+- Section headings are labelled.
+
+Not checked:
+- **reduced motion:** cannot be emulated in this browser tool; the CSS override is present.
+- **contrast:** not measured.
+
+Observation (not fixed; not a Slice 2 regression): domain shell pages have two `h1` (company name plus domain title).
+
+**Final automated tests (after the fix):**
+
+| Check | Result |
+|---|---|
+| Frontend `npx vitest run` | **59/59** |
+| `npx tsc --noEmit` | pass |
+| `npx eslint .` | pass, 0 warnings |
+| `npx next build` | pass |
+| Backend `npx jest` | **50/50 suites, 385/385** |
+
+**Exact remaining items (none blocking):**
+1. Non-Chairman "Chairman only" path not live-tested (no such actor in the fixtures).
+2. Zero/multi-company states are not live-tested because the actor owns one company (unit-tested).
+3. Reduced-motion and contrast not measured by tooling.
+4. Duplicate `h1` on domain shell pages (cosmetic, a11y polish for a later slice).
+
+**Slice 2 classification: A — COMPLETE.** The full authenticated journey (login → company selection → company context → Chairman Home on real data → shell → logout), together with the authorization-manipulation checks, was verified live against the real backend and database.
