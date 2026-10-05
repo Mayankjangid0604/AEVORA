@@ -65,9 +65,9 @@ export class JwtAuthGuard implements CanActivate {
             where: { chairmanId: payload.actorId },
             select: { id: true }
           });
-          if (company) {
-            payload.companyId = company.id;
-          }
+          // No owned company: null, never undefined. Prisma drops `undefined` filters, so an undefined
+          // companyId would turn `where: { companyId }` into an all-companies query (V14 closure).
+          payload.companyId = company ? company.id : null;
         }
       } else if (requestedCompanyId && payload.companyId !== requestedCompanyId) {
         throw new ForbiddenException('Unauthorized company context access'); // authenticated but not permitted: 403, not a session failure

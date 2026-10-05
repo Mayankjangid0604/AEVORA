@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseUUIDPipe, UseGuards, Request, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, UseGuards, Request, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../../authorization/jwt-auth.guard';
 
@@ -8,15 +8,18 @@ export class IntelligenceController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get('sessions/:id')
-  async getSession(@Param('id', ParseUUIDPipe) id: string) {
-    return this.prisma.intelligenceSession.findUnique({
-      where: { id },
+  async getSession(@Param('id', ParseUUIDPipe) id: string, @Request() req) {
+    // Bound to the caller's company (V14 closure); another tenant's session is indistinguishable from a missing one.
+    const session = await this.prisma.intelligenceSession.findFirst({
+      where: { id, companyId: req.user.companyId ?? '__none__' },
       include: {
         assessments: { include: { evidence: true } },
         plans: { include: { steps: true } },
         proposals: { include: { options: true, reviews: true } },
       },
     });
+    if (!session) throw new NotFoundException('Intelligence session not found');
+    return session;
   }
 
   @Get('company/:companyId/proposals')

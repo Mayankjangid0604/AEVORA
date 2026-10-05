@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Query, UseGuards, Request, BadRequestException } from '@nestjs/common';
 import { AuthorizationService } from '../authorization/authorization.service';
 import { JwtAuthGuard } from '../authorization/jwt-auth.guard';
 import { RolesGuard } from '../authorization/roles.guard';
@@ -107,11 +107,15 @@ export class OperatingLoopController {
     return this.itlPool.getPoolSnapshot(companyId);
   }
 
-  /** Trigger an immediate ITL pool scan (processes all failed cycles now). */
+  /** Trigger an immediate ITL pool scan for the selected company's failed cycles. */
   @Roles('CHAIRMAN')
   @Post('error-pool/scan')
-  scanPool() {
-    return this.itlPool.processPool();
+  async scanPool(@Request() req) {
+    // Scoped to the explicitly selected company (X-Company-Id, already validated by JwtAuthGuard); no implicit fallback.
+    const companyId = req.headers['x-company-id'];
+    if (typeof companyId !== 'string' || !companyId) throw new BadRequestException('X-Company-Id header is required');
+    await this.authz.assertCompanyAccess(req.user, companyId);
+    return this.itlPool.processPool(companyId);
   }
 
   /** Force-retry a specific failed cycle immediately (Chairman override). */

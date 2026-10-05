@@ -19,7 +19,7 @@ export class CompanyIntelligenceController {
     @Query() query: V9IntelligenceQuery,
     @Request() req
   ) {
-    if (req.user.companyId && req.user.companyId !== companyId) {
+    if (!req.user.companyId || req.user.companyId !== companyId) { // fail closed when no company context (V14 closure)
       throw new ForbiddenException('Unauthorized cross-company data access attempt');
     }
     return this.companyIntelligenceService.generateCompanyIntelligence(companyId, query);

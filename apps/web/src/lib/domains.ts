@@ -8,25 +8,25 @@ export interface Domain {
   slug: string;
   label: string;
   status: DomainStatus;
-  /** Backend routes confirmed to exist in apps/api (existence only, not yet authorization-reviewed for UI). */
+  /** Backend routes confirmed to exist in apps/api (authorization reviewed in AEVORA_V14_SLICE1_CLOSURE_REPORT.md). */
   endpoints: string[];
   note: string;
 }
 
-const REVIEW = 'Endpoint exists. Its authorization must be verified before this workspace renders data.';
+const REVIEW = 'Authorization reviewed (see AEVORA_V14_SLICE1_CLOSURE_REPORT.md). Workspace not built yet.';
 
 export const COMPANY_DOMAINS: Domain[] = [
   { slug: 'ceo', label: 'AI CEO', status: 'not-built', endpoints: ['GET /ceo/operating-state', 'GET /ceo/feed'], note: REVIEW },
   { slug: 'workforce', label: 'Workforce', status: 'not-built', endpoints: ['GET /workforce/profiles', 'GET /workforce/ai/workers'], note: REVIEW },
-  { slug: 'departments', label: 'Departments', status: 'not-built', endpoints: ['GET /organization/departments', 'GET /companies/:id/departments'], note: REVIEW },
+  { slug: 'departments', label: 'Departments', status: 'not-built', endpoints: ['GET /organization/departments', 'GET /companies/:id/departments'], note: 'Reviewed. GET /organization/employee/:id and /history are unscoped and stay blocked; use /workforce/profiles/:id.' },
   { slug: 'projects', label: 'Projects', status: 'not-built', endpoints: ['GET /chairman/projects', 'GET /projects/:id/plans'], note: REVIEW },
   { slug: 'tasks', label: 'Tasks', status: 'blocked', endpoints: ['GET /tasks/:id', 'GET /employees/:id/tasks'], note: 'Isolation fixed in V14 slice 1, but no company-wide task listing endpoint exists yet.' },
-  { slug: 'research', label: 'Research', status: 'not-built', endpoints: ['GET /chairman/research/*', 'GET /research/*'], note: REVIEW },
+  { slug: 'research', label: 'Research', status: 'not-built', endpoints: ['GET /chairman/research/*', 'GET /research/:id'], note: 'Reviewed. POST /chairman/research/improvement/* lack company checks and stay blocked.' },
   { slug: 'marketing', label: 'Marketing', status: 'not-built', endpoints: ['GET /marketing/*'], note: REVIEW },
   { slug: 'sales', label: 'Sales', status: 'not-built', endpoints: ['GET /sales/*', 'GET /outreach/*'], note: REVIEW },
   { slug: 'intelligence', label: 'Intelligence', status: 'not-built', endpoints: ['GET /intelligence/company/:companyId/proposals'], note: REVIEW },
   { slug: 'improvement', label: 'Improvement', status: 'not-built', endpoints: ['GET /continuous-improvement/company/:companyId/proposals'], note: 'Isolation fixed and tested in V14 slice 1. Workspace not built yet.' },
-  { slug: 'operations', label: 'Operations', status: 'blocked', endpoints: ['GET /autonomous-enterprise/dashboard/summary'], note: 'Operating Loop stays hidden: POST /operating-loop/error-pool/scan still processes every company globally.' },
+  { slug: 'operations', label: 'Operations', status: 'blocked', endpoints: ['GET /autonomous-enterprise/dashboard/summary'], note: 'Operating Loop: all routes company-scoped in the V14 closure, but chairman/operating-loop/* is broken (reads an identity field the JWT never carries) and no workspace is built.' },
 ];
 
 export const OS_DOMAINS: Domain[] = [

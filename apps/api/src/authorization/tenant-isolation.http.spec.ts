@@ -119,6 +119,14 @@ describe('V14 tenant isolation over HTTP (legacy controllers + /auth/*)', () => 
   describe('authentication', () => {
     it('rejects requests without a token (401)', () => http().get('/companies').expect(401));
     it('rejects a forged token (401)', () => http().get('/companies').set('Authorization', 'Bearer not.a.jwt').expect(401));
+    it('rejects a JWT signed with a different secret (401)', async () => {
+      const forged = new JwtService({ secret: 'attacker-secret' }).sign({ actorId: 'chair-A', actorRole: 'CHAIRMAN' });
+      await http().get('/auth/me').set('Authorization', `Bearer ${forged}`).expect(401);
+    });
+    it('rejects a session token sent as ?token= on a non-stream route (401)', async () => {
+      const t = jwt.sign({ actorId: 'chair-A', actorRole: 'CHAIRMAN' });
+      await http().get(`/auth/me?token=${t}`).expect(401);
+    });
     it('rejects an expired token (401)', async () => {
       const expired = jwt.sign({ actorId: 'chair-A', actorRole: 'CHAIRMAN' }, { expiresIn: -10 });
       await http().get('/auth/me').set('Authorization', `Bearer ${expired}`).expect(401);
@@ -238,6 +246,15 @@ describe('V14 tenant isolation over HTTP (legacy controllers + /auth/*)', () => 
     ];
     it.each(hidden)('%s %s → 404 (other tenant row is invisible)', async (method, path) => {
       await (http() as any)[method](path).set('Authorization', chairA()).send({ companyId: 'A' }).expect(404);
+    });
+
+    it('error-pool scan is scoped to the selected, authorised company', async () => {
+      await http().post('/operating-loop/error-pool/scan').set('Authorization', chairA()).expect(400);
+      await http().post('/operating-loop/error-pool/scan').set('Authorization', chairA()).set('x-company-id', 'B').expect(403);
+      await http().post('/operating-loop/error-pool/scan').set('Authorization', empA()).set('x-company-id', 'A').expect(403);
+      expect(services.pool.processPool).not.toHaveBeenCalled();
+      await http().post('/operating-loop/error-pool/scan').set('Authorization', chairA()).set('x-company-id', 'A').expect(201);
+      expect(services.pool.processPool).toHaveBeenCalledWith('A');
     });
 
     it('no domain service was reached by any cross-tenant request', async () => {

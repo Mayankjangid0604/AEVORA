@@ -81,6 +81,13 @@ describe('logout', () => {
     const res = await logoutPost(post('/api/auth/logout', {}));
     expect(res.headers.get('set-cookie')).toMatch(new RegExp(`${SESSION_COOKIE}=;.*Max-Age=0`, 'i'));
   });
+  it('POST cross-origin or origin-less logout is rejected and leaves the cookie alone', async () => {
+    for (const headers of [{ origin: 'https://evil.example' }, {}] as Record<string, string>[]) {
+      const res = await logoutPost(post('/api/auth/logout', {}, headers));
+      expect(res.status).toBe(403);
+      expect(res.headers.get('set-cookie')).toBeNull();
+    }
+  });
   it('GET (expired session) clears the cookie and redirects once to /login with a safe next', async () => {
     const res = await logoutGet(new NextRequest(`${ORIGIN}/api/auth/logout?next=%2Fcompany%2FA`));
     expect(res.status).toBe(303);
@@ -179,7 +186,7 @@ describe('shared helpers', () => {
     for (const bad of ['//evil', 'https://evil', '/\\evil', '/login', '/login?next=/x', '/api/bff/x', undefined, 5]) expect(safeNextPath(bad)).toBe('/');
   });
   it('isSafeId', () => {
-    expect(isSafeId('420dfa62-4db4-4b97-94f5-d7f0e31887e3')).toBe(true);
+    expect(isSafeId('00000000-0000-4000-8000-000000000000')).toBe(true);
     for (const bad of ['', '../x', 'a/b', 'a b', 'x'.repeat(65), null]) expect(isSafeId(bad)).toBe(false);
   });
   it('errorKind', () => expect(errorKind(503)).toBe('unavailable'));

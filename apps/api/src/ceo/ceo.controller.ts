@@ -19,6 +19,7 @@ import { CeoStrategicPlanningService } from './ceo-strategic-planning.service';
 import { CreatePlanDto, CreateObjectiveDto, CreateStrategicRiskDto, UpdateObjectiveProgressDto } from './dto/ceo-strategic-planning.dto';
 import { CeoPerformanceService } from './ceo-performance.service';
 import { CeoSuccessionService } from './ceo-succession.service';
+import { AuthorizationService } from '../authorization/authorization.service';
 @Controller('ceo')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class CeoController {
@@ -35,6 +36,7 @@ export class CeoController {
     private readonly strategic: CeoStrategicPlanningService,
     private readonly performance: CeoPerformanceService,
     private readonly succession: CeoSuccessionService,
+    private readonly authz: AuthorizationService,
   ) {}
   @Get('operating-state')
   async getOperatingState(@Request() req) {
@@ -164,7 +166,9 @@ export class CeoController {
     return this.autonomous.runDecisionLoop(req.user.companyId, ceo.id);
   }
   @Post('autonomous-decisions/:id/execute')
-  executeAutonomousDecision(@Request() req, @Param('id') id: string) {
+  async executeAutonomousDecision(@Request() req, @Param('id') id: string) {
+    // The service looks the decision up by id only: bind it to the caller's company first (V14 closure).
+    await this.authz.assertResourceAccess(req.user, 'ceoAutonomousDecision', id);
     return this.autonomous.executeDecision(id, false);
   }
   @Post('autonomous-decisions/:id/approve')

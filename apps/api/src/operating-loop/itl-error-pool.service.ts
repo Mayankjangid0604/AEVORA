@@ -119,10 +119,13 @@ export class ItlErrorPoolService implements OnModuleInit {
     this.poolScanInterval = setTimeout(scan, this.SCAN_INTERVAL_MS);
   }
 
-  /** Main pool processing: fetch all FAILED cycles, classify, retry or escalate. */
-  async processPool(): Promise<{ processed: number; healed: number; escalated: number; skipped: number }> {
+  /**
+   * Main pool processing: fetch FAILED cycles, classify, retry or escalate.
+   * The background scanner passes no companyId (all companies); HTTP callers pass their authorised company.
+   */
+  async processPool(companyId?: string): Promise<{ processed: number; healed: number; escalated: number; skipped: number }> {
     const failedCycles = await this.prisma.operatingLoopCycle.findMany({
-      where: { phase: OodaPhase.FAILED },
+      where: { phase: OodaPhase.FAILED, ...(companyId ? { companyId } : {}) },
       orderBy: { createdAt: 'asc' },
     });
 
