@@ -53,7 +53,8 @@ export class KnowledgeService {
     }
 
     if (record.companyId !== companyId) {
-      throw new ForbiddenException('Cannot access knowledge across companies');
+      // Same answer as a missing record: cross-company existence is never revealed (V14 closure).
+      throw new NotFoundException('Knowledge record not found');
     }
 
     return record;

@@ -28,7 +28,8 @@ export class InferenceService {
       include: { modelVersion: true }
     });
 
-    if (!deployment || deployment.status !== 'ACTIVE') {
+    // Another company's deployment must be indistinguishable from a missing one (anti-enumeration, V14 closure).
+    if (!deployment || deployment.status !== 'ACTIVE' || !requestingCompanyId || deployment.modelVersion?.companyId !== requestingCompanyId) {
       throw new BadRequestException('Deployment is not active or does not exist');
     }
 

@@ -18,10 +18,10 @@ const REVIEW = 'Authorization reviewed (see AEVORA_V14_SLICE1_CLOSURE_REPORT.md)
 export const COMPANY_DOMAINS: Domain[] = [
   { slug: 'ceo', label: 'AI CEO', status: 'not-built', endpoints: ['GET /ceo/operating-state', 'GET /ceo/feed'], note: REVIEW },
   { slug: 'workforce', label: 'Workforce', status: 'not-built', endpoints: ['GET /workforce/profiles', 'GET /workforce/ai/workers'], note: REVIEW },
-  { slug: 'departments', label: 'Departments', status: 'not-built', endpoints: ['GET /organization/departments', 'GET /companies/:id/departments'], note: 'Reviewed. GET /organization/employee/:id and /history are unscoped and stay blocked; use /workforce/profiles/:id.' },
+  { slug: 'departments', label: 'Departments', status: 'not-built', endpoints: ['GET /organization/departments', 'GET /companies/:id/departments'], note: 'Reviewed. /organization/employee/:id/{permissions,responsibilities,kpis,budget,performance,succession} are legacy placeholders and stay blocked.' },
   { slug: 'projects', label: 'Projects', status: 'not-built', endpoints: ['GET /chairman/projects', 'GET /projects/:id/plans'], note: REVIEW },
   { slug: 'tasks', label: 'Tasks', status: 'blocked', endpoints: ['GET /tasks/:id', 'GET /employees/:id/tasks'], note: 'Isolation fixed in V14 slice 1, but no company-wide task listing endpoint exists yet.' },
-  { slug: 'research', label: 'Research', status: 'not-built', endpoints: ['GET /chairman/research/*', 'GET /research/:id'], note: 'Reviewed. POST /chairman/research/improvement/* lack company checks and stay blocked.' },
+  { slug: 'research', label: 'Research', status: 'not-built', endpoints: ['GET /chairman/research/*', 'GET /research/:id'], note: REVIEW },
   { slug: 'marketing', label: 'Marketing', status: 'not-built', endpoints: ['GET /marketing/*'], note: REVIEW },
   { slug: 'sales', label: 'Sales', status: 'not-built', endpoints: ['GET /sales/*', 'GET /outreach/*'], note: REVIEW },
   { slug: 'intelligence', label: 'Intelligence', status: 'not-built', endpoints: ['GET /intelligence/company/:companyId/proposals'], note: REVIEW },

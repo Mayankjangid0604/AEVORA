@@ -166,6 +166,7 @@ export class CeoController {
     return this.autonomous.runDecisionLoop(req.user.companyId, ceo.id);
   }
   @Post('autonomous-decisions/:id/execute')
+  @Roles('CHAIRMAN')
   async executeAutonomousDecision(@Request() req, @Param('id') id: string) {
     // The service looks the decision up by id only: bind it to the caller's company first (V14 closure).
     await this.authz.assertResourceAccess(req.user, 'ceoAutonomousDecision', id);
@@ -215,11 +216,13 @@ export class CeoController {
     return this.budget.adjustDepartmentAllocation(req.user.companyId, id, dto, req.user.actorId);
   }
   @Post('budgets/department/:id/reservation')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
   createReservation(@Request() req, @Param('id') id: string, @Body() dto: BudgetReservationDto) {
     // CEO can create reservations autonomously? "MEDIUM-RISK: creating reservations"
     return this.budget.createReservation(req.user.companyId, id, dto, req.user.actorId);
   }
   @Post('budgets/department/:id/reservation/release')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
   releaseReservation(@Request() req, @Param('id') id: string, @Body() body: { amount: number }) {
     return this.budget.releaseReservation(req.user.companyId, id, body.amount, req.user.actorId);
   }
@@ -256,6 +259,7 @@ export class CeoController {
   }
   // --- STRATEGIC PLANNING ENDPOINTS ---
   @Post('strategy/plans')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
   async createPlan(@Request() req, @Body() dto: CreatePlanDto) {
     const ceo = await findCeo(this.prisma, req.user.companyId);
     if (!ceo) throw new NotFoundException('CEO not found');
@@ -266,6 +270,7 @@ export class CeoController {
     return this.strategic.getPlan(req.user.companyId, id);
   }
   @Post('strategy/plans/:id/propose')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
   async proposePlan(@Request() req, @Param('id') id: string) {
     const ceo = await findCeo(this.prisma, req.user.companyId);
     if (!ceo) throw new NotFoundException('CEO not found');
@@ -293,18 +298,21 @@ export class CeoController {
     return this.strategic.resumePlan(req.user.companyId, id, req.user.actorId);
   }
   @Post('strategy/plans/:id/archive')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
   async archivePlan(@Request() req, @Param('id') id: string) {
     const ceo = await findCeo(this.prisma, req.user.companyId);
     if (!ceo) throw new NotFoundException('CEO not found');
     return this.strategic.archivePlan(req.user.companyId, id, ceo.id);
   }
   @Post('strategy/objectives')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
   async createObjective(@Request() req, @Body() dto: CreateObjectiveDto) {
     const ceo = await findCeo(this.prisma, req.user.companyId);
     if (!ceo) throw new NotFoundException('CEO not found');
     return this.strategic.createObjective(req.user.companyId, ceo.id, dto);
   }
   @Post('strategy/objectives/:id/progress')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
   async updateObjectiveProgress(@Request() req, @Param('id') id: string, @Body() dto: UpdateObjectiveProgressDto) {
     const ceo = await findCeo(this.prisma, req.user.companyId);
     if (!ceo) throw new NotFoundException('CEO not found');
@@ -315,6 +323,7 @@ export class CeoController {
     return this.strategic.calculateStrategicHealth(req.user.companyId);
   }
   @Post('strategy/risks')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
   async createStrategicRisk(@Request() req, @Body() dto: CreateStrategicRiskDto) {
     const ceo = await findCeo(this.prisma, req.user.companyId);
     if (!ceo) throw new NotFoundException('CEO not found');

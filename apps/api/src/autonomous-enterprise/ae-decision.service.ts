@@ -27,6 +27,16 @@ export class AeDecisionService {
     return actor;
   }
 
+  /**
+   * Deciding an AeChairmanDecision: the owning Chairman (the decision's addressee) or an active employee of the company.
+   * V14 closure: verifyActor alone rejected the Chairman, who is not an Employee row.
+   */
+  private async verifyDecider(actorId: string, companyId: string) {
+    const owned = await this.prisma.company.findFirst({ where: { id: companyId, chairmanId: actorId }, select: { id: true } });
+    if (owned) return;
+    await this.verifyActor(actorId, companyId);
+  }
+
   async create(companyId: string, actorId: string, dto: {
     title: string; description?: string; priority?: number;
     escalationId?: string; domainRefs?: any; idempotencyKey: string;
@@ -66,7 +76,7 @@ export class AeDecisionService {
   }
 
   async decide(companyId: string, actorId: string, decisionId: string, notes?: string) {
-    await this.verifyActor(actorId, companyId);
+    await this.verifyDecider(actorId, companyId);
     const dec = await this.get(companyId, decisionId);
     if (dec.status === AeDecisionStatus.DISMISSED) throw new BadRequestException('Cannot decide a DISMISSED decision');
     if (dec.status === AeDecisionStatus.ACTIONED) throw new BadRequestException('Decision already ACTIONED');
@@ -79,7 +89,7 @@ export class AeDecisionService {
   }
 
   async defer(companyId: string, actorId: string, decisionId: string) {
-    await this.verifyActor(actorId, companyId);
+    await this.verifyDecider(actorId, companyId);
     await this.get(companyId, decisionId);
     const updated = await this.prisma.aeChairmanDecision.update({
       where: { id: decisionId },
@@ -90,7 +100,7 @@ export class AeDecisionService {
   }
 
   async dismiss(companyId: string, actorId: string, decisionId: string) {
-    await this.verifyActor(actorId, companyId);
+    await this.verifyDecider(actorId, companyId);
     await this.get(companyId, decisionId);
     const updated = await this.prisma.aeChairmanDecision.update({
       where: { id: decisionId },

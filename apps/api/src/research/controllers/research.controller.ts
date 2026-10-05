@@ -14,6 +14,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../../authorization/jwt-auth.guard';
 import { RolesGuard } from '../../authorization/roles.guard';
 import { Roles } from '../../authorization/roles.decorator';
+import { AuthorizationService } from '../../authorization/authorization.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('CHAIRMAN', 'MANAGEMENT', 'SYSTEM', 'EMPLOYEE')
@@ -31,7 +32,8 @@ export class ResearchController {
     private readonly inferenceService: InferenceService,
     private readonly improvementObservationService: ImprovementObservationService,
     private readonly researchPlanningService: ResearchPlanningService,
-    private readonly evaluationComparisonService: EvaluationComparisonService
+    private readonly evaluationComparisonService: EvaluationComparisonService,
+    private readonly authz: AuthorizationService,
   ) {}
 
   @Get('proposals')
@@ -128,16 +130,19 @@ export class ResearchController {
 
   @Post('improvement/hypotheses/:signalId')
   async createHypothesis(@Param('signalId') signalId: string, @Request() req: any) {
+    await this.authz.assertResourceAccess(req.user, 'improvementSignal', signalId); // V14 closure: bind to caller company
     return this.researchPlanningService.createHypothesisFromSignal(signalId, req.user.actorId);
   }
 
   @Post('improvement/proposals/:hypothesisId')
-  async proposeFromHypothesis(@Param('hypothesisId') hypothesisId: string) {
+  async proposeFromHypothesis(@Param('hypothesisId') hypothesisId: string, @Request() req: any) {
+    await this.authz.assertResourceAccess(req.user, 'researchHypothesis', hypothesisId);
     return this.researchPlanningService.createProposalFromHypothesis(hypothesisId);
   }
 
   @Post('improvement/comparisons/:planId')
-  async compareCandidate(@Param('planId') planId: string) {
+  async compareCandidate(@Param('planId') planId: string, @Request() req: any) {
+    await this.authz.assertResourceAccess(req.user, 'experimentPlan', planId);
     return this.evaluationComparisonService.compareCandidateToBaseline(planId);
   }
 }

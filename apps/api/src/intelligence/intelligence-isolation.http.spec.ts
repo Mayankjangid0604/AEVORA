@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { JwtAuthGuard } from '../authorization/jwt-auth.guard';
 import { RolesGuard } from '../authorization/roles.guard';
+import { AuthorizationService } from '../authorization/authorization.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { IntelligenceController } from './controllers/intelligence.controller';
 import { CompanyIntelligenceController } from '../company-intelligence/company-intelligence.controller';
@@ -25,10 +26,12 @@ describe('Intelligence isolation over HTTP', () => {
   const sessions = [{ id: SESSION_B, companyId: B }];
   const prisma: any = {
     company: { findFirst: jest.fn(async ({ where }: any) => (where.chairmanId === 'chair-A' && (!where.id || where.id === A) ? { id: A } : null)) },
+    employee: { findUnique: jest.fn(async ({ where }: any) => ({ 'emp-B': { companyId: B }, 'emp-A': { companyId: A } } as any)[where.id] ?? null) },
     intelligenceSession: { findFirst: jest.fn(async ({ where }: any) => sessions.find(s => s.id === where.id && s.companyId === where.companyId) ?? null) },
   };
   const companyIntel = { generateCompanyIntelligence: jest.fn(async () => ({})) };
   const org = { getDepartments: jest.fn(async () => []) };
+  const employees = { getEmployee: jest.fn(async (id: string) => ({ id })), getHistory: jest.fn(async () => []) };
 
   beforeAll(async () => {
     process.env.JWT_SECRET = SECRET;
@@ -36,12 +39,12 @@ describe('Intelligence isolation over HTTP', () => {
       imports: [JwtModule.register({ secret: SECRET })],
       controllers: [IntelligenceController, CompanyIntelligenceController, OrganizationController],
       providers: [
-        { provide: APP_GUARD, useClass: JwtAuthGuard }, RolesGuard,
+        { provide: APP_GUARD, useClass: JwtAuthGuard }, RolesGuard, AuthorizationService,
         { provide: PrismaService, useValue: prisma },
         { provide: CompanyIntelligenceService, useValue: companyIntel },
         { provide: GroupIntelligenceService, useValue: {} },
         { provide: OrganizationService, useValue: org },
-        { provide: EmployeeService, useValue: {} },
+        { provide: EmployeeService, useValue: employees },
         { provide: WorkerProfileService, useValue: {} },
       ],
     }).compile();
@@ -70,5 +73,14 @@ describe('Intelligence isolation over HTTP', () => {
   it('a company-less chairman reaches company-scoped services with null, never undefined (no all-company query)', async () => {
     await http().get('/organization/departments').set('Authorization', companylessChair());
     expect(org.getDepartments).toHaveBeenCalledWith(null);
+  });
+
+  it('GET /organization/employee/:id and /history hide other tenants (404) and serve own company', async () => {
+    await http().get('/organization/employee/emp-B').set('Authorization', empA()).expect(404);
+    await http().get('/organization/employee/emp-B/history').set('Authorization', empA()).expect(404);
+    expect(employees.getEmployee).not.toHaveBeenCalled();
+    expect(employees.getHistory).not.toHaveBeenCalled();
+    await http().get('/organization/employee/emp-A').set('Authorization', empA()).expect(200);
+    await http().get('/organization/employee/emp-A/history').set('Authorization', empA()).expect(200);
   });
 });

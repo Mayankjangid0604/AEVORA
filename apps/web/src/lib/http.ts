@@ -41,5 +41,11 @@ export function safeNextPath(raw: unknown): string {
   return raw;
 }
 
+/** Where an expired/invalid session is sent. Reading it changes no state. */
+export function expiredLoginPath(next: unknown): string {
+  const safe = safeNextPath(next);
+  return safe === '/' ? '/login?reason=expired' : `/login?reason=expired&next=${encodeURIComponent(safe)}`;
+}
+
 /** Browser -> BFF header carrying the navigation-state company (the BFF forwards it as X-Company-Id). */
 export const COMPANY_HEADER = 'x-aevora-company';

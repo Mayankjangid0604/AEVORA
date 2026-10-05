@@ -1,11 +1,9 @@
 /** Browser-side fetcher for TanStack Query. Talks only to the same-origin BFF; never sees a JWT. */
-import { ApiError, COMPANY_HEADER } from './http';
+import { ApiError, COMPANY_HEADER, expiredLoginPath } from './http';
 
+/** The BFF already cleared the cookie on its 401 response; full navigation drops all client state. */
 export function expireSession(): void {
-  const next = window.location.pathname + window.location.search;
-  // A route handler (not a page) must clear the httpOnly cookie, so this is a full navigation.
-  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-  window.location.assign(`/api/auth/logout?next=${encodeURIComponent(next)}`);
+  window.location.assign(expiredLoginPath(window.location.pathname + window.location.search));
 }
 
 export async function bffGet<T>(path: string, opts: { companyId?: string; signal?: AbortSignal } = {}): Promise<T> {

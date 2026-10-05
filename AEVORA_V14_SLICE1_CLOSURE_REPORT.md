@@ -1,5 +1,7 @@
 # AEVORA V14 — SLICE 1 CLOSURE REPORT
 
+> **Section 16 (Final Authorization Disposition) supersedes earlier sections where they differ.**
+
 **Date:** 2026-10-06 · **Base checkpoint:** `efc8851` · **Scope:** closure audit of Slice 1 (no domain workspaces built)
 
 ---
@@ -235,4 +237,139 @@ No V15 work. `apps/web` imports nothing from `@aevora/shared`, `shared/v12`, `wo
 
 ---
 
-**Slice 1 status: NOT COMPLETE.** All automated acceptance criteria pass (see §3a). Live login is BLOCKED (§12), and the OPEN items in §13 remain.
+---
+
+## 16. Final Authorization Disposition (pass from `3dffcf2`)
+
+### 16.1 UNKNOWN routes resolved
+
+| Route | Trace | Auth / role | Company / resource | External effect | Disposition |
+|---|---|---|---|---|---|
+| `POST /chairman/research/inference` | controller → `InferenceService.runInference(deploymentId, payload, req.user.companyId)` → `limitedDeployment.findUnique` → `modelVersion.companyId` vs caller → local Python runtime → `inferenceLog.create` | JWT; class roles CHAIRMAN/MANAGEMENT/SYSTEM/EMPLOYEE | was checked, but a foreign deployment returned a **different message** than a missing one (existence oracle) → **fixed**: missing, inactive and foreign give the identical 400; nothing runs or logs | local model execution only | **SAFE WITH CONDITIONS** (company context; local compute) |
+| `POST /outreach/campaigns/:id/outcome` | → `SalesAgentWorker.recordOutcome` → `outreachCampaign.findFirst({id, companyId})` (404) → update campaign; on INTERESTED/BOOKED update lead + upsert discovery call (bound via the campaign) → `realtime.broadcastToUser(chairman)` | JWT; CHAIRMAN, MANAGEMENT | company + resource bound; referenced lead comes from the bound campaign | socket broadcast + Chairman notification email | **SAFE WITH CONDITIONS** (UI confirmation; notification side effect) |
+| `POST /outreach/discovery-calls/:id/transcript` | → `DiscoveryService.completeCall` → `discoveryCall.findFirst({id, companyId})` (404) → local LLM `extractClientNeeds` → update | JWT; CHAIRMAN, MANAGEMENT | company + resource bound | local LLM call | **SAFE WITH CONDITIONS** |
+
+No UNKNOWN routes remain.
+
+### 16.2 `/organization/employee/:id*`
+
+| Route(s) | Category | Disposition |
+|---|---|---|
+| `GET employee/:id`, `GET employee/:id/history` | **C** (real `EmployeeService` reads, no authorization) | **fixed**: `assertResourceAccess(user,'employee',id)`, foreign → 404 (test) → **SAFE** |
+| `employee/:id/{permissions,responsibilities,kpis,budget,performance,succession}` (10 handlers) | **A** (legacy placeholders: hard-coded `[]`, `{allocatedAmount:0,spentAmount:0}`, `{status:'Evaluated'}`; no service, no DB access) | **BLOCKED / LEGACY**: unchanged, not in the BFF allowlist, never exposed. They touch no data, so they are no isolation risk, only fabricated responses |
+
+### 16.3 `/chairman/research/improvement/*`
+
+- Why employees could call them: the class-level `@Roles('CHAIRMAN','MANAGEMENT','SYSTEM','EMPLOYEE')`.
+- Intended actor: in this controller, research *drafting* steps (`proposals POST`, `improvement/scan`) are open to all research roles and only *approval* is `CHAIRMAN, MANAGEMENT`. These three are drafting/compute steps (create hypothesis, create draft proposal, compute comparison). The only callers are these routes, and there is no external side effect. **Roles preserved.**
+- Company ownership: **was missing** (id-only lookups). **Fixed** with `assertResourceAccess` on `improvementSignal`, `researchHypothesis` and `experimentPlan` (all carry `companyId`). Foreign, missing or unowned rows → 404 (tests) → **SAFE WITH CONDITIONS**.
+
+### 16.4 CEO authorization matrix (all non-GET routes)
+
+| Group | Route | Before | After | Actor recorded | External effect | Reason |
+|---|---|---|---|---|---|---|
+| Read-only info | all `GET /ceo/*` | any member | unchanged | — | — | company-scoped reads |
+| Read-only compute | `financial-authority/check` | any | unchanged | — | none (no writes, verified) | evaluation only |
+| AI CEO execution | `autonomous-decisions/:id/execute` | none | **CHAIRMAN** + company | — | executes business action | same gate as sibling run/approve/reject |
+| Autonomous decisions | `autonomous-decisions/run`, `:id/approve`, `:id/reject` | CHAIRMAN | unchanged | Chairman | LLM / actions | already correct |
+| Approvals | `strategy/plans/:id/approve|reject|pause|resume`, `questions/:id/answer`, `budgets/:id/status`, `financial-authority/grant|suspend|revoke` | CHAIRMAN | unchanged | Chairman | — | already correct |
+| Operational (acts **as the AI CEO**) | `strategy/plans`, `:id/propose`, `:id/archive`, `strategy/objectives`, `objectives/:id/progress`, `strategy/risks` | none | **CHAIRMAN, MANAGEMENT** | AI CEO id regardless of caller | none | an EMPLOYEE token could author records attributed to the AI CEO; matches the existing management gate (`performance/*`, `succession/*`) |
+| Operational | `budgets/department/:id/reservation`, `/release` | none | **CHAIRMAN, MANAGEMENT** | caller | budget ledger change | management action; no HTTP callers exist (repo search) |
+| Chairman directives | `priorities`, `v3-objective`, `delegate`, `staffing/run`, `ask`, `weekly-reports/run`, `reviews/run`, `budgets` POST/allocate/adjust | CHAIRMAN | unchanged | Chairman/CEO | LLM; weekly report email | already correct |
+| Out of V14 scope | `notify-test` (real email), `staffing/office-rooms` (3D office) | CHAIRMAN | unchanged | — | email / V15 | not exposed |
+| Management | `performance/*`, `succession/*` | CHAIRMAN, MANAGEMENT | unchanged | caller | — | already correct |
+
+Tests: `ceo-execute-isolation.http.spec.ts`.
+
+### 16.5 Chairman capability decision
+
+- **Autonomous Enterprise `AeChairmanDecision` decide/defer/dismiss:** the model is the Chairman's decision queue, and `AuthorizationService.checkPermission` already grants the Chairman full access to owned companies. `decidedBy` and `AeAuditEvent.actorId` are plain strings (no Employee FK), yet `verifyActor` rejected the Chairman. **Smallest compatible change:** a private `verifyDecider` = owning Chairman **or** the unchanged `verifyActor`, used only by those three methods. Tests: owning Chairman allowed; foreign Chairman 403; foreign decision 404; employee rules unchanged.
+- **Workforce, marketing, and the other AE mutations:** their rules are written around an Employee + WorkerProfile actor (self-review, self-bonus, reviewer/subject identity, profile creation). Nothing in the code indicates the Chairman acts through them. **Exclusion kept and documented** (fails closed, 403). No V14 action UI may assume otherwise.
+
+### 16.6 Status-code decisions
+
+| Case | Before | After | Rule |
+|---|---|---|---|
+| Chairman knowledge from another company | 403 (missing → 404: oracle) | **404, identical message** | anti-enumeration |
+| `chairman/commands/:id/approve|reject` unowned / missing / not pending | empty **200** | **404** | not-found must not look like success |
+| Research inference foreign deployment | distinct 400 message | identical 400 | anti-enumeration |
+| `research proposals/:id/approve` foreign | 403, same as missing | unchanged | already non-enumerating |
+
+Tests: `chairman-status-codes.spec.ts`, `research-isolation.http.spec.ts`.
+
+### 16.7 Logout security decision
+
+**`GET /api/auth/logout` removed; logout is POST-only (Origin-checked).** The GET existed only so server components could clear the cookie on expiry. Any cookie-clearing GET is a cross-site forced-logout vector. Now:
+- Server layouts and the browser fetcher send expired sessions to `/login?reason=expired&next=…` (`expiredLoginPath`, sanitised).
+- The proxy always renders `/login?reason=expired`, even with a dead cookie present, so there's still no redirect loop.
+- The dead cookie is cleared by same-origin BFF 401 responses or overwritten at the next sign-in. Nothing changes state on GET.
+
+Tests: no GET/HEAD/PUT/PATCH/DELETE export; expired path sanitised; `reason=expired` renders with a cookie present; cross-origin/origin-less POST 403.
+
+### 16.8 Final route disposition (changes vs §7)
+
+| Route | §7 | Final |
+|---|---|---|
+| `research/inference` | ? | **SC** (oracle fixed) |
+| `outreach/campaigns/:id/outcome` | ? | **SC** (notification side effect) |
+| `outreach/discovery-calls/:id/transcript` | ? | **SC** (LLM) |
+| `organization/employee/:id`, `/history` | U | **S** (fixed) |
+| `organization/employee/:id/{6 placeholders}` | U | **BLOCKED / LEGACY** (no data access; never exposed) |
+| `chairman/research/improvement/*` (3) | U | **SC** (company binding fixed; roles preserved) |
+| `ceo/autonomous-decisions/:id/execute` | SC | **SC** (CHAIRMAN + company) |
+| CEO strategy/objective/risk/reservation mutations | SC | **SC** (CHAIRMAN, MANAGEMENT) |
+| AE decisions decide/defer/dismiss | SC (Chairman 403) | **SC** (Chairman allowed) |
+| `chairman/knowledge/:id*`, `chairman/commands/:id/approve|reject` | SC (K) | **SC** (404) |
+| `chairman/operating-loop/*` | U | **BLOCKED (fail-closed)**: always 403, because they read an identity claim the JWT never carries. Repairing them would *enable* new behaviour and needs a company check on `cycle/:id/verdict`, which is out of closure scope. Unreachable, so nothing leaks |
+| `outreach/process`, `whatsapp/:leadId`, `inbound/poll-email` | U for V14 UI | authorization correct (company-bound, CHAIRMAN/MANAGEMENT); **not exposed** (real outreach / IMAP) |
+| `chairman/simulation*`, `world`, `ceo/office-rooms`, `ceo/notify-test` | U for V14 | V15 / ops scope; not exposed |
+
+No route is UNKNOWN. No route with an authorization defect is reachable; the remaining U/BLOCKED items fail closed or are deliberately outside V14.
+
+### 16.9 Final security scan (`apps/web/src`, excluding tests)
+
+| Check | Result |
+|---|---|
+| JWT / `access_token` in browser JS | none (only `api/auth/login/route.ts`, server) |
+| `Authorization` / `Bearer` | only `server/api.ts` (plus the word inside a registry note string) |
+| localStorage / sessionStorage / `document.cookie` | none |
+| Client-readable auth cookie | none (HttpOnly; test) |
+| Hardcoded production ids / UUIDs | none (tests use synthetic ids) |
+| Fake production data / metrics / activity | none |
+| V15 / spatial / `@aevora/shared` / WebXR / 3D | none (scan test) |
+| Blocked backend routes via BFF | GET-only allowlist of 4 verified routes; others 404 (test) |
+| Frontend authorization authority | none |
+| `GET /api/auth/logout` | removed |
+
+### 16.10 Final test counts (finished code)
+
+| Check | Result |
+|---|---|
+| Backend `npx jest` | **50/50 suites, 385/385 tests, 0 failures** (47.6 s) |
+| Backend `npx tsc --noEmit -p tsconfig.json` | pass |
+| Frontend `npx vitest run` | **36/36** |
+| Frontend `npx tsc --noEmit` | pass |
+| Frontend `npx eslint .` | pass, 0 warnings |
+| Frontend `npx next build` | pass |
+
+### 16.11 Exact remaining blocker
+
+**LIVE LOGIN = NOT VERIFIED.** It needs PostgreSQL, started intentionally by the user/operator; it was not started, modified or seeded here. Once it's running, start the API in safe mode from `apps/api`:
+
+```bash
+AEVORA_ENV_OVERRIDE=../../scripts/safe-local.env npm run start --workspace=@aevora/api
+```
+
+Then start the web app from the repository root:
+
+```bash
+npm run dev --workspace=@aevora/web
+```
+
+Or start `aevora-api-safe` and then `aevora-web` from `.claude/launch.json` in the Claude Code desktop preview, and follow the §12 checklist.
+
+Documented, fail-closed, non-acceptance items: `/chairman/operating-loop/*` always 403; legacy placeholders under `/organization/employee/:id/*`; workforce/marketing Chairman exclusion; Jest open-handle warning; no refresh/revocation and undecided Socket.IO auth (by design).
+
+---
+
+**Slice 1 status: B — COMPLETE WITH EXPLICIT EXTERNAL PREREQUISITE.** The only remaining prerequisite is live-login verification, which needs PostgreSQL to be started by the user/operator. **LIVE LOGIN = NOT VERIFIED.**

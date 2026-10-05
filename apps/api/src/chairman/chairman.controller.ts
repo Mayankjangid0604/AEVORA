@@ -104,7 +104,10 @@ export class ChairmanController {
   @Post('commands/:id/approve')
   async approveCommand(@Request() req: any, @Param('id') id: string) {
     const chairman = await this.requireChairman(req.user.actorId);
-    return this.commandService.approveCommand(id, chairman.id);
+    // The service returns null for unowned, missing or non-pending commands: answer 404, not an empty 200 (V14 closure).
+    const result = await this.commandService.approveCommand(id, chairman.id);
+    if (!result) throw new NotFoundException('Command not found or not awaiting approval');
+    return result;
   }
 
   // ── POST /chairman/broadcast ────────────────────────────
@@ -119,7 +122,9 @@ export class ChairmanController {
   @Post('commands/:id/reject')
   async rejectCommand(@Request() req: any, @Param('id') id: string) {
     const chairman = await this.requireChairman(req.user.actorId);
-    return this.commandService.rejectCommand(id, chairman.id);
+    const result = await this.commandService.rejectCommand(id, chairman.id);
+    if (!result) throw new NotFoundException('Command not found or not awaiting approval');
+    return result;
   }
 
   // ── GET /chairman/overview ──────────────────────────────

@@ -4,14 +4,15 @@ import { safeNextPath } from '@/lib/http';
 
 /**
  * Coarse gate only: presence of the session cookie. Validity is decided by the backend on every request
- * (an invalid cookie leads to /api/auth/logout, which clears it — so there is no redirect loop).
+ * An invalid cookie leads to /login?reason=expired, which always renders (no redirect loop); the cookie is
+ * cleared by same-origin BFF 401 responses or overwritten by the next sign-in.
  */
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const hasSession = req.cookies.has(SESSION_COOKIE);
 
   if (pathname === '/login') {
-    if (hasSession) return NextResponse.redirect(new URL(safeNextPath(req.nextUrl.searchParams.get('next')), req.url));
+    if (hasSession && req.nextUrl.searchParams.get('reason') !== 'expired') return NextResponse.redirect(new URL(safeNextPath(req.nextUrl.searchParams.get('next')), req.url));
     return NextResponse.next();
   }
   if (!hasSession) {

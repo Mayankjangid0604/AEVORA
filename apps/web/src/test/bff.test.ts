@@ -9,12 +9,12 @@ vi.mock('next/headers', () => ({
 }));
 
 import { POST as login } from '@/app/api/auth/login/route';
-import { GET as logoutGet, POST as logoutPost } from '@/app/api/auth/logout/route';
+import { POST as logoutPost } from '@/app/api/auth/logout/route';
 import { GET as bff } from '@/app/api/bff/[...path]/route';
 import { backendFetch } from '@/server/api';
 import { proxy } from '@/proxy';
 import { SESSION_COOKIE } from '@/lib/session-cookie';
-import { safeNextPath, isSafeId, errorKind } from '@/lib/http';
+import { safeNextPath, isSafeId, errorKind, expiredLoginPath } from '@/lib/http';
 
 const ORIGIN = 'http://localhost:3000';
 const JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJhY3RvcklkIjoiY2hhaXItQSJ9.sig';
@@ -88,15 +88,14 @@ describe('logout', () => {
       expect(res.headers.get('set-cookie')).toBeNull();
     }
   });
-  it('GET (expired session) clears the cookie and redirects once to /login with a safe next', async () => {
-    const res = await logoutGet(new NextRequest(`${ORIGIN}/api/auth/logout?next=%2Fcompany%2FA`));
-    expect(res.status).toBe(303);
-    expect(res.headers.get('location')).toBe(`${ORIGIN}/login?reason=expired&next=%2Fcompany%2FA`);
-    expect(res.headers.get('set-cookie')).toMatch(/Max-Age=0/i);
+  it('logout has no GET handler: no cross-site navigation can change session state', async () => {
+    const mod: Record<string, unknown> = await import('@/app/api/auth/logout/route');
+    expect(Object.keys(mod).filter((k) => /^(GET|HEAD|PUT|PATCH|DELETE)$/.test(k))).toEqual([]);
   });
-  it('GET drops an unsafe next (open redirect)', async () => {
-    const res = await logoutGet(new NextRequest(`${ORIGIN}/api/auth/logout?next=%2F%2Fevil.example`));
-    expect(res.headers.get('location')).toBe(`${ORIGIN}/login?reason=expired`);
+  it('expired-session path is a plain /login URL with a safe next and no unsafe destinations', () => {
+    expect(expiredLoginPath('/company/A')).toBe('/login?reason=expired&next=%2Fcompany%2FA');
+    expect(expiredLoginPath('//evil.example')).toBe('/login?reason=expired');
+    expect(expiredLoginPath('/api/auth/logout')).toBe('/login?reason=expired');
   });
 });
 
@@ -174,6 +173,9 @@ describe('route protection (proxy)', () => {
   it('authenticated user on /login goes to a safe next, never to an external URL', () => {
     expect(visit('/login?next=%2Fdecisions', JWT).headers.get('location')).toBe(`${ORIGIN}/decisions`);
     expect(visit('/login?next=https%3A%2F%2Fevil.example', JWT).headers.get('location')).toBe(`${ORIGIN}/`);
+  });
+  it('login with reason=expired renders even when a (dead) cookie is present: no redirect loop', () => {
+    expect(visit('/login?reason=expired&next=%2Fdecisions', JWT).headers.get('location')).toBeNull();
   });
   it('authenticated request passes through', () => {
     expect(visit('/', JWT).headers.get('location')).toBeNull();

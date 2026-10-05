@@ -4,7 +4,8 @@ import { Injectable, ForbiddenException, NotFoundException, BadRequestException 
 export interface AuthUser { actorId: string; actorRole: string; companyId?: string }
 
 /** Company-owned models whose rows can be addressed by id from a route. */
-export type CompanyScopedModel = 'department' | 'employee' | 'task' | 'goal' | 'improvementProposal' | 'operatingLoopCycle' | 'ceoAutonomousDecision';
+export type CompanyScopedModel = 'department' | 'employee' | 'task' | 'goal' | 'improvementProposal' | 'operatingLoopCycle' | 'ceoAutonomousDecision'
+  | 'improvementSignal' | 'researchHypothesis' | 'experimentPlan';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()

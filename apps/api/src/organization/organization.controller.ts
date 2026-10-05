@@ -1,3 +1,4 @@
+import { AuthorizationService } from '../authorization/authorization.service';
 import { Controller, Get, Post, Put, Patch, Body, Param, Request, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../authorization/jwt-auth.guard';
 import { OrganizationService } from './organization.service';
@@ -11,6 +12,7 @@ export class OrganizationController {
     private readonly orgService: OrganizationService,
     private readonly employeeService: EmployeeService,
     private readonly profileService: WorkerProfileService,
+    private readonly authz: AuthorizationService,
   ) {}
 
   @Get()
@@ -54,12 +56,14 @@ export class OrganizationController {
   }
 
   @Get('employee/:id')
-  getEmployee(@Request() req: any, @Param('id') id: string) {
-    return this.employeeService.getEmployee(id); // Ensure company filtering exists
+  async getEmployee(@Request() req: any, @Param('id') id: string) {
+    await this.authz.assertResourceAccess(req.user, 'employee', id); // V14 closure: other tenants -> 404
+    return this.employeeService.getEmployee(id);
   }
 
   @Get('employee/:id/history')
-  getEmployeeHistory(@Param('id') id: string) {
+  async getEmployeeHistory(@Request() req: any, @Param('id') id: string) {
+    await this.authz.assertResourceAccess(req.user, 'employee', id);
     return this.employeeService.getHistory(id);
   }
 
