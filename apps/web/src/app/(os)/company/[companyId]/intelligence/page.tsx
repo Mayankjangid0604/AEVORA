@@ -1,5 +1,5 @@
-import { DomainWorkspace } from '@/components/domain-workspace';
+import { IntelligenceOverview } from '@/components/intelligence-views';
 
-export default function Page() {
-  return <DomainWorkspace slug="intelligence" />;
+export default async function IntelligencePage({ params }: { params: Promise<{ companyId: string }> }) {
+  return <IntelligenceOverview companyId={(await params).companyId} />;
 }

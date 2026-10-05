@@ -23,7 +23,7 @@ export const COMPANY_DOMAINS: Domain[] = [
   { slug: 'research', label: 'Research', status: 'not-built', endpoints: ['GET /chairman/research/*', 'GET /research/:id'], note: REVIEW },
   { slug: 'marketing', label: 'Marketing', status: 'not-built', endpoints: ['GET /marketing/*'], note: REVIEW },
   { slug: 'sales', label: 'Sales', status: 'not-built', endpoints: ['GET /sales/*', 'GET /outreach/*'], note: REVIEW },
-  { slug: 'intelligence', label: 'Intelligence', status: 'not-built', endpoints: ['GET /intelligence/company/:companyId/proposals'], note: REVIEW },
+  { slug: 'intelligence', label: 'Intelligence', status: 'ready', endpoints: ['GET /company-intelligence/company/:companyId', 'GET /intelligence/company/:companyId/proposals', 'GET /intelligence/company/:companyId/assistance-requests', 'GET /intelligence/sessions/:id'], note: 'Read-only. Computed summary + persisted proposals, assistance requests and sessions; no model is invoked.' },
   { slug: 'improvement', label: 'Improvement', status: 'not-built', endpoints: ['GET /continuous-improvement/company/:companyId/proposals'], note: 'Isolation fixed and tested in V14 slice 1. Workspace not built yet.' },
   { slug: 'operations', label: 'Operations', status: 'blocked', endpoints: ['GET /autonomous-enterprise/dashboard/summary'], note: 'Operating Loop: all routes company-scoped in the V14 closure, but chairman/operating-loop/* is broken (reads an identity field the JWT never carries) and no workspace is built.' },
 ];

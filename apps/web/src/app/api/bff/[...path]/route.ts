@@ -12,7 +12,13 @@ import { COMPANY_HEADER, isSafeId } from '@/lib/http';
  *          X-Company-Id is absent, so the BFF refuses these routes without an explicit company.
  * project: server-side field whitelist; anything else the backend returns never reaches the browser.
  */
-interface RouteRule { pattern: RegExp; company?: true; project?: Projection }
+interface RouteRule {
+  pattern: RegExp;
+  company?: true;
+  project?: Projection;
+  /** The first capture group is a company id in the path; it must equal the explicit company header. */
+  pathCompany?: true;
+}
 
 const ID = '[A-Za-z0-9_-]{1,64}';
 const ROUTES: RouteRule[] = [
@@ -32,6 +38,12 @@ const ROUTES: RouteRule[] = [
   // Slice 4: Projects (ChairmanController, CHAIRMAN-only, getCompanyForChairman; detail 404s foreign ids).
   { pattern: /^chairman\/projects$/, company: true, project: projections.projects },
   { pattern: new RegExp(`^chairman/projects/${ID}$`), company: true, project: projections.project },
+  // Slice 5: Intelligence. company-intelligence is computed from DB state on request (no model/external call);
+  // proposals/assistance/session are persisted rows. Backend checks req.user.companyId === path company.
+  { pattern: new RegExp(`^company-intelligence/company/(${ID})$`), company: true, pathCompany: true, project: projections.intelligenceSummary },
+  { pattern: new RegExp(`^intelligence/company/(${ID})/proposals$`), company: true, pathCompany: true, project: projections.proposals },
+  { pattern: new RegExp(`^intelligence/company/(${ID})/assistance-requests$`), company: true, pathCompany: true, project: projections.assistanceRequests },
+  { pattern: new RegExp(`^intelligence/sessions/${ID}$`), company: true, project: projections.session },
 ];
 
 const noStore = { 'Cache-Control': 'no-store' };
@@ -44,6 +56,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ path: strin
   const companyId = req.headers.get(COMPANY_HEADER) ?? undefined;
   if (companyId !== undefined && !isSafeId(companyId)) return NextResponse.json({ message: 'Invalid company context' }, { status: 400 });
   if (companyId === undefined && rule.company) return NextResponse.json({ message: 'Company context required' }, { status: 400 });
+  if (rule.pathCompany && rule.pattern.exec(path)?.[1] !== companyId) return NextResponse.json({ message: 'Company context mismatch' }, { status: 400 });
 
   const token = await readSessionToken();
   if (!token) return NextResponse.json({ message: 'Not authenticated' }, { status: 401 });

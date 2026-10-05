@@ -3,7 +3,7 @@
  * (e.g. Employee.salary, identitySeed, performance scores). Only the listed fields ever reach the browser.
  * A projection returning `undefined` means "not found" (the BFF answers 404).
  */
-import type { DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance } from '@/lib/types';
+import type { AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance } from '@/lib/types';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -68,6 +68,74 @@ function projectDetail(v: unknown): ProjectDetail | undefined {
   return { ...projectBase(v), milestones, risks, requirements, team };
 }
 
+/** Non-finance metric domains whose values are plain counts. */
+const COUNT_DOMAINS = new Set(['Workforce', 'Projects']);
+
+function intelligenceSummary(v: unknown): IntelligenceSummary | undefined {
+  if (!isObj(v)) return undefined;
+  const titled = (x: unknown) => arr(x).filter(isObj).filter((o) => str(o.title));
+  return {
+    generatedAt: str(v.generatedAt),
+    metrics: arr(v.metrics).filter(isObj)
+      .filter((m) => str(m.key) && str(m.domain) && COUNT_DOMAINS.has(m.domain as string) && num(m.value) !== null)
+      .map((m) => ({ key: m.key as string, value: m.value as number, domain: m.domain as string })),
+    facts: arr(v.facts).filter(isObj).filter((f) => str(f.statement)).map((f) => ({ statement: f.statement as string, source: str(f.source) })),
+    risks: titled(v.risks).map((r) => ({ title: r.title as string, count: num(r.count) })),
+    opportunities: titled(v.opportunities).map((r) => ({ title: r.title as string, count: num(r.count) })),
+    trends: titled(v.trends).map((t) => ({ title: t.title as string, description: str(t.description) })),
+    missingData: arr(v.missingData).filter((m): m is string => typeof m === 'string'),
+    sources: isObj(v.sourceFreshness)
+      ? Object.entries(v.sourceFreshness).filter(([, at]) => typeof at === 'string').map(([name, at]) => ({ name, asOf: at as string }))
+      : [],
+  };
+}
+
+function proposal(v: unknown): DecisionProposalView | undefined {
+  if (!isObj(v) || !str(v.id) || !str(v.title)) return undefined;
+  return {
+    id: v.id as string,
+    title: v.title as string,
+    problem: str(v.problem) ?? '',
+    recommendation: str(v.recommendation) ?? '',
+    rationale: str(v.rationale) ?? '',
+    confidence: str(v.confidence) ?? 'Not recorded',
+    impactLevel: str(v.impactLevel) ?? 'Not recorded',
+    status: str(v.status) ?? 'UNKNOWN',
+    createdAt: str(v.createdAt) ?? '',
+    sessionId: str(v.sessionId),
+    proposerId: str(v.employeeId),
+    options: arr(v.options).filter(isObj).filter((o) => str(o.id) && str(o.title)).map((o) => ({
+      id: o.id as string, title: o.title as string, description: str(o.description) ?? '',
+      estimatedEffort: str(o.estimatedEffort), estimatedImpact: str(o.estimatedImpact), score: num(o.score),
+    })),
+    reviews: arr(v.reviews).filter(isObj).filter((r) => str(r.id)).map((r) => ({
+      id: r.id as string, result: str(r.result) ?? 'UNKNOWN', feedback: str(r.feedback), createdAt: str(r.createdAt) ?? '',
+    })),
+  };
+}
+
+function assistanceRequest(v: unknown): AssistanceRequestView | undefined {
+  if (!isObj(v) || !str(v.id) || !str(v.question)) return undefined;
+  return { id: v.id as string, question: v.question as string, reason: str(v.reason), urgency: str(v.urgency) ?? 'UNKNOWN', status: str(v.status) ?? 'UNKNOWN', createdAt: str(v.createdAt) ?? '' };
+}
+
+function session(v: unknown): IntelligenceSessionView | undefined {
+  if (!isObj(v) || !str(v.id)) return undefined;
+  return {
+    id: v.id as string,
+    objective: str(v.objective) ?? '',
+    status: str(v.status) ?? 'UNKNOWN',
+    createdAt: str(v.createdAt) ?? '',
+    updatedAt: str(v.updatedAt) ?? '',
+    assessments: arr(v.assessments).filter(isObj).filter((a) => str(a.id)).map((a) => ({
+      id: a.id as string, summary: str(a.summary) ?? '', recommendation: str(a.recommendation) ?? '', createdAt: str(a.createdAt) ?? '',
+    })),
+    proposals: arr(v.proposals).filter(isObj).filter((p) => str(p.id) && str(p.title)).map((p) => ({
+      id: p.id as string, title: p.title as string, status: str(p.status) ?? 'UNKNOWN',
+    })),
+  };
+}
+
 const list = <T>(one: (v: unknown) => T | undefined) => (v: unknown): T[] =>
   (Array.isArray(v) ? v : []).map(one).filter((x): x is T => x !== undefined);
 
@@ -82,4 +150,8 @@ export const projections = {
   provenance,
   projects: list(project),
   project: projectDetail,
+  intelligenceSummary,
+  proposals: list(proposal),
+  assistanceRequests: list(assistanceRequest),
+  session,
 } satisfies Record<string, Projection>;

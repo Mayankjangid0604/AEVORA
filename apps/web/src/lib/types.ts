@@ -104,3 +104,51 @@ export interface ProjectDetail extends Omit<ProjectSummary, 'assignmentCount'> {
   requirements: ProjectRequirement[];
   team: ProjectTeamMember[];
 }
+
+/**
+ * GET /company-intelligence/company/:companyId, projected. Computed by the backend on request from current
+ * company state (no model call). Not forwarded: the hard-coded `confidence`, generic `uncertainty`/`limitations`
+ * text, and finance metrics (units unverified).
+ */
+export interface IntelligenceSummary {
+  generatedAt: string | null;
+  metrics: { key: string; value: number; domain: string }[];
+  facts: { statement: string; source: string | null }[];
+  risks: { title: string; count: number | null }[];
+  opportunities: { title: string; count: number | null }[];
+  trends: { title: string; description: string | null }[];
+  missingData: string[];
+  sources: { name: string; asOf: string }[];
+}
+
+/** GET /intelligence/company/:companyId/proposals, projected. `confidence`/`impactLevel` are backend strings shown verbatim. */
+export interface DecisionProposalView {
+  id: string;
+  title: string;
+  problem: string;
+  recommendation: string;
+  rationale: string;
+  confidence: string;
+  impactLevel: string;
+  status: string;
+  createdAt: string;
+  sessionId: string | null;
+  /** Employee who raised it (DecisionProposal.employeeId), same company. */
+  proposerId: string | null;
+  options: { id: string; title: string; description: string; estimatedEffort: string | null; estimatedImpact: string | null; score: number | null }[];
+  reviews: { id: string; result: string; feedback: string | null; createdAt: string }[];
+}
+
+/** GET /intelligence/company/:companyId/assistance-requests, projected. */
+export interface AssistanceRequestView { id: string; question: string; reason: string | null; urgency: string; status: string; createdAt: string }
+
+/** GET /intelligence/sessions/:id, projected. Raw JSON assessment fields and plans are not forwarded. */
+export interface IntelligenceSessionView {
+  id: string;
+  objective: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  assessments: { id: string; summary: string; recommendation: string; createdAt: string }[];
+  proposals: { id: string; title: string; status: string }[];
+}
