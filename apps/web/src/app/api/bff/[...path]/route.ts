@@ -12,7 +12,15 @@ const ALLOWED: RegExp[] = [
   /^groups$/,
   /^groups\/[A-Za-z0-9_-]{1,64}$/,
   /^companies\/[A-Za-z0-9_-]{1,64}$/,
+  // Slice 2: Chairman Home reads (ChairmanController, CHAIRMAN-only, scoped by getCompanyForChairman).
+  /^chairman\/(overview|alerts|decisions|activity)$/,
 ];
+
+/**
+ * Routes whose backend falls back to the Chairman's *first* company when X-Company-Id is absent.
+ * The BFF refuses them without an explicit company so that fallback can never happen.
+ */
+const REQUIRES_COMPANY = /^chairman\//;
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   const path = (await ctx.params).path.join('/');
@@ -20,6 +28,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ path: strin
 
   const companyId = req.headers.get(COMPANY_HEADER) ?? undefined;
   if (companyId !== undefined && !isSafeId(companyId)) return NextResponse.json({ message: 'Invalid company context' }, { status: 400 });
+  if (companyId === undefined && REQUIRES_COMPANY.test(path)) return NextResponse.json({ message: 'Company context required' }, { status: 400 });
 
   const token = await readSessionToken();
   if (!token) return NextResponse.json({ message: 'Not authenticated' }, { status: 401 });

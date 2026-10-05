@@ -1,30 +1,32 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { OS_DOMAINS } from '@/lib/domains';
 import type { Me } from '@/lib/types';
+import { CommandPalette } from './command-palette';
+import { NavRail } from './nav-rail';
 import { UserMenu } from './user-menu';
 
+/**
+ * Company OS shell: persistent rail (md+), top bar with command entry and session control, workspace.
+ * Below md the rail collapses into the command palette, which lists the same destinations.
+ */
 export function OsShell({ me, children }: { me: Me; children: ReactNode }) {
   return (
     <div className="flex min-h-screen bg-bg text-text">
-      <nav aria-label="AEVORA" className="hidden w-56 shrink-0 border-r border-border bg-surface p-4 md:block">
-        <Link href="/" className="block text-sm font-semibold tracking-wide">AEVORA</Link>
-        <ul className="mt-6 space-y-1 text-sm">
-          <li><Link href="/" className="block rounded px-2 py-1.5 hover:bg-surface-2">Home</Link></li>
-          {OS_DOMAINS.map((d) => (
-            <li key={d.slug}>
-              <Link href={`/${d.slug}`} className="block rounded px-2 py-1.5 text-muted hover:bg-surface-2 hover:text-text">{d.label}</Link>
-            </li>
-          ))}
-        </ul>
-      </nav>
+      <a href="#workspace" className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-control focus:bg-surface focus:px-3 focus:py-2">
+        Skip to workspace
+      </a>
+      <div className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-border bg-surface md:block">
+        <NavRail />
+      </div>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-border px-4 py-3 md:px-6">
-          <Link href="/" className="text-sm font-semibold md:hidden">AEVORA</Link>
-          <span className="hidden text-xs uppercase tracking-wider text-muted md:inline">Company OS</span>
+        <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-bg/90 px-4 py-2.5 backdrop-blur md:px-6">
+          <Link href="/" className="text-sm font-semibold tracking-[0.2em] md:hidden">AEVORA</Link>
+          <div className="flex flex-1 justify-end md:justify-start"><CommandPalette /></div>
           <UserMenu name={me.name} role={me.actorRole} />
         </header>
-        <main className="flex-1 p-4 md:p-6">{children}</main>
+        <main id="workspace" tabIndex={-1} className="mx-auto w-full max-w-[96rem] flex-1 p-4 outline-none md:p-6">
+          {children}
+        </main>
       </div>
     </div>
   );

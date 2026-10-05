@@ -106,10 +106,30 @@ describe('BFF proxy', () => {
   });
   it('routes outside the verified allowlist are 404 (blocked domains are unreachable)', async () => {
     jar.set(SESSION_COOKIE, JWT);
-    for (const p of ['tasks/t1', 'operating-loop/A/dashboard', 'continuous-improvement/company/A/proposals', 'companies', 'chairman/overview']) {
+    for (const p of ['tasks/t1', 'operating-loop/A/dashboard', 'continuous-improvement/company/A/proposals', 'companies',
+      'chairman/operating-loop/cycles', 'chairman/simulation', 'chairman/world', 'chairman/financials', 'organization/employee/e1/kpis',
+      'outreach/process', 'outreach/inbound/poll-email', 'ceo/notify-test', 'world-state/snapshot/A']) {
       expect((await bffCall(p)).status).toBe(404);
     }
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it('Chairman Home reads require an explicit company (no backend first-company fallback)', async () => {
+    jar.set(SESSION_COOKIE, JWT);
+    for (const v of ['overview', 'alerts', 'decisions', 'activity']) {
+      const res = await bffCall(`chairman/${v}`);
+      expect(res.status).toBe(400);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    backendReply(200, { alerts: 0 });
+    expect((await bffCall('chairman/overview', { 'x-aevora-company': 'A' })).status).toBe(200);
+    expect(fetchMock.mock.calls[0]![1].headers['X-Company-Id']).toBe('A');
+  });
+  it('a forbidden company stays 403 at the BFF (no switching, no retry with another company)', async () => {
+    jar.set(SESSION_COOKIE, JWT);
+    backendReply(403, { message: 'Unauthorized company context access' });
+    const res = await bffCall('chairman/overview', { 'x-aevora-company': 'B' });
+    expect(res.status).toBe(403);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
   it('attaches Bearer + X-Company-Id server-side and preserves the backend status', async () => {
     jar.set(SESSION_COOKIE, JWT);

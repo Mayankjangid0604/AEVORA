@@ -13,6 +13,15 @@
   --danger: #f28b82;
   --warn: #e9b65c;
   --ok: #63c99d;
+  --accent-soft: rgb(122 167 255 / 0.12);
+  --danger-soft: rgb(242 139 130 / 0.12);
+  --warn-soft: rgb(233 182 92 / 0.12);
+  --ok-soft: rgb(99 201 157 / 0.12);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
   color-scheme: dark;
 }
 
@@ -45,6 +54,10 @@
   --danger: #b3261e;
   --warn: #8a5a00;
   --ok: #1d7a4f;
+  --accent-soft: rgb(47 95 208 / 0.10);
+  --danger-soft: rgb(179 38 30 / 0.08);
+  --warn-soft: rgb(138 90 0 / 0.10);
+  --ok-soft: rgb(29 122 79 / 0.10);
   color-scheme: light;
 }
 
@@ -60,7 +73,32 @@
   --color-danger: var(--danger);
   --color-warn: var(--warn);
   --color-ok: var(--ok);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn-soft: var(--warn-soft);
+  --color-ok-soft: var(--ok-soft);
+  --radius-panel: var(--radius);
+  --radius-control: var(--radius-sm);
 }
+
+/* Visible focus for every interactive element (WCAG 2.4.7 / 2.4.11). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Motion communicates state only: arrival of loaded content. */
+@keyframes enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.motion-enter { animation: enter var(--dur-base) var(--ease-out); }
+
+/* Loading placeholder: a shape, never fake values. */
+@keyframes pulse-soft { 50% { opacity: 0.45; } }
+.skeleton { background: var(--surface-2); border-radius: var(--radius-sm); animation: pulse-soft 1.4s ease-in-out infinite; }
+
+dialog::backdrop { background: rgb(0 0 0 / 0.5); }
 
 body {
   background: var(--bg);

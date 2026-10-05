@@ -1,14 +1,33 @@
-import { CompanyList } from '@/components/company-list';
+import { redirect } from 'next/navigation';
+import { backendFetch } from '@/server/api';
+import { redirectIfUnauthenticated } from '@/server/guard';
+import { CompanySelector } from '@/components/company-selector';
+import { SystemState } from '@/components/system-state';
+import { selectionOutcome } from '@/lib/company-selection';
+import type { AccessibleCompany } from '@/lib/types';
 
-/** Chairman Home (structural). Only backend-derived data is shown: the companies this session can access. */
-export default function HomePage() {
+/**
+ * Company selection. The list is the backend's GET /auth/companies for this session, nothing else.
+ * One company: go straight in (the company layout still authorises it). Several: explicit choice.
+ */
+export default async function CompaniesPage({ searchParams }: { searchParams: Promise<{ choose?: string }> }) {
+  const r = await backendFetch<AccessibleCompany[]>('auth/companies');
+  await redirectIfUnauthenticated(r);
+  if (!r.ok) return <SystemState kind={r.error.kind} />;
+
+  const outcome = selectionOutcome(Array.isArray(r.data) ? r.data : []);
+  // `?choose=1` lets a single-company user reach this page deliberately (e.g. "Switch company").
+  if (outcome.kind === 'enter' && !(await searchParams).choose) redirect(`/company/${encodeURIComponent(outcome.companyId)}`);
+
   return (
-    <section aria-labelledby="home-title" className="space-y-6">
-      <h1 id="home-title" className="text-xl font-semibold">Home</h1>
-      <div className="space-y-3">
-        <h2 className="text-sm font-medium uppercase tracking-wider text-muted">Companies</h2>
-        <CompanyList />
-      </div>
+    <section aria-labelledby="companies-title" className="space-y-5">
+      <header>
+        <h1 id="companies-title" className="text-xl font-semibold">Companies</h1>
+        <p className="mt-1 text-sm text-muted">Companies your account can access. Choose one to open its operating view.</p>
+      </header>
+      {outcome.kind === 'none'
+        ? <SystemState kind="empty" title="No accessible company" detail="AEVORA found no company this account can access." />
+        : <CompanySelector companies={outcome.kind === 'enter' ? (r.data as AccessibleCompany[]) : outcome.companies} />}
     </section>
   );
 }

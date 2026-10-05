@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { backendFetch } from '@/server/api';
 import { redirectIfUnauthenticated } from '@/server/guard';
 import { SystemState } from '@/components/system-state';
-import { COMPANY_DOMAINS } from '@/lib/domains';
+import { StatusBadge } from '@/components/company-selector';
 import { isSafeId } from '@/lib/http';
 import type { Company } from '@/lib/types';
 
@@ -20,24 +20,36 @@ export default async function CompanyLayout({ children, params }: { children: Re
   await redirectIfUnauthenticated(r);
   if (!r.ok) {
     return r.status === 403 || r.status === 404
-      ? <SystemState kind="forbidden" title="You do not have access to this company." detail="AEVORA did not switch you to another company." />
-      : <SystemState kind={r.error.kind} detail={r.error.message} />;
+      ? (
+        <div className="space-y-3">
+          <SystemState kind="forbidden" title="You do not have access to this company." detail="AEVORA did not switch you to another company." />
+          <Link href="/?choose=1" className="inline-block text-sm text-accent hover:underline">Back to your companies</Link>
+        </div>
+      )
+      : <SystemState kind={r.error.kind} />;
   }
 
   return (
     <div className="space-y-6">
-      <header className="space-y-1">
-        <nav aria-label="Context" className="text-xs text-muted"><Link href="/" className="hover:text-text">Home</Link> / Company</nav>
-        <h1 className="text-xl font-semibold"><Link href={`/company/${companyId}`}>{r.data.name}</Link></h1>
-        <p className="text-xs text-muted">{r.data.status}</p>
-      </header>
-      <nav aria-label="Company domains" className="flex flex-wrap gap-2">
-        {COMPANY_DOMAINS.map((d) => (
-          <Link key={d.slug} href={`/company/${companyId}/${d.slug}`} className="rounded-md border border-border px-3 py-1 text-sm text-muted hover:bg-surface-2 hover:text-text">
-            {d.label}
-          </Link>
-        ))}
-      </nav>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+        <div className="min-w-0">
+          <nav aria-label="Breadcrumb" className="text-xs text-muted">
+            <ol className="flex gap-1.5">
+              <li><Link href="/?choose=1" className="hover:text-text">Companies</Link></li>
+              <li aria-hidden="true">/</li>
+              <li aria-current="page" className="truncate text-text">{r.data.name}</li>
+            </ol>
+          </nav>
+          <h1 className="mt-1 flex items-center gap-3 text-xl font-semibold">
+            <span className="truncate">{r.data.name}</span>
+            <StatusBadge status={r.data.status} />
+          </h1>
+          {r.data.legalName && r.data.legalName !== r.data.name && <p className="text-xs text-muted">{r.data.legalName}</p>}
+        </div>
+        <Link href="/?choose=1" className="rounded-control border border-border px-3 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-text">
+          Switch company
+        </Link>
+      </div>
       {children}
     </div>
   );
