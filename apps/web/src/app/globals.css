@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/* Design tokens: dark-first, complete light theme. Components use only these semantic tokens. */
+:root {
+  --bg: #0b0e14;
+  --surface: #121620;
+  --surface-2: #1a1f2b;
+  --border: #272d3a;
+  --text: #e7e9ef;
+  --muted: #9aa3b4;
+  --accent: #7aa7ff;
+  --on-accent: #0b0e14;
+  --danger: #f28b82;
+  --warn: #e9b65c;
+  --ok: #63c99d;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f6f7fa;
+    --surface: #ffffff;
+    --surface-2: #eef0f5;
+    --border: #d9dde6;
+    --text: #141821;
+    --muted: #5a6274;
+    --accent: #2f5fd0;
+    --on-accent: #ffffff;
+    --danger: #b3261e;
+    --warn: #8a5a00;
+    --ok: #1d7a4f;
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --bg: #f6f7fa;
+  --surface: #ffffff;
+  --surface-2: #eef0f5;
+  --border: #d9dde6;
+  --text: #141821;
+  --muted: #5a6274;
+  --accent: #2f5fd0;
+  --on-accent: #ffffff;
+  --danger: #b3261e;
+  --warn: #8a5a00;
+  --ok: #1d7a4f;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-danger: var(--danger);
+  --color-warn: var(--warn);
+  --color-ok: var(--ok);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

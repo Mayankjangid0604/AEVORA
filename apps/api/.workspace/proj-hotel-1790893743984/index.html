@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Hotel App Core</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Hotel App Core</h1>
+    <nav>
+      <button onclick="showTab('rooms')">Rooms</button>
+      <button onclick="showTab('guests')">Guests</button>
+      <button onclick="showTab('bookings')">Bookings</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="rooms" class="tab">
+      <h2>Rooms</h2>
+      <form id="room-form">
+        <input type="text" id="room-no" placeholder="Room Number" required>
+        <input type="text" id="room-type" placeholder="Type (Single/Double)" required>
+        <button type="submit">Add Room</button>
+      </form>
+      <ul id="room-list"></ul>
+    </section>
+
+    <section id="guests" class="tab" style="display:none;">
+      <h2>Guests</h2>
+      <form id="guest-form">
+        <input type="text" id="guest-name" placeholder="Guest Name" required>
+        <input type="email" id="guest-email" placeholder="Email" required>
+        <button type="submit">Add Guest</button>
+      </form>
+      <ul id="guest-list"></ul>
+    </section>
+
+    <section id="bookings" class="tab" style="display:none;">
+      <h2>Bookings</h2>
+      <form id="booking-form">
+        <select id="booking-guest" required><option value="">Select Guest</option></select>
+        <select id="booking-room" required><option value="">Select Room</option></select>
+        <button type="submit">Book Room</button>
+      </form>
+      <ul id="booking-list"></ul>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
