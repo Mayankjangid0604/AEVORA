@@ -4,4 +4,5 @@ export type ChairmanView = 'overview' | 'alerts' | 'decisions' | 'activity';
 export const companyKeys = {
   all: (companyId: string) => ['company', companyId] as const,
   chairman: (companyId: string, view: ChairmanView) => ['company', companyId, 'chairman', view] as const,
+  org: (companyId: string, ...parts: string[]) => ['company', companyId, 'org', ...parts] as const,
 };

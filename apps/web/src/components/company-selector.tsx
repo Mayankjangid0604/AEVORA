@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { AccessibleCompany } from '@/lib/types';
+import { StatusBadge } from './status-badge';
 
 /** Renders exactly the companies the backend returned for this session (GET /auth/companies). */
 export function CompanySelector({ companies }: { companies: AccessibleCompany[] }) {
@@ -21,10 +22,4 @@ export function CompanySelector({ companies }: { companies: AccessibleCompany[] 
       ))}
     </ul>
   );
-}
-
-/** Backend status strings rendered verbatim; colour is a hint, the text carries the meaning. */
-export function StatusBadge({ status }: { status: string }) {
-  const tone = status === 'ACTIVE' ? 'bg-ok-soft text-ok' : status === 'CLOSED' ? 'bg-danger-soft text-danger' : 'bg-warn-soft text-warn';
-  return <span className={`rounded-control px-1.5 py-0.5 text-[11px] font-medium tracking-wide ${tone}`}>{status}</span>;
 }

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { backendFetch } from '@/server/api';
 import { redirectIfUnauthenticated } from '@/server/guard';
 import { SystemState } from '@/components/system-state';
-import { StatusBadge } from '@/components/company-selector';
+import { StatusBadge } from '@/components/status-badge';
 import { isSafeId } from '@/lib/http';
 import type { Company } from '@/lib/types';
 

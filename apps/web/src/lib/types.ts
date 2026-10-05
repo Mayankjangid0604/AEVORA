@@ -54,3 +54,22 @@ export interface ManagementDecision {
 
 /** GET /chairman/activity — CompanyEvent (payload not rendered). */
 export interface CompanyEvent { id: string; type: string; createdAt: string }
+
+/** GET /organization/departments(/:id), projected by the BFF to these fields only. */
+export interface DepartmentSummary { id: string; name: string; status: string }
+
+/**
+ * GET /organization/employees, /organization/employee/:id, projected by the BFF.
+ * Salary, identity seed, performance/reliability scores and credential fields never leave the server.
+ */
+export interface EmployeeSummary {
+  id: string;
+  name: string;
+  status: string;
+  hireDate: string | null;
+  role: { title: string } | null;
+  department: { id: string; name: string } | null;
+}
+
+/** GET /workforce/profiles(/:employeeId), projected to the backend-recorded worker type only. */
+export interface WorkerProvenance { employeeId: string; workerType: string }

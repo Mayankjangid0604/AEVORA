@@ -1,8 +1,8 @@
 /**
  * Domain readiness registry. A route existing does not mean its domain is ready: a workspace renders
- * backend data only when status is 'ready'. Nothing is 'ready' in this slice except the context screens.
+ * backend data only when status is 'ready' (its routes verified and allowlisted in the BFF).
  */
-export type DomainStatus = 'not-built' | 'blocked';
+export type DomainStatus = 'ready' | 'not-built' | 'blocked';
 
 export interface Domain {
   slug: string;
@@ -17,8 +17,7 @@ const REVIEW = 'Authorization reviewed (see AEVORA_V14_SLICE1_CLOSURE_REPORT.md)
 
 export const COMPANY_DOMAINS: Domain[] = [
   { slug: 'ceo', label: 'AI CEO', status: 'not-built', endpoints: ['GET /ceo/operating-state', 'GET /ceo/feed'], note: REVIEW },
-  { slug: 'workforce', label: 'Workforce', status: 'not-built', endpoints: ['GET /workforce/profiles', 'GET /workforce/ai/workers'], note: REVIEW },
-  { slug: 'departments', label: 'Departments', status: 'not-built', endpoints: ['GET /organization/departments', 'GET /companies/:id/departments'], note: 'Reviewed. /organization/employee/:id/{permissions,responsibilities,kpis,budget,performance,succession} are legacy placeholders and stay blocked.' },
+  { slug: 'organization', label: 'Organization', status: 'ready', endpoints: ['GET /organization/departments', 'GET /organization/departments/:id', 'GET /organization/employees', 'GET /organization/employee/:id', 'GET /workforce/profiles', 'GET /workforce/profiles/:employeeId'], note: 'Read-only. Departments and workforce from the backend; salary and credential fields are never sent to the browser.' },
   { slug: 'projects', label: 'Projects', status: 'not-built', endpoints: ['GET /chairman/projects', 'GET /projects/:id/plans'], note: REVIEW },
   { slug: 'tasks', label: 'Tasks', status: 'blocked', endpoints: ['GET /tasks/:id', 'GET /employees/:id/tasks'], note: 'Isolation fixed in V14 slice 1, but no company-wide task listing endpoint exists yet.' },
   { slug: 'research', label: 'Research', status: 'not-built', endpoints: ['GET /chairman/research/*', 'GET /research/:id'], note: REVIEW },
