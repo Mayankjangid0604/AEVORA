@@ -1,5 +1,5 @@
-import { DomainWorkspace } from '@/components/domain-workspace';
+import { SalesWorkspace } from '@/components/growth-views';
 
-export default function Page() {
-  return <DomainWorkspace slug="sales" />;
+export default async function Page({ params }: { params: Promise<{ companyId: string }> }) {
+  return <SalesWorkspace companyId={(await params).companyId} />;
 }

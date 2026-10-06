@@ -33,6 +33,11 @@ const ROUTES: RouteRule[] = [
   // Slice 7: AI CEO read-only records. ceo/ask, reviews/run, questions/:id/answer etc. stay blocked (model calls / mutations).
   { pattern: /^ceo\/feed$/, company: true, project: projections.ceoFeed },
   { pattern: /^ceo\/questions$/, company: true, project: projections.ceoQuestions },
+  // Slice 8: Marketing content posts and lead generation (read-only). generate/approve/posted/whatsapp/pixel,
+  // lead-gen/trigger, sales/*, outreach/*, inbox/*, client-meeting/* and research/* stay blocked.
+  { pattern: /^marketing-content\/posts$/, company: true, project: projections.contentPosts },
+  { pattern: /^lead-gen\/runs$/, company: true, project: projections.leadGenRuns },
+  { pattern: /^lead-gen\/leads$/, company: true, project: projections.salesLeads },
   // Slice 3: Organization / Workforce (req.user.companyId; by-id reads company-bound, see AEVORA_V14_SLICE3_REPORT.md).
   { pattern: /^organization\/departments$/, company: true, project: projections.departments },
   { pattern: new RegExp(`^organization/departments/${ID}$`), company: true, project: projections.department },

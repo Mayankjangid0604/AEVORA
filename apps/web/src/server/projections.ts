@@ -3,7 +3,7 @@
  * (e.g. Employee.salary, identitySeed, performance scores). Only the listed fields ever reach the browser.
  * A projection returning `undefined` means "not found" (the BFF answers 404).
  */
-import type { CeoFeedItem, CeoQuestionView, ManagementDecision, OperationalAlert, TaskDetail, TaskSummary, AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance } from '@/lib/types';
+import type { ContentPostView, LeadGenRunView, SalesLeadView, CeoFeedItem, CeoQuestionView, ManagementDecision, OperationalAlert, TaskDetail, TaskSummary, AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance } from '@/lib/types';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -200,6 +200,28 @@ function ceoQuestions(v: unknown, companyId?: string): CeoQuestionView[] {
   }));
 }
 
+function contentPosts(v: unknown, companyId?: string): ContentPostView[] {
+  return arr(v).filter((p) => inCompany(p, companyId)).map((p) => p as Obj).map((p) => ({
+    id: p.id as string, platform: str(p.platform) ?? '', contentType: str(p.contentType) ?? '', caption: str(p.caption) ?? '',
+    hashtags: arr(p.hashtags).filter((h): h is string => typeof h === 'string'), status: str(p.status) ?? 'UNKNOWN',
+    scheduledFor: str(p.scheduledFor), postedAt: str(p.postedAt), createdAt: str(p.createdAt) ?? '',
+  }));
+}
+
+function leadGenRuns(v: unknown, companyId?: string): LeadGenRunView[] {
+  return arr(v).filter((r) => inCompany(r, companyId)).map((r) => r as Obj).map((r) => ({
+    id: r.id as string, status: str(r.status) ?? 'UNKNOWN', triggeredBy: str(r.triggeredBy) ?? '', triggeredAt: str(r.triggeredAt) ?? '',
+    completedAt: str(r.completedAt), totalFound: num(r.totalFound), totalNew: num(r.totalNew),
+  }));
+}
+
+function salesLeads(v: unknown, companyId?: string): SalesLeadView[] {
+  return arr(v).filter((l) => inCompany(l, companyId)).map((l) => l as Obj).map((l) => ({
+    id: l.id as string, name: str(l.name) ?? '', industry: str(l.industry), geography: str(l.geography), companySize: str(l.companySize),
+    status: str(l.status) ?? 'UNKNOWN', source: str(l.source), createdAt: str(l.createdAt) ?? '', lastContactedAt: str(l.lastContactedAt),
+  }));
+}
+
 /** companyId = the explicit company context of the request (for context-ownership checks). */
 export type Projection = (body: unknown, companyId?: string) => unknown;
 
@@ -222,4 +244,7 @@ export const projections = {
   decisions,
   ceoFeed,
   ceoQuestions,
+  contentPosts,
+  leadGenRuns,
+  salesLeads,
 } satisfies Record<string, Projection>;

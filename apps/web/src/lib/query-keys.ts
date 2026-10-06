@@ -8,5 +8,6 @@ export const companyKeys = {
   projects: (companyId: string, ...parts: string[]) => ['company', companyId, 'projects', ...parts] as const,
   intelligence: (companyId: string, ...parts: string[]) => ['company', companyId, 'intelligence', ...parts] as const,
   ceo: (companyId: string, ...parts: string[]) => ['company', companyId, 'ceo', ...parts] as const,
+  growth: (companyId: string, ...parts: string[]) => ['company', companyId, 'growth', ...parts] as const,
   tasks: (companyId: string, ...parts: string[]) => ['company', companyId, 'tasks', ...parts] as const,
 };
