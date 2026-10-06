@@ -38,6 +38,10 @@ const ROUTES: RouteRule[] = [
   { pattern: /^marketing-content\/posts$/, company: true, project: projections.contentPosts },
   { pattern: /^lead-gen\/runs$/, company: true, project: projections.leadGenRuns },
   { pattern: /^lead-gen\/leads$/, company: true, project: projections.salesLeads },
+  // Slice 9: Operating-loop cycles (rule-based OODA records), read-only. :companyId/cycle, verdict, scan-opportunities,
+  // error-pool/*, context, memory, performance and all continuous-improvement/autonomous-enterprise/boardroom routes stay blocked.
+  { pattern: new RegExp(`^operating-loop/(${ID})/cycles$`), company: true, pathCompany: true, project: projections.operatingCycles },
+  { pattern: new RegExp(`^operating-loop/cycle/${ID}$`), company: true, project: projections.operatingCycle },
   // Slice 3: Organization / Workforce (req.user.companyId; by-id reads company-bound, see AEVORA_V14_SLICE3_REPORT.md).
   { pattern: /^organization\/departments$/, company: true, project: projections.departments },
   { pattern: new RegExp(`^organization/departments/${ID}$`), company: true, project: projections.department },

@@ -3,7 +3,7 @@
  * (e.g. Employee.salary, identitySeed, performance scores). Only the listed fields ever reach the browser.
  * A projection returning `undefined` means "not found" (the BFF answers 404).
  */
-import type { ContentPostView, LeadGenRunView, SalesLeadView, CeoFeedItem, CeoQuestionView, ManagementDecision, OperationalAlert, TaskDetail, TaskSummary, AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance } from '@/lib/types';
+import type { OperatingCycleView, ContentPostView, LeadGenRunView, SalesLeadView, CeoFeedItem, CeoQuestionView, ManagementDecision, OperationalAlert, TaskDetail, TaskSummary, AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance } from '@/lib/types';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -222,6 +222,18 @@ function salesLeads(v: unknown, companyId?: string): SalesLeadView[] {
   }));
 }
 
+function operatingCycle(v: unknown, companyId?: string): OperatingCycleView | undefined {
+  if (!inCompany(v, companyId)) return undefined;
+  const rec = isObj(v.recommendation) && str(v.recommendation.title) ? v.recommendation : null;
+  const ex = isObj(v.execution) && Object.keys(v.execution).length ? v.execution : null;
+  return {
+    id: v.id as string, phase: str(v.phase) ?? 'UNKNOWN', trigger: str(v.trigger) ?? '', chairmanVerdict: str(v.chairmanVerdict),
+    startedAt: str(v.startedAt) ?? '', completedAt: str(v.completedAt), failed: !!v.error,
+    recommendation: rec && { title: rec.title as string, impact: str(rec.impact), effort: str(rec.effort), risk: str(rec.risk) },
+    execution: ex && { action: str(ex.action), dispatched: typeof ex.dispatched === 'boolean' ? ex.dispatched : null, result: str(ex.result) },
+  };
+}
+
 /** companyId = the explicit company context of the request (for context-ownership checks). */
 export type Projection = (body: unknown, companyId?: string) => unknown;
 
@@ -247,4 +259,6 @@ export const projections = {
   contentPosts,
   leadGenRuns,
   salesLeads,
+  operatingCycles: (v: unknown, companyId?: string) => arr(v).map((c) => operatingCycle(c, companyId)).filter((c): c is OperatingCycleView => !!c),
+  operatingCycle,
 } satisfies Record<string, Projection>;

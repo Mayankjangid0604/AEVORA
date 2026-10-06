@@ -216,3 +216,10 @@ export interface SalesLeadView {
   id: string; name: string; industry: string | null; geography: string | null; companySize: string | null;
   status: string; source: string | null; createdAt: string; lastContactedAt: string | null;
 }
+
+/** GET /operating-loop/:companyId/cycles and /operating-loop/cycle/:id — rule-based OODA cycle; raw JSON phases and error text dropped. */
+export interface OperatingCycleView {
+  id: string; phase: string; trigger: string; chairmanVerdict: string | null; startedAt: string; completedAt: string | null; failed: boolean;
+  recommendation: { title: string; impact: string | null; effort: string | null; risk: string | null } | null;
+  execution: { action: string | null; dispatched: boolean | null; result: string | null } | null;
+}
