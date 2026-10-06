@@ -16,7 +16,9 @@ export interface Domain {
 const REVIEW = 'Authorization reviewed (see AEVORA_V14_SLICE1_CLOSURE_REPORT.md). Workspace not built yet.';
 
 export const COMPANY_DOMAINS: Domain[] = [
-  { slug: 'ceo', label: 'AI CEO', status: 'not-built', endpoints: ['GET /ceo/operating-state', 'GET /ceo/feed'], note: REVIEW },
+  { slug: 'ceo', label: 'AI CEO', status: 'ready', endpoints: ['GET /ceo/feed', 'GET /ceo/questions'], note: 'Read-only record of what the AI CEO did and asked. Asking the CEO or running a review calls a model and is not available here.' },
+  { slug: 'decisions', label: 'Decisions', status: 'ready', endpoints: ['GET /chairman/decisions'], note: 'Read-only, Chairman only. Management decisions as recorded; approving and rejecting is not available.' },
+  { slug: 'attention', label: 'Attention', status: 'ready', endpoints: ['GET /chairman/alerts', 'GET /ceo/questions'], note: 'Read-only. Operational alerts and AI CEO questions awaiting an answer; no activity events.' },
   { slug: 'organization', label: 'Organization', status: 'ready', endpoints: ['GET /organization/departments', 'GET /organization/departments/:id', 'GET /organization/employees', 'GET /organization/employee/:id', 'GET /workforce/profiles', 'GET /workforce/profiles/:employeeId'], note: 'Read-only. Departments and workforce from the backend; salary and credential fields are never sent to the browser.' },
   { slug: 'projects', label: 'Projects', status: 'ready', endpoints: ['GET /chairman/projects', 'GET /chairman/projects/:id'], note: 'Read-only, Chairman only. Tasks, deliveries and financial figures are not forwarded to the browser.' },
   { slug: 'tasks', label: 'Tasks', status: 'ready', endpoints: ['GET /employees/:id/tasks', 'GET /tasks/:id'], note: 'Read-only, by assignee. No company-wide task listing exists; unassigned tasks are not available.' },
@@ -29,8 +31,6 @@ export const COMPANY_DOMAINS: Domain[] = [
 ];
 
 export const OS_DOMAINS: Domain[] = [
-  { slug: 'attention', label: 'Attention', status: 'not-built', endpoints: ['GET /chairman/alerts'], note: REVIEW },
-  { slug: 'decisions', label: 'Decisions', status: 'not-built', endpoints: ['GET /chairman/decisions', 'GET /autonomous-enterprise/decisions'], note: REVIEW },
   { slug: 'reports', label: 'Reports', status: 'not-built', endpoints: ['GET /groups/:id/report', 'GET /boardroom/*'], note: REVIEW },
   { slug: 'assistant', label: 'Assistant', status: 'not-built', endpoints: ['GET /assistant/messages'], note: REVIEW },
   { slug: 'admin', label: 'Admin', status: 'not-built', endpoints: ['GET /model-platform/*'], note: REVIEW },

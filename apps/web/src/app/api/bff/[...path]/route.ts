@@ -27,7 +27,12 @@ const ROUTES: RouteRule[] = [
   { pattern: new RegExp(`^groups/${ID}$`) },
   { pattern: new RegExp(`^companies/${ID}$`) },
   // Slice 2: Chairman Home (ChairmanController, CHAIRMAN-only, getCompanyForChairman).
-  { pattern: /^chairman\/(overview|alerts|decisions|activity)$/, company: true },
+  { pattern: /^chairman\/(overview|activity)$/, company: true },
+  { pattern: /^chairman\/alerts$/, company: true, project: projections.alerts },
+  { pattern: /^chairman\/decisions$/, company: true, project: projections.decisions },
+  // Slice 7: AI CEO read-only records. ceo/ask, reviews/run, questions/:id/answer etc. stay blocked (model calls / mutations).
+  { pattern: /^ceo\/feed$/, company: true, project: projections.ceoFeed },
+  { pattern: /^ceo\/questions$/, company: true, project: projections.ceoQuestions },
   // Slice 3: Organization / Workforce (req.user.companyId; by-id reads company-bound, see AEVORA_V14_SLICE3_REPORT.md).
   { pattern: /^organization\/departments$/, company: true, project: projections.departments },
   { pattern: new RegExp(`^organization/departments/${ID}$`), company: true, project: projections.department },

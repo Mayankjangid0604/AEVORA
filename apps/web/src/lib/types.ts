@@ -40,6 +40,8 @@ export interface OperationalAlert {
   description: string | null;
   status: string;
   createdAt: string;
+  acknowledgedAt: string | null;
+  resolvedAt: string | null;
 }
 
 /** GET /chairman/decisions — ManagementDecision scalars + proposer. */
@@ -50,6 +52,19 @@ export interface ManagementDecision {
   status: 'PROPOSED' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
   createdAt: string;
   proposer: { id: string; name: string } | null;
+  description: string | null;
+  updatedAt: string | null;
+  approvedAt: string | null;
+  targetEmployee: { id: string; name: string } | null;
+}
+
+/** GET /ceo/feed — what the AI CEO recorded (reviews, its actions, weekly reports). */
+export interface CeoFeedItem { id: string; at: string; kind: string; outcome: string | null; title: string; detail: string }
+
+/** GET /ceo/questions — CeoQuestion without its context JSON. */
+export interface CeoQuestionView {
+  id: string; question: string; urgency: string; status: string;
+  askedAt: string; answeredAt: string | null; chairmanAnswer: string | null;
 }
 
 /** GET /chairman/activity — CompanyEvent (payload not rendered). */

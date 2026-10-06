@@ -55,8 +55,8 @@ describe('Chairman Home sections render backend data only', () => {
   });
   it('attention lists only ACTIVE alerts, empty state otherwise', () => {
     const alerts: OperationalAlert[] = [
-      { id: '1', severity: 'CRITICAL', category: 'finance', title: 'Cash low', description: null, status: 'ACTIVE', createdAt: '2026-10-01T10:00:00Z' },
-      { id: '2', severity: 'INFO', category: 'ops', title: 'Old resolved', description: null, status: 'RESOLVED', createdAt: '2026-10-01T09:00:00Z' },
+      { id: '1', severity: 'CRITICAL', category: 'finance', title: 'Cash low', description: null, status: 'ACTIVE', createdAt: '2026-10-01T10:00:00Z', acknowledgedAt: null, resolvedAt: null },
+      { id: '2', severity: 'INFO', category: 'ops', title: 'Old resolved', description: null, status: 'RESOLVED', createdAt: '2026-10-01T09:00:00Z', acknowledgedAt: null, resolvedAt: null },
     ];
     const html = renderToStaticMarkup(<AttentionList alerts={alerts} />);
     expect(html).toContain('Cash low');
@@ -65,8 +65,8 @@ describe('Chairman Home sections render backend data only', () => {
   });
   it('decisions list only PROPOSED, offers no action controls, empty state otherwise', () => {
     const decisions: ManagementDecision[] = [
-      { id: 'd1', type: 'HIRE', title: 'Hire analyst', status: 'PROPOSED', createdAt: '2026-10-01T10:00:00Z', proposer: { id: 'e', name: 'CEO Agent' } },
-      { id: 'd2', type: 'FIRE', title: 'Done already', status: 'APPROVED', createdAt: '2026-10-01T10:00:00Z', proposer: null },
+      { id: 'd1', type: 'HIRE', title: 'Hire analyst', status: 'PROPOSED', createdAt: '2026-10-01T10:00:00Z', proposer: { id: 'e', name: 'CEO Agent' }, description: null, updatedAt: null, approvedAt: null, targetEmployee: null },
+      { id: 'd2', type: 'FIRE', title: 'Done already', status: 'APPROVED', createdAt: '2026-10-01T10:00:00Z', proposer: null, description: null, updatedAt: null, approvedAt: null, targetEmployee: null },
     ];
     const html = renderToStaticMarkup(<DecisionList decisions={decisions} />);
     expect(html).toContain('Hire analyst');
@@ -82,7 +82,7 @@ describe('Chairman Home sections render backend data only', () => {
   });
   it('limits are disclosed, never silently truncated', () => {
     const many: CompanyEvent[] = Array.from({ length: 3 }, (_, i) => ({ id: `e${i}`, type: `T${i}`, createdAt: '2026-10-01T10:00:00Z' }));
-    const alerts = many.map((e) => ({ id: e.id, severity: 'INFO' as const, category: 'c', title: e.type, description: null, status: 'ACTIVE', createdAt: e.createdAt }));
+    const alerts = many.map((e) => ({ id: e.id, severity: 'INFO' as const, category: 'c', title: e.type, description: null, status: 'ACTIVE', createdAt: e.createdAt, acknowledgedAt: null, resolvedAt: null }));
     expect(renderToStaticMarkup(<AttentionList alerts={alerts} limit={2} />)).toContain('Showing 2 of 3 active alerts');
   });
 });

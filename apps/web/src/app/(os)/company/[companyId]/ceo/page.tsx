@@ -1,5 +1,5 @@
-import { DomainWorkspace } from '@/components/domain-workspace';
+import { CeoWorkspace } from '@/components/ceo-views';
 
-export default function Page() {
-  return <DomainWorkspace slug="ceo" />;
+export default async function Page({ params }: { params: Promise<{ companyId: string }> }) {
+  return <CeoWorkspace companyId={(await params).companyId} />;
 }

@@ -3,7 +3,7 @@
  * (e.g. Employee.salary, identitySeed, performance scores). Only the listed fields ever reach the browser.
  * A projection returning `undefined` means "not found" (the BFF answers 404).
  */
-import type { TaskDetail, TaskSummary, AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance } from '@/lib/types';
+import type { CeoFeedItem, CeoQuestionView, ManagementDecision, OperationalAlert, TaskDetail, TaskSummary, AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance } from '@/lib/types';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -166,6 +166,40 @@ function taskInContext(v: unknown, companyId?: string): TaskDetail | undefined {
 const list = <T>(one: (v: unknown) => T | undefined) => (v: unknown): T[] =>
   (Array.isArray(v) ? v : []).map(one).filter((x): x is T => x !== undefined);
 
+const ref = (v: unknown) => (isObj(v) && str(v.id) ? { id: v.id as string, name: str(v.name) ?? 'Unknown' } : null);
+const inCompany = (v: unknown, companyId?: string): v is Obj => isObj(v) && !!str(v.id) && v.companyId === companyId;
+
+function alerts(v: unknown, companyId?: string): OperationalAlert[] {
+  return arr(v).filter((a) => inCompany(a, companyId)).map((a) => a as Obj).map((a) => ({
+    id: a.id as string, severity: (str(a.severity) ?? 'INFO') as OperationalAlert['severity'], category: str(a.category) ?? '', title: str(a.title) ?? '',
+    description: str(a.description), status: str(a.status) ?? 'UNKNOWN', createdAt: str(a.createdAt) ?? '', acknowledgedAt: str(a.acknowledgedAt), resolvedAt: str(a.resolvedAt),
+  }));
+}
+
+// payload JSON and approvedBy (an actor id) are never forwarded.
+function decisions(v: unknown, companyId?: string): ManagementDecision[] {
+  return arr(v).filter((d) => inCompany(d, companyId)).map((d) => d as Obj).map((d) => ({
+    id: d.id as string, type: str(d.type) ?? '', title: str(d.title) ?? '', status: (str(d.status) ?? 'PROPOSED') as ManagementDecision['status'],
+    createdAt: str(d.createdAt) ?? '', proposer: ref(d.proposer), description: str(d.description), updatedAt: str(d.updatedAt),
+    approvedAt: str(d.approvedAt), targetEmployee: ref(d.targetEmployee),
+  }));
+}
+
+// Feed items carry no companyId; the backend scopes them to the X-Company-Id the BFF forwards.
+function ceoFeed(v: unknown): CeoFeedItem[] {
+  return arr(v).filter(isObj).filter((f) => str(f.id) && str(f.at)).map((f) => ({
+    id: f.id as string, at: f.at as string, kind: str(f.kind) ?? 'UNKNOWN', outcome: str(f.outcome), title: str(f.title) ?? '', detail: str(f.detail) ?? '',
+  }));
+}
+
+// context JSON (CEO-internal working data) is never forwarded.
+function ceoQuestions(v: unknown, companyId?: string): CeoQuestionView[] {
+  return arr(v).filter((q) => inCompany(q, companyId)).map((q) => q as Obj).map((q) => ({
+    id: q.id as string, question: str(q.question) ?? '', urgency: str(q.urgency) ?? 'UNKNOWN', status: str(q.status) ?? 'UNKNOWN',
+    askedAt: str(q.askedAt) ?? '', answeredAt: str(q.answeredAt), chairmanAnswer: str(q.chairmanAnswer),
+  }));
+}
+
 /** companyId = the explicit company context of the request (for context-ownership checks). */
 export type Projection = (body: unknown, companyId?: string) => unknown;
 
@@ -184,4 +218,8 @@ export const projections = {
   session,
   employeeTasks: tasksInContext,
   task: taskInContext,
+  alerts,
+  decisions,
+  ceoFeed,
+  ceoQuestions,
 } satisfies Record<string, Projection>;
