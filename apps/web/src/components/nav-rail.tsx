@@ -44,12 +44,12 @@ export function NavRail() {
           </ul>
         </div>
       )}
-      <div>
+      {OS_DOMAINS.length > 0 && <div>
         <p className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">Operating system</p>
         <ul className="space-y-0.5">
           {OS_DOMAINS.map((d) => <RailLink key={d.slug} href={`/${d.slug}`} label={d.label} status={d.status} current={pathname.startsWith(`/${d.slug}`)} />)}
         </ul>
-      </div>
+      </div>}
     </nav>
   );
 }

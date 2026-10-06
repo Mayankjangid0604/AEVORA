@@ -223,3 +223,12 @@ export interface OperatingCycleView {
   recommendation: { title: string; impact: string | null; effort: string | null; risk: string | null } | null;
   execution: { action: string | null; dispatched: boolean | null; result: string | null } | null;
 }
+
+/** GET /assistant/messages — AssistantMessage; intent/result JSON (parsed intents, execution output) dropped. */
+export interface AssistantMessageView { id: string; from: string; to: string; content: string; status: string; createdAt: string }
+
+/** GET /chairman-mail — ChairmanMail list (system notifications to the Chairman); body/data never forwarded. */
+export interface ChairmanMailView { id: string; ref: string; event: string; category: string; title: string; status: string; read: boolean; createdAt: string; messageCount: number }
+
+/** GET /agents — Agent record; configuration (provider/model/system instructions) and budget dropped. */
+export interface AgentView { id: string; employeeId: string; status: string; autonomyLevel: string; createdAt: string }

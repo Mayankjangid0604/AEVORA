@@ -3,7 +3,7 @@
  * (e.g. Employee.salary, identitySeed, performance scores). Only the listed fields ever reach the browser.
  * A projection returning `undefined` means "not found" (the BFF answers 404).
  */
-import type { OperatingCycleView, ContentPostView, LeadGenRunView, SalesLeadView, CeoFeedItem, CeoQuestionView, ManagementDecision, OperationalAlert, TaskDetail, TaskSummary, AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance } from '@/lib/types';
+import type { AgentView, AssistantMessageView, ChairmanMailView, OperatingCycleView, ContentPostView, LeadGenRunView, SalesLeadView, CeoFeedItem, CeoQuestionView, ManagementDecision, OperationalAlert, TaskDetail, TaskSummary, AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance } from '@/lib/types';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -185,10 +185,18 @@ function decisions(v: unknown, companyId?: string): ManagementDecision[] {
   }));
 }
 
+/**
+ * Persisted CEO action details can contain a raw backend error (stack frames, server file paths, source excerpts
+ * with agent configuration). Such text is internal and is replaced, never forwarded.
+ */
+const INTERNAL_ERROR = /invocation in|\.(ts|js):\d+|\bat [\w.<>]+ \(|prisma\.|[A-Z]:\\[\w-]|systemInstructions|stack trace/i;
+const safeDetail = (d: string | null) => (d && INTERNAL_ERROR.test(d) ? 'An internal error was recorded for this action (details are not shown).' : d ?? '');
+
 // Feed items carry no companyId; the backend scopes them to the X-Company-Id the BFF forwards.
 function ceoFeed(v: unknown): CeoFeedItem[] {
   return arr(v).filter(isObj).filter((f) => str(f.id) && str(f.at)).map((f) => ({
-    id: f.id as string, at: f.at as string, kind: str(f.kind) ?? 'UNKNOWN', outcome: str(f.outcome), title: str(f.title) ?? '', detail: str(f.detail) ?? '',
+    id: f.id as string, at: f.at as string, kind: str(f.kind) ?? 'UNKNOWN', outcome: str(f.outcome),
+    title: INTERNAL_ERROR.test(str(f.title) ?? '') ? 'CEO action (internal error recorded)' : str(f.title) ?? '', detail: safeDetail(str(f.detail)),
   }));
 }
 
@@ -234,6 +242,32 @@ function operatingCycle(v: unknown, companyId?: string): OperatingCycleView | un
   };
 }
 
+function assistantMessages(v: unknown, companyId?: string): AssistantMessageView[] {
+  return arr(v).filter((m) => inCompany(m, companyId)).map((m) => m as Obj).map((m) => ({
+    id: m.id as string, from: str(m.from) ?? 'UNKNOWN', to: str(m.to) ?? 'UNKNOWN', content: str(m.content) ?? '',
+    status: str(m.status) ?? 'UNKNOWN', createdAt: str(m.createdAt) ?? '',
+  }));
+}
+
+// The backend list already selects safe columns (no body/data/emailMessageId) and filters by req.user.companyId.
+function chairmanMail(v: unknown): ChairmanMailView[] {
+  return arr(v).filter(isObj).filter((m) => str(m.id)).map((m) => ({
+    id: m.id as string, ref: str(m.ref) ?? '', event: str(m.event) ?? '', category: str(m.category) ?? '', title: str(m.title) ?? '',
+    status: str(m.status) ?? 'UNKNOWN', read: !!m.readAt, createdAt: str(m.createdAt) ?? '',
+    messageCount: isObj(m._count) ? num(m._count.messages) ?? 0 : 0,
+  }));
+}
+
+const unreadCount = (v: unknown) => (isObj(v) && num(v.count) !== null ? { count: v.count as number } : undefined);
+
+// Agent rows carry no companyId; the backend filters by employee.companyId = req.user.companyId.
+function agents(v: unknown): AgentView[] {
+  return arr(v).filter(isObj).filter((a) => str(a.id) && str(a.employeeId)).map((a) => ({
+    id: a.id as string, employeeId: a.employeeId as string, status: str(a.status) ?? 'UNKNOWN',
+    autonomyLevel: str(a.autonomyLevel) ?? 'UNKNOWN', createdAt: str(a.createdAt) ?? '',
+  }));
+}
+
 /** companyId = the explicit company context of the request (for context-ownership checks). */
 export type Projection = (body: unknown, companyId?: string) => unknown;
 
@@ -261,4 +295,8 @@ export const projections = {
   salesLeads,
   operatingCycles: (v: unknown, companyId?: string) => arr(v).map((c) => operatingCycle(c, companyId)).filter((c): c is OperatingCycleView => !!c),
   operatingCycle,
+  assistantMessages,
+  chairmanMail,
+  unreadCount,
+  agents,
 } satisfies Record<string, Projection>;

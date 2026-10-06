@@ -10,11 +10,13 @@ function When({ iso }: { iso: string }) {
   return Number.isNaN(d.getTime()) ? null : <time dateTime={iso} className="whitespace-nowrap text-xs text-muted">{dateFmt.format(d)}</time>;
 }
 
-export function Panel({ title, id, children, action }: { title: string; id: string; children: ReactNode; action?: ReactNode }) {
+/** level: 2 directly under the company h1 (Home); 3 inside a workspace whose PageHeader is the h2. */
+export function Panel({ title, id, children, action, level = 3 }: { title: string; id: string; children: ReactNode; action?: ReactNode; level?: 2 | 3 }) {
+  const H = level === 2 ? 'h2' : 'h3';
   return (
     <section aria-labelledby={id} className="rounded-panel border border-border bg-surface">
       <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
-        <h2 id={id} className="text-xs font-semibold uppercase tracking-wider text-muted">{title}</h2>
+        <H id={id} className="text-xs font-semibold uppercase tracking-wider text-muted">{title}</H>
         {action}
       </header>
       <div className="p-4">{children}</div>

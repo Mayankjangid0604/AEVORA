@@ -35,13 +35,13 @@ export function ChairmanHome({ companyId }: { companyId: string }) {
             : <OverviewFigures data={overview.data} />}
         </section>
 
-        <Panel title="Pending decisions" id="decisions-title">
+        <Panel level={2} title="Pending decisions" id="decisions-title">
           {decisions.isPending ? <SectionSkeleton label="decisions" />
             : decisions.isError ? <QueryError error={decisions.error} forbiddenDetail={CHAIRMAN_ONLY} />
             : <DecisionList decisions={decisions.data} />}
         </Panel>
 
-        <Panel title="Recent activity" id="activity-title">
+        <Panel level={2} title="Recent activity" id="activity-title">
           {activity.isPending ? <SectionSkeleton label="activity" />
             : activity.isError ? <QueryError error={activity.error} forbiddenDetail={CHAIRMAN_ONLY} />
             : <ActivityList events={activity.data} />}
@@ -49,7 +49,7 @@ export function ChairmanHome({ companyId }: { companyId: string }) {
       </div>
 
       <aside aria-label="Attention" className="min-w-0">
-        <Panel title="Attention" id="attention-title">
+        <Panel level={2} title="Attention" id="attention-title">
           {alerts.isPending ? <SectionSkeleton label="alerts" />
             : alerts.isError ? <QueryError error={alerts.error} forbiddenDetail={CHAIRMAN_ONLY} />
             : <AttentionList alerts={alerts.data} />}

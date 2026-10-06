@@ -48,6 +48,21 @@ describe('slice 7 projections', () => {
     expect(a.map((x) => x.id)).toEqual(['a1']);
     expect(JSON.stringify([d, a])).not.toMatch(LEAK);
   });
+  it('feed replaces persisted raw backend errors (stack, paths, agent configuration) instead of forwarding them', () => {
+    const raw = 'Invalid `prisma.employee.create()` invocation in\nF:\\aevora-main\\apps\\api\\src\\ceo\\ceo-hiring.service.ts:181:25\n configuration: { systemInstructions: x }';
+    const [f] = projections.ceoFeed([{ id: 'r1:0', at: '2026-10-01T10:00:00.000Z', kind: 'DECISION', outcome: 'FAILED', title: 'Hired a new employee (failed)', detail: raw }]);
+    expect(f!.title).toBe('Hired a new employee (failed)');
+    const [benign, pathOnly, frame] = projections.ceoFeed([
+      { id: 'a', at: 'x', title: 't', detail: 'Changed lead categories\n\nWhy: no leads yet' },
+      { id: 'b', at: 'x', title: 't', detail: 'Failed writing C:\\data\\out.json' },
+      { id: 'c', at: 'x', title: 't', detail: 'TypeError: x\n    at Foo.bar (file)' },
+    ]);
+    expect(benign!.detail).toBe('Changed lead categories\n\nWhy: no leads yet');
+    expect(pathOnly!.detail).toMatch(/details are not shown/);
+    expect(frame!.detail).toMatch(/details are not shown/);
+    expect(f!.detail).toBe('An internal error was recorded for this action (details are not shown).');
+    expect(JSON.stringify(f)).not.toMatch(/prisma|systemInstructions|\.ts:|aevora-main/);
+  });
   it('feed keeps backend fields verbatim and drops malformed rows', () => {
     const f = projections.ceoFeed([{ id: 'r1', at: '2026-10-01T10:00:00.000Z', kind: 'REVIEW', title: 'Business review', detail: 'x', extra: 'X' }, { id: 'bad' }]);
     expect(f).toEqual([{ id: 'r1', at: '2026-10-01T10:00:00.000Z', kind: 'REVIEW', outcome: null, title: 'Business review', detail: 'x' }]);

@@ -42,6 +42,12 @@ const ROUTES: RouteRule[] = [
   // error-pool/*, context, memory, performance and all continuous-improvement/autonomous-enterprise/boardroom routes stay blocked.
   { pattern: new RegExp(`^operating-loop/(${ID})/cycles$`), company: true, pathCompany: true, project: projections.operatingCycles },
   { pattern: new RegExp(`^operating-loop/cycle/${ID}$`), company: true, project: projections.operatingCycle },
+  // Slice 10: Assistant history, Chairman mail list + unread count, agent roster (all read-only).
+  // assistant/message (model + actions), chairman-mail/:id (marks read), replies, agents/:id/run etc. stay blocked.
+  { pattern: /^assistant\/messages$/, company: true, project: projections.assistantMessages },
+  { pattern: /^chairman-mail$/, company: true, project: projections.chairmanMail },
+  { pattern: /^chairman-mail\/unread-count$/, company: true, project: projections.unreadCount },
+  { pattern: /^agents$/, company: true, project: projections.agents },
   // Slice 3: Organization / Workforce (req.user.companyId; by-id reads company-bound, see AEVORA_V14_SLICE3_REPORT.md).
   { pattern: /^organization\/departments$/, company: true, project: projections.departments },
   { pattern: new RegExp(`^organization/departments/${ID}$`), company: true, project: projections.department },
