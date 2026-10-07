@@ -1,12 +1,20 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Optional, Inject, forwardRef, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmployeeStatus } from '@prisma/client';
 import { AuthorizationService } from '../authorization/authorization.service';
 import { bandSalaryAC } from '../config/salary-bands';
+import { HqCapacityService } from '../v12-spatial/hq-capacity.service';
 
 @Injectable()
 export class EmployeeService {
-  constructor(private prisma: PrismaService, private auth: AuthorizationService) {}
+  private readonly logger = new Logger(EmployeeService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private auth: AuthorizationService,
+    @Optional() @Inject(forwardRef(() => HqCapacityService))
+    private hqCapacityService?: HqCapacityService,
+  ) {}
 
   async getEmployee(id: string) {
     const emp = await this.prisma.employee.findUnique({
@@ -66,6 +74,13 @@ export class EmployeeService {
 
       return emp;
     });
+
+    if (this.hqCapacityService) {
+      this.hqCapacityService.reconcileCompanyCapacity(companyId).catch((err) => {
+        this.logger.error(`[RESILIENCE] Capacity reconciliation failed after hiring: ${err?.message}`);
+      });
+    }
+
     return res;
   }
 
@@ -109,6 +124,13 @@ export class EmployeeService {
 
       return updated;
     });
+
+    if (this.hqCapacityService) {
+      this.hqCapacityService.reconcileCompanyCapacity(emp.companyId).catch((err) => {
+        this.logger.error(`[RESILIENCE] Capacity reconciliation failed after status update: ${err?.message}`);
+      });
+    }
+
     return res;
   }
 

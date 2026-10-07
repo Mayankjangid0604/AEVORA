@@ -24,7 +24,6 @@
   },
   "dependencies": {
     "imap": "^0.8.19",
-    "kokoro": "^1.0.0",
     "mailparser": "^3.9.28",
     "pg": "^8.23.0"
   }

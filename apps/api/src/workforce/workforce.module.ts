@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ApprovalModule } from '../approval/approval.module';
 import { WorkforceAuditService } from './workforce-audit.service';
@@ -13,9 +13,15 @@ import { WorkforceController } from './workforce.controller';
 import { WorkerRegistryService } from './worker-registry.service';
 import { SoftwareWorker } from './software.worker';
 import { ProjectExecutionModule } from '../project-execution/project-execution.module';
+import { V12SpatialModule } from '../v12-spatial/v12-spatial.module';
 
 @Module({
-  imports: [PrismaModule, ApprovalModule, ProjectExecutionModule],
+  imports: [
+    PrismaModule,
+    ApprovalModule,
+    ProjectExecutionModule,
+    forwardRef(() => V12SpatialModule),
+  ],
   controllers: [WorkforceController],
   providers: [
     WorkforceAuditService,

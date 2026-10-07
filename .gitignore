@@ -24,8 +24,13 @@ briefs/pending/*.md
 *.tsbuildinfo
 /tree.txt
 apps/api/.temp/
+apps/api/.workspace/
 __pycache__/
 *.pyc
 apps/api/.data/
 playwright-report/
 test-results/
+.turbo/
+*/.turbo/
+packages/*/.turbo/
+apps/*/.turbo/

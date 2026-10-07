@@ -21,10 +21,12 @@ import {
   MeetingRoom,
   TopologyEdge,
   NavigationNode,
-  MovementState
+  MovementState,
+  Vehicle,
 } from '@aevora/shared';
 import { WorldStateEventService } from './world-state-event.service';
 import { HierarchicalStreamingManager, RegionNode, StreamingState } from '@aevora/shared';
+import { calculateSlotCoordinate } from '../v12-spatial/vehicle-policy';
 
 const REGION_HIERARCHY_TYPES = new Set([
   V12EntityType.REGION, V12EntityType.CITY, V12EntityType.CAMPUS,
@@ -223,6 +225,53 @@ export class WorldStateGatewayService {
       };
       entities[parking.id] = parking;
     }
+
+    // Vehicles — scoped to this company
+    const vehicles = this.prisma.v12SpatialVehicle
+      ? await this.prisma.v12SpatialVehicle.findMany({
+          where: { companyId },
+          orderBy: { createdAt: 'asc' },
+        })
+      : [];
+
+    const parkingMap = new Map(parkings.map((p) => [p.id, p]));
+    const parkingSlotCounters = new Map<string, number>();
+
+    for (const v of vehicles) {
+      const parking = v.parkingAreaId ? parkingMap.get(v.parkingAreaId) : null;
+      let posX = 0;
+      let posY = 0;
+      let posZ = 0;
+
+      if (parking) {
+        const slotIdx = parkingSlotCounters.get(parking.id) || 0;
+        parkingSlotCounters.set(parking.id, slotIdx + 1);
+        const slotCoord = calculateSlotCoordinate(parking, slotIdx);
+        posX = slotCoord.x;
+        posY = slotCoord.y;
+        posZ = slotCoord.z;
+      }
+
+      const vehicleEntity: Vehicle & {
+        isParked?: boolean;
+        parkingAreaId?: string | null;
+        slotIndex?: number;
+      } = {
+        id: `v12_vehicle_${v.id}`,
+        type: V12EntityType.VEHICLE,
+        name: `${v.vehicleClass} Fleet Vehicle`,
+        parentId: v.parkingAreaId ? `v12_parking_${v.parkingAreaId}` : undefined,
+        ownerId: v.ownerEmployeeId || undefined,
+        vehicleClass: v.vehicleClass as any,
+        assetId: v.assetId,
+        occupants: (Array.isArray(v.occupantEmployeeIds) ? v.occupantEmployeeIds : []) as string[],
+        isParked: v.isParked,
+        parkingAreaId: v.parkingAreaId,
+        transform: this.createTransform(posX, posY, posZ, 0, 0, 0, 1, 1, 1),
+        visibility: this.getDefaultVisibility(),
+      };
+      entities[vehicleEntity.id] = vehicleEntity;
+    }
   }
 
   /**
@@ -263,23 +312,42 @@ export class WorldStateGatewayService {
 
     // 3. Translate Employees to Persons
     for (const employee of company.employees) {
-      const person: Person = {
+      const empWs = this.prisma.v12SpatialWorkspace?.findFirst
+        ? await this.prisma.v12SpatialWorkspace.findFirst({
+            where: { employeeId: employee.id, companyId },
+          })
+        : null;
+      const movementState = this.prisma.v12SpatialMovementState?.findUnique
+        ? await this.prisma.v12SpatialMovementState.findUnique({
+            where: { entityId: employee.id }
+          })
+        : null;
+
+      const transform = empWs
+        ? this.createTransform(empWs.posX, empWs.posY + 1.0, empWs.posZ, 0, 0, 0, 1, 1, 1)
+        : this.getDefaultTransform();
+
+      const isEmployeeActive = employee.status === 'ACTIVE';
+
+      const person: any = {
         id: `v12_person_${employee.id}`,
         type: V12EntityType.PERSON,
         name: employee.name,
-        transform: this.getDefaultTransform(), // Needs spatial state mapping later
-        visibility: this.getDefaultVisibility(),
+        transform,
+        visibility: isEmployeeActive
+          ? this.getDefaultVisibility()
+          : { isVisible: false, opacity: 0, renderState: 'HIDDEN' },
         parentId: companyEntity.id,
         aevoraId: employee.id,
         aevoraType: 'Employee',
-        currentActivity: employee.activity,
+        departmentId: employee.departmentId,
+        roleId: employee.roleId,
+        workspaceId: empWs?.id || undefined,
+        currentActivity: employee.activity || 'WORKING',
+        spatialState: isEmployeeActive ? (empWs ? 'AT_WORKSPACE' : 'PROVISIONED') : 'UNAVAILABLE',
         assetId: 'asset_digital_human_body_v1',
       };
-      entities[person.id] = person;
 
-      const movementState = await this.prisma.v12SpatialMovementState.findUnique({
-        where: { entityId: employee.id }
-      });
       if (movementState) {
         person.movement = {
           movementState: movementState.movementState as any,
@@ -294,6 +362,8 @@ export class WorldStateGatewayService {
           blockedReason: movementState.blockedReason || undefined
         };
       }
+
+      entities[person.id] = person;
     }
 
     // 3.5 Fetch Navigation Nodes — scoped to this company's site/building/floor chain, plus any

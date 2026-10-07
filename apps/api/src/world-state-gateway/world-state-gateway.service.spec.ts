@@ -25,6 +25,7 @@ describe('WorldStateGatewayService', () => {
             v12SpatialRoom: { findMany: jest.fn().mockResolvedValue([]) },
             v12SpatialWorkspace: { findMany: jest.fn().mockResolvedValue([]) },
             v12SpatialParkingArea: { findMany: jest.fn().mockResolvedValue([]) },
+            v12SpatialVehicle: { findMany: jest.fn().mockResolvedValue([]) },
             v12SpatialTopologyEdge: { findMany: jest.fn().mockResolvedValue([]) },
             v12NavigationNode: { findMany: jest.fn().mockResolvedValue([]) },
             v12SpatialMovementState: { findUnique: jest.fn().mockResolvedValue(null) },
@@ -136,6 +137,12 @@ describe('WorldStateGatewayService', () => {
             { id: 'park-A', siteId: 'site-A' },
             { id: 'park-B', siteId: 'site-B' },
           ].filter((p) => where.siteId.in.includes(p.siteId))),
+        },
+        v12SpatialVehicle: {
+          findMany: jest.fn(async ({ where }: any) => [
+            { id: 'veh-A', companyId: 'A', vehicleClass: 'STANDARD', parkingAreaId: 'park-A' },
+            { id: 'veh-B', companyId: 'B', vehicleClass: 'STANDARD', parkingAreaId: 'park-B' },
+          ].filter((v) => v.companyId === where.companyId)),
         },
         v12NavigationNode: { findMany: jest.fn().mockResolvedValue([]) },
         v12SpatialTopologyEdge: { findMany: jest.fn().mockResolvedValue([]) },

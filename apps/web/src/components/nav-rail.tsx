@@ -38,6 +38,7 @@ export function NavRail() {
           <p className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">Company</p>
           <ul className="space-y-0.5">
             <RailLink href={base} label="Home" current={pathname === base} />
+            <RailLink href={`${base}/world`} label="3D World" current={pathname.startsWith(`${base}/world`)} />
             {COMPANY_DOMAINS.map((d) => (
               <RailLink key={d.slug} href={`${base}/${d.slug}`} label={d.label} status={d.status} current={pathname.startsWith(`${base}/${d.slug}`)} />
             ))}

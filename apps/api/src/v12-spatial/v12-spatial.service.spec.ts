@@ -3,6 +3,7 @@ import { V12SpatialService } from './v12-spatial.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorldStateEventService } from '../world-state-gateway/world-state-event.service';
 import { V12NavigationService } from './v12-navigation.service';
+import { HqCapacityService } from './hq-capacity.service';
 import { V12EventType } from '@aevora/shared';
 import { Subject } from 'rxjs';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
@@ -33,6 +34,7 @@ describe('V12SpatialService.handlePersonActivityChange', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: WorldStateEventService, useValue: mockEventService },
         { provide: V12NavigationService, useValue: mockNavService },
+        { provide: HqCapacityService, useValue: { reconcileCompanyCapacity: jest.fn().mockResolvedValue({}) } },
       ],
     }).compile();
 
@@ -122,6 +124,7 @@ describe('V12SpatialService.getEmployeeEmbodiment', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: WorldStateEventService, useValue: mockEventService },
         { provide: V12NavigationService, useValue: mockNavService },
+        { provide: HqCapacityService, useValue: { reconcileCompanyCapacity: jest.fn().mockResolvedValue({}) } },
       ],
     }).compile();
     service = module.get(V12SpatialService);

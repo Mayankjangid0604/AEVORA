@@ -7,6 +7,8 @@ import { V12NavigationService } from './v12-navigation.service';
 import { V12EventType } from '@aevora/shared';
 import { deriveEmployeeSpatialState, EmployeeSpatialState } from '@aevora/shared';
 
+import { HqCapacityService } from './hq-capacity.service';
+
 export interface DigitalHumanEmbodiment {
   employeeId: string;
   companyId: string;
@@ -29,7 +31,8 @@ export class V12SpatialService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     private readonly worldStateEventService: WorldStateEventService,
-    private readonly navigationService: V12NavigationService
+    private readonly navigationService: V12NavigationService,
+    private readonly hqCapacityService: HqCapacityService,
   ) {}
 
   onModuleInit() {
@@ -171,97 +174,18 @@ export class V12SpatialService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const { city } = await this.seedSaahvikWorld();
-    
-    // Determine HQ status - Assume if it's named 'Aevora' or groupId is null and it's the first one, but let's 
-    // differentiate by name for now, or just provide standard structure for all, tweaking roles based on HQ.
-    const isHQ = company.name.toLowerCase().includes('aevora') || !company.groupId;
+    await this.seedSaahvikWorld();
+    await this.hqCapacityService.reconcileCompanyCapacity(companyId);
 
-    // 1. Site
+    // Parking area preservation
     let site = await this.prisma.v12SpatialSite.findFirst({ where: { companyId: company.id } });
-    if (!site) {
-      site = await this.prisma.v12SpatialSite.create({
-        data: { 
-          name: `${company.name} Campus`, 
-          cityId: city.id, 
-          companyId: company.id,
-          posX: companyId.charCodeAt(0) * 10 + companyId.charCodeAt(1), 
-          posY: 0, 
-          posZ: companyId.charCodeAt(companyId.length - 1) * 10 + companyId.charCodeAt(companyId.length - 2) 
-        }
-      });
-    }
-
-    // 2. Building
-    let building = await this.prisma.v12SpatialBuilding.findFirst({ where: { siteId: site.id } });
-    if (!building) {
-      building = await this.prisma.v12SpatialBuilding.create({
-        data: { name: `${company.name} HQ Building`, siteId: site.id }
-      });
-    }
-
-    // 3. Floor
-    let mainFloor = await this.prisma.v12SpatialFloor.findFirst({ where: { buildingId: building.id, name: 'Main Floor' } });
-    if (!mainFloor) {
-      mainFloor = await this.prisma.v12SpatialFloor.create({
-        data: { name: 'Main Floor', level: 1, buildingId: building.id }
-      });
-    }
-    
-    let execFloor = await this.prisma.v12SpatialFloor.findFirst({ where: { buildingId: building.id, name: 'Executive Level' } });
-    if (!execFloor) {
-      execFloor = await this.prisma.v12SpatialFloor.create({
-        data: { name: 'Executive Level', level: 100, buildingId: building.id }
-      });
-    }
-
-    // 4. Rooms
-    const ensureRoom = async (name: string, type: string, floorId: string, departmentId?: string) => {
-      let room = await this.prisma.v12SpatialRoom.findFirst({ where: { floorId, name } });
-      if (!room) {
-        room = await this.prisma.v12SpatialRoom.create({
-          data: { name, type, floorId, departmentId }
+    if (site) {
+      let parking = await this.prisma.v12SpatialParkingArea.findFirst({ where: { siteId: site.id } });
+      if (!parking) {
+        await this.prisma.v12SpatialParkingArea.create({
+          data: { name: `${company.name} Parking`, siteId: site.id, capacity: 100, availableSpots: 100 }
         });
       }
-      return room;
-    };
-
-    await ensureRoom('Chairman Office', 'CHAIRMAN_OFFICE', execFloor.id);
-    await ensureRoom(isHQ ? 'CEO/Main Executive Office' : 'CEO Office', 'CEO_OFFICE', execFloor.id);
-    
-    if (isHQ) {
-      await ensureRoom('Head Office', 'HEAD_OFFICE', execFloor.id);
-    } else {
-      await ensureRoom('MD Office', 'MD_OFFICE', execFloor.id);
-    }
-    
-    // Additional rooms
-    await ensureRoom('Main Lobby', 'LOBBY', mainFloor.id);
-    await ensureRoom('Main Reception', 'RECEPTION', mainFloor.id);
-    await ensureRoom('Ground Corridor', 'CORRIDOR', mainFloor.id);
-    await ensureRoom('Exec Corridor', 'CORRIDOR', execFloor.id);
-    await ensureRoom('Main Meeting Room', 'MEETING_ROOM', mainFloor.id);
-    await ensureRoom('Boardroom', 'CONFERENCE_ROOM', execFloor.id);
-
-    // 5. Departments
-    for (const dept of company.departments) {
-      const deptRoomName = `${dept.name} Space`;
-      await ensureRoom(deptRoomName, 'DEPARTMENT_SPACE', mainFloor.id, dept.id);
-    }
-
-    // 6. Workspaces
-    // Instead of doing it directly here, we use the reconcileEmployeeSpatialPresence 
-    // to maintain single responsibility and handle role-based placement
-    for (const emp of company.employees) {
-      await this.reconcileEmployeeSpatialPresence(emp.id);
-    }
-
-    // 7. Parking
-    let parking = await this.prisma.v12SpatialParkingArea.findFirst({ where: { siteId: site.id } });
-    if (!parking) {
-      parking = await this.prisma.v12SpatialParkingArea.create({
-        data: { name: `${company.name} Parking`, siteId: site.id, capacity: 100, availableSpots: 100 }
-      });
     }
 
     this.logger.log(`Spatial presence reconciled for company ${company.name}`);
@@ -275,70 +199,7 @@ export class V12SpatialService implements OnModuleInit, OnModuleDestroy {
     
     if (!emp || !emp.companyId) return;
 
-    // Find company building
-    const site = await this.prisma.v12SpatialSite.findFirst({ where: { companyId: emp.companyId } });
-    if (!site) return; // Wait for company spatial presence to be reconciled
-    const building = await this.prisma.v12SpatialBuilding.findFirst({ where: { siteId: site.id } });
-    if (!building) return;
-
-    const mainFloor = await this.prisma.v12SpatialFloor.findFirst({ where: { buildingId: building.id, name: 'Main Floor' } });
-    const execFloor = await this.prisma.v12SpatialFloor.findFirst({ where: { buildingId: building.id, name: 'Executive Level' } });
-    
-    if (!mainFloor || !execFloor) return;
-
-    let targetRoom: any = null;
-    const isHQ = emp.company.name.toLowerCase().includes('aevora') || !emp.company.groupId;
-
-    // 1. Leadership Mapping
-    const roleTitle = emp.role?.title?.toUpperCase() || '';
-    if (roleTitle.includes('CHAIRMAN')) {
-      targetRoom = await this.prisma.v12SpatialRoom.findFirst({ where: { floorId: execFloor.id, type: 'CHAIRMAN_OFFICE' } });
-    } else if (roleTitle.includes('CEO')) {
-      targetRoom = await this.prisma.v12SpatialRoom.findFirst({ where: { floorId: execFloor.id, type: 'CEO_OFFICE' } });
-    } else if (roleTitle.includes('MD')) {
-      targetRoom = await this.prisma.v12SpatialRoom.findFirst({ where: { floorId: execFloor.id, type: 'MD_OFFICE' } });
-    } else if (isHQ && roleTitle.includes('HEAD')) {
-      targetRoom = await this.prisma.v12SpatialRoom.findFirst({ where: { floorId: execFloor.id, type: 'HEAD_OFFICE' } });
-    }
-
-    // 2. Department Mapping (Fallback)
-    if (!targetRoom && emp.departmentId) {
-      targetRoom = await this.prisma.v12SpatialRoom.findFirst({
-        where: { floorId: mainFloor.id, departmentId: emp.departmentId }
-      });
-    }
-
-    if (targetRoom) {
-      let ws = await this.prisma.v12SpatialWorkspace.findFirst({ where: { employeeId: emp.id } });
-      const isActive = emp.status === 'ACTIVE';
-
-      if (!ws) {
-        await this.prisma.v12SpatialWorkspace.create({
-          data: {
-            name: `${emp.name} Workspace`,
-            roomId: targetRoom.id,
-            employeeId: emp.id,
-            companyId: emp.companyId,
-            departmentId: emp.departmentId,
-            floorId: targetRoom.floorId,
-            buildingId: building.id,
-            isActive: isActive
-          }
-        });
-      } else {
-        await this.prisma.v12SpatialWorkspace.update({
-          where: { id: ws.id },
-          data: {
-            roomId: targetRoom.id,
-            companyId: emp.companyId,
-            departmentId: emp.departmentId,
-            floorId: targetRoom.floorId,
-            buildingId: building.id,
-            isActive: isActive
-          }
-        });
-      }
-    }
+    await this.hqCapacityService.reconcileCompanyCapacity(emp.companyId);
   }
 
   async backfillAllCompanies() {

@@ -99,6 +99,19 @@ export class WorkforceController {
     });
   }
 
+  @Post('hiring/auto-provision')
+  autoProvisionWorkforce(@Request() req: any, @Body() body: any) {
+    const { companyId, actorId } = req.user;
+    return this.hiringSvc.autoProvisionDepartmentWorkforce(companyId, actorId, {
+      departmentId: body.departmentId,
+      count: body.count,
+      roleId: body.roleId,
+      workerType: body.workerType as WorkerType,
+      titlePrefix: body.titlePrefix,
+      compensationBand: body.compensationBand,
+    });
+  }
+
   @Get('hiring')
   getHiringRequests(@Request() req: any, @Query('status') status?: HiringRequestStatus, @Query('workerType') workerType?: WorkerType) {
     return this.hiringSvc.getHiringRequests(req.user.companyId, status, workerType);

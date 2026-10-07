@@ -8,7 +8,7 @@ import { DepartmentLeaderAutonomousService } from './department-leader-autonomou
 import { V12SpatialModule } from '../v12-spatial/v12-spatial.module';
 
 @Module({
-  imports: [WorkforceModule, forwardRef(() => CeoModule), forwardRef(() => V12SpatialModule)],
+  imports: [forwardRef(() => WorkforceModule), forwardRef(() => CeoModule), forwardRef(() => V12SpatialModule)],
   controllers: [DepartmentController],
   providers: [DepartmentService, PrismaService, DepartmentLeaderAutonomousService],
   exports: [DepartmentService, DepartmentLeaderAutonomousService],

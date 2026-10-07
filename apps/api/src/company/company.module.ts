@@ -3,9 +3,10 @@ import { CompanyService } from './company.service';
 import { CompanyController } from './company.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { V12SpatialModule } from '../v12-spatial/v12-spatial.module';
+import { WorldStateGatewayModule } from '../world-state-gateway/world-state-gateway.module';
 
 @Module({
-  imports: [PrismaModule, V12SpatialModule],
+  imports: [PrismaModule, V12SpatialModule, WorldStateGatewayModule],
   controllers: [CompanyController],
   providers: [CompanyService],
   exports: [CompanyService],

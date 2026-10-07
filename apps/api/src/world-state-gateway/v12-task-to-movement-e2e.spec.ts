@@ -4,6 +4,7 @@ import { WorldStateEventService } from './world-state-event.service';
 import { WorldStateEventTranslationService } from './world-state-translation.service';
 import { V12SpatialService } from '../v12-spatial/v12-spatial.service';
 import { V12NavigationService } from '../v12-spatial/v12-navigation.service';
+import { HqCapacityService } from '../v12-spatial/hq-capacity.service';
 import { Subject } from 'rxjs';
 import { V12EventType } from '@aevora/shared';
 
@@ -120,6 +121,7 @@ describe('V12 end-to-end: authoritative task -> real navigation -> movement prog
         V12SpatialService,
         V12NavigationService,
         WorldStateEventTranslationService,
+        { provide: HqCapacityService, useValue: { reconcileCompanyCapacity: jest.fn().mockResolvedValue({}) } },
       ],
     }).compile();
 

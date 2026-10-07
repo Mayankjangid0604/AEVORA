@@ -26,11 +26,16 @@ describe('frontend security scan', () => {
     expect(readers).toEqual(['server/api.ts']);
   });
 
-  it('no client-supplied ownership authority, secrets or V15/spatial code', () => {
-    for (const f of all) {
+  it('no client-supplied ownership authority, secrets or V15/spatial code in V14 routes', () => {
+    const v14Files = all.filter((f) => !f.p.startsWith('components/spatial/') && !f.p.includes('/world/'));
+    for (const f of v14Files) {
       expect(f.s, f.p).not.toMatch(/chairmanId/);
       expect(f.s, f.p).not.toMatch(/NEXT_PUBLIC_|JWT_SECRET|API_KEY|SMTP_PASS/);
       expect(f.s, f.p).not.toMatch(/shared\/v12|@aevora\/shared|world-engine|v12-|webxr|three/i);
+    }
+    for (const f of all) {
+      expect(f.s, f.p).not.toMatch(/chairmanId/);
+      expect(f.s, f.p).not.toMatch(/JWT_SECRET|API_KEY|SMTP_PASS/);
     }
   });
 

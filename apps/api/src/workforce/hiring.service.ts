@@ -1,10 +1,12 @@
 import {
   Injectable, ForbiddenException, NotFoundException, BadRequestException,
+  Logger, Optional, Inject, forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkforceAuditService } from './workforce-audit.service';
 import { WorkerProfileService } from './worker-profile.service';
 import { ApprovalValidationService } from '../approval/approval-validation.service';
+import { HqCapacityService } from '../v12-spatial/hq-capacity.service';
 import {
   WorkerType, HiringRequestStatus, EmployeeStatus, ExecutionEnvironment,
 } from '@prisma/client';
@@ -24,11 +26,15 @@ const HIRING_TRANSITIONS: Record<HiringRequestStatus, HiringRequestStatus[]> = {
 
 @Injectable()
 export class HiringService {
+  private readonly logger = new Logger(HiringService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: WorkforceAuditService,
     private readonly profileSvc: WorkerProfileService,
     private readonly approvalSvc: ApprovalValidationService,
+    @Optional() @Inject(forwardRef(() => HqCapacityService))
+    private readonly hqCapacityService?: HqCapacityService,
   ) {}
 
   private async verifyActor(actorId: string, companyId: string) {
@@ -172,6 +178,145 @@ export class HiringService {
       newValue: { employeeId: employee.id, name: dto.name, workerType: req.workerType },
     });
     return employee;
+  }
+
+  /**
+   * V15-C Authoritative Automatic Workforce Provisioning.
+   * Routes workforce demand through real authoritative business pipeline:
+   * Actor Validation -> Department Validation -> Role Resolution -> HiringRequest
+   * -> completeHiring (Employee + ACWallet + WorkerProfile + EMPLOYEE_HIRED event)
+   * -> V15-B Spatial Capacity Reconciliation (with failure isolation).
+   */
+  async autoProvisionDepartmentWorkforce(
+    companyId: string,
+    actorId: string,
+    dto: {
+      departmentId: string;
+      count: number;
+      roleId?: string;
+      workerType?: WorkerType;
+      titlePrefix?: string;
+      compensationBand?: string;
+    },
+  ) {
+    await this.verifyActor(actorId, companyId);
+
+    if (!Number.isInteger(dto.count) || dto.count <= 0 || dto.count > 50) {
+      throw new BadRequestException('Count must be an integer between 1 and 50');
+    }
+
+    const dept = await this.prisma.department.findUnique({
+      where: { id: dto.departmentId },
+    });
+    if (!dept || dept.companyId !== companyId) {
+      throw new NotFoundException('Department not found or does not belong to company');
+    }
+
+    // Resolve or find suitable role
+    let role: any = null;
+    if (dto.roleId) {
+      role = await this.prisma.role.findUnique({ where: { id: dto.roleId } });
+      if (!role || (role.companyId && role.companyId !== companyId)) {
+        throw new NotFoundException('Specified role not found or does not belong to company');
+      }
+    } else {
+      role = await this.prisma.role.findFirst({
+        where: {
+          OR: [{ companyId }, { companyId: null }],
+        },
+      });
+    }
+
+    if (!role) {
+      // Create a default role for this company if none exists
+      role = await this.prisma.role.create({
+        data: {
+          title: `${dept.name} Specialist`,
+          companyId,
+          level: 3,
+          accessLevel: 'STANDARD',
+        },
+      });
+    }
+
+    const workerType = dto.workerType || WorkerType.HUMAN;
+    const provisionedEmployees: any[] = [];
+
+    for (let i = 1; i <= dto.count; i++) {
+      const candidateTitle = dto.titlePrefix
+        ? `${dto.titlePrefix} ${i}`
+        : `${dept.name} Specialist ${i}`;
+
+      // 1. Authoritative HiringRequest in ONBOARDING state for direct enterprise execution
+      const hiringReq = await this.prisma.hiringRequest.create({
+        data: {
+          companyId,
+          departmentId: dept.id,
+          workerType,
+          title: candidateTitle,
+          description: `Authoritative auto-provisioned workforce requirement for ${dept.name}`,
+          compensationBand: dto.compensationBand || 'L3',
+          requestedById: actorId,
+          status: HiringRequestStatus.ONBOARDING,
+          candidateName: candidateTitle,
+          approvedById: actorId,
+          approvedAt: new Date(),
+        },
+      });
+
+      await this.audit.record({
+        companyId,
+        actorId,
+        action: 'AUTO_PROVISION_REQUEST_CREATED',
+        objectType: 'HiringRequest',
+        objectId: hiringReq.id,
+        newValue: { departmentId: dept.id, workerType, count: dto.count },
+      });
+
+      // 2. Authoritative employee creation through completeHiring
+      const emp = await this.completeHiring(companyId, actorId, hiringReq.id, {
+        name: `${candidateTitle} ${Date.now().toString().slice(-4)}${i}`,
+        identitySeed: `AUTO-${companyId.slice(0, 4)}-${dept.id.slice(0, 4)}-${i}-${Date.now()}`,
+        departmentId: dept.id,
+        roleId: role.id,
+        salary: bandSalaryAC(role),
+        skills: [
+          { name: 'Core Operations', category: 'General', proficiency: 75 },
+          { name: dept.name, category: 'Domain', proficiency: 80 },
+        ],
+      });
+
+      provisionedEmployees.push(emp);
+    }
+
+    // 3. Trigger spatial capacity reconciliation (V15-B integration) with failure isolation
+    if (this.hqCapacityService) {
+      try {
+        await this.hqCapacityService.reconcileCompanyCapacity(companyId);
+      } catch (spatialErr: any) {
+        // Critical V15-C failure isolation invariant:
+        // Spatial reconciliation failure must NEVER rollback or fail the authoritative employee transaction
+        this.logger.warn(
+          `[V15-C Failure Isolation] Spatial capacity reconciliation failed after provisioning ${provisionedEmployees.length} employees for department ${dept.id}: ${spatialErr?.message}`,
+        );
+      }
+    }
+
+    return {
+      success: true,
+      provisionedCount: provisionedEmployees.length,
+      departmentId: dept.id,
+      departmentName: dept.name,
+      roleId: role.id,
+      roleTitle: role.title,
+      employees: provisionedEmployees.map((e) => ({
+        id: e.id,
+        name: e.name,
+        departmentId: e.departmentId,
+        roleId: e.roleId,
+        status: e.status,
+      })),
+    };
   }
 
   async getHiringRequests(companyId: string, status?: HiringRequestStatus, workerType?: WorkerType) {

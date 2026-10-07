@@ -19,6 +19,11 @@ import { DepartmentModule } from '../department/department.module';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { CommunicationModule } from '../communication/communication.module';
 
+import { HqCapacityService } from './hq-capacity.service';
+import { HqCapacityController } from './hq-capacity.controller';
+
+import { V12VehicleController } from './v12-vehicle.controller';
+
 @Module({
   imports: [
     PrismaModule, 
@@ -29,8 +34,15 @@ import { CommunicationModule } from '../communication/communication.module';
     forwardRef(() => CommunicationModule),
     AuthorizationModule
   ],
-  controllers: [V12CommandController, V12AssistantController, V12VRActionController, V12SpatialAudioController],
-  providers: [V12SpatialService, V12NavigationService, V12VehicleService, V12CommandAdapter, V12AssistantAdapter, V12VRActionAdapter, V12AssetRegistryService, V12SpatialAudioService],
-  exports: [V12SpatialService, V12NavigationService, V12VehicleService, V12CommandAdapter, V12AssistantAdapter, V12VRActionAdapter, V12AssetRegistryService, V12SpatialAudioService],
+  controllers: [
+    V12CommandController,
+    V12AssistantController,
+    V12VRActionController,
+    V12SpatialAudioController,
+    HqCapacityController,
+    V12VehicleController,
+  ],
+  providers: [V12SpatialService, HqCapacityService, V12NavigationService, V12VehicleService, V12CommandAdapter, V12AssistantAdapter, V12VRActionAdapter, V12AssetRegistryService, V12SpatialAudioService],
+  exports: [V12SpatialService, HqCapacityService, V12NavigationService, V12VehicleService, V12CommandAdapter, V12AssistantAdapter, V12VRActionAdapter, V12AssetRegistryService, V12SpatialAudioService],
 })
 export class V12SpatialModule {}
