@@ -1,4 +1,4 @@
-import { Injectable, Logger, ForbiddenException, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, ForbiddenException, NotFoundException, BadRequestException, Inject, forwardRef, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CeoDecisionCategory, CeoDecisionRiskLevel, CeoDecisionConfidence, CeoDecisionApprovalStatus, CeoDecisionExecutionStatus } from '@prisma/client';
 import { TaskService } from '../task/task.service';
@@ -7,6 +7,13 @@ import { WorkerRegistryService } from '../workforce/worker-registry.service';
 import { ModelGateway, ModelTier } from '@aevora/model-gateway';
 import { GoalStatus, TaskStatus } from '@prisma/client';
 import { chairmanMailer } from '../notifications/chairman-mailer';
+import { CeoContextAssemblyService } from './ceo-context-assembly.service';
+import { CeoProactiveDetectionService } from './ceo-proactive-detection.service';
+import { CeoObjectiveDecompositionService } from './ceo-objective-decomposition.service';
+import { CeoDecisionLifecycleService } from './ceo-decision-lifecycle.service';
+import { CeoConsequenceAnalysisService } from './ceo-consequence-analysis.service';
+import { DecomposeObjectiveParams } from './ceo-core.types';
+import { ConsequenceAnalysisInput } from './ceo-consequence.types';
 
 interface CeoObservation {
   category: CeoDecisionCategory;
@@ -27,11 +34,18 @@ export class CeoAutonomousService {
   private readonly logger = new Logger(CeoAutonomousService.name);
   private readonly gateway = new ModelGateway();
 
-  constructor(@Inject(forwardRef(() => TaskOrchestratorService)) private readonly taskOrchestrator: TaskOrchestratorService, 
+  constructor(
+    @Inject(forwardRef(() => TaskOrchestratorService)) private readonly taskOrchestrator: TaskOrchestratorService,
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => TaskService)) private readonly tasks: TaskService,
     private readonly workerRegistry: WorkerRegistryService,
+    @Optional() private readonly contextAssembly?: CeoContextAssemblyService,
+    @Optional() private readonly proactiveDetection?: CeoProactiveDetectionService,
+    @Optional() private readonly decisionLifecycle?: CeoDecisionLifecycleService,
+    @Optional() private readonly objectiveDecomposition?: CeoObjectiveDecompositionService,
+    @Optional() private readonly consequenceAnalysis?: CeoConsequenceAnalysisService,
   ) {}
+
 
   /**
    * Run the CEO Decision Loop for a company.
@@ -1015,6 +1029,65 @@ Examples:
     }
   }
 
+  /**
+   * Evaluates material failure telemetry for the CEO, distinguishing:
+   * - ISOLATED_EXECUTION_FAILURE
+   * - WORKER_SPECIFIC_FAILURE
+   * - CAPABILITY_MISMATCH
+   * - DEPARTMENT_SYSTEMIC_FAILURE
+   * - INFRASTRUCTURE_FAILURE
+   * - EXTERNAL_DEPENDENCY_FAILURE
+   * - STRATEGIC_FAILURE
+   */
+  async evaluateMaterialFailureSignal(options: {
+    taskId: string;
+    companyId: string;
+    failureType: string;
+    errorMessage?: string;
+    retryCount: number;
+    departmentId?: string | null;
+  }) {
+    const { taskId, companyId, failureType, errorMessage, retryCount, departmentId } = options;
+
+    let classification:
+      | 'ISOLATED_EXECUTION_FAILURE'
+      | 'WORKER_SPECIFIC_FAILURE'
+      | 'CAPABILITY_MISMATCH'
+      | 'DEPARTMENT_SYSTEMIC_FAILURE'
+      | 'INFRASTRUCTURE_FAILURE'
+      | 'EXTERNAL_DEPENDENCY_FAILURE'
+      | 'STRATEGIC_FAILURE' = 'ISOLATED_EXECUTION_FAILURE';
+
+    let requiresStrategicReplanning = false;
+
+    if (failureType === 'SAFETY_FAILURE' || failureType === 'AUTHORITY_FAILURE') {
+      classification = 'STRATEGIC_FAILURE';
+      requiresStrategicReplanning = true;
+    } else if (failureType === 'EXTERNAL_ACTION_FAILURE') {
+      classification = 'EXTERNAL_DEPENDENCY_FAILURE';
+    } else if (failureType === 'RESOURCE_EXHAUSTION') {
+      classification = 'INFRASTRUCTURE_FAILURE';
+    } else if (failureType === 'CAPABILITY_FAILURE') {
+      classification = 'CAPABILITY_MISMATCH';
+    } else if (retryCount > 2) {
+      classification = departmentId ? 'DEPARTMENT_SYSTEMIC_FAILURE' : 'WORKER_SPECIFIC_FAILURE';
+    }
+
+    this.logger.log(
+      `[CEO Intelligence] Material failure evaluated for task ${taskId}: ${classification} (Strategic Replanning: ${requiresStrategicReplanning})`,
+    );
+
+    return {
+      taskId,
+      companyId,
+      classification,
+      requiresStrategicReplanning,
+      recommendedAction: requiresStrategicReplanning
+        ? 'GOVERNANCE_ESCALATION_OR_REPLAN'
+        : 'REASSIGN_OR_RECOVERY',
+    };
+  }
+
   private async executeReplan(oldTaskId: string, newTasks: any[]) {
     const oldTask = await this.prisma.task.findUnique({ where: { id: oldTaskId } });
     if (!oldTask) return;
@@ -1217,9 +1290,222 @@ Examples:
 
     return statusReport;
   }
+
+  // =========================================================================
+  // V16 SLICE 2: AUTONOMOUS CEO CORE ENGINE INTEGRATIONS
+  // =========================================================================
+
+  /**
+   * Assembles comprehensive operational context consuming Enterprise Brain as authoritative derived layer.
+   */
+  async assembleContext(companyId: string) {
+    if (!this.contextAssembly) {
+      throw new BadRequestException('CeoContextAssemblyService not configured.');
+    }
+    return this.contextAssembly.assembleContext(companyId);
+  }
+
+  /**
+   * Proactively detects issues across the 8 required enterprise dimensions.
+   */
+  async detectProactiveSignals(companyId: string) {
+    if (!this.contextAssembly || !this.proactiveDetection) {
+      throw new BadRequestException('Proactive detection services not configured.');
+    }
+    const context = await this.contextAssembly.assembleContext(companyId);
+    return this.proactiveDetection.detectSignals(context);
+  }
+
+  /**
+   * Decomposes a Strategic Objective across the V16 6-level hierarchy.
+   */
+  async decomposeObjective(companyId: string, ceoId: string, params: DecomposeObjectiveParams) {
+    if (!this.objectiveDecomposition) {
+      throw new BadRequestException('CeoObjectiveDecompositionService not configured.');
+    }
+    return this.objectiveDecomposition.decomposeStrategicObjective(companyId, ceoId, params);
+  }
+
+  /**
+   * Traces upward lineage from an operational task back to strategic objective.
+   */
+  async traceObjectiveLineage(companyId: string, taskId: string) {
+    if (!this.objectiveDecomposition) {
+      throw new BadRequestException('CeoObjectiveDecompositionService not configured.');
+    }
+    return this.objectiveDecomposition.traceObjectiveLineage(companyId, taskId);
+  }
+
+  /**
+   * Evaluates objective viability and executes deterministic replanning if lagging or blocked.
+   */
+  async replanObjective(companyId: string, ceoId: string, objectiveId: string) {
+    if (!this.objectiveDecomposition) {
+      throw new BadRequestException('CeoObjectiveDecompositionService not configured.');
+    }
+    return this.objectiveDecomposition.evaluateObjectiveViabilityAndReplan(companyId, ceoId, objectiveId);
+  }
+
+  /**
+   * Conducts closed-loop review of a decision outcome and records feedback in OrganizationalMemory.
+   */
+  async reviewDecisionOutcome(companyId: string, decisionId: string) {
+    if (!this.decisionLifecycle) {
+      throw new BadRequestException('CeoDecisionLifecycleService not configured.');
+    }
+    return this.decisionLifecycle.reviewDecisionOutcome(companyId, decisionId);
+  }
+
+  /**
+   * Evaluates Chairman directive and formulates CEO POV / Disagreement protocol.
+   */
+  async evaluateChairmanDirective(companyId: string, ceoId: string, directiveText: string) {
+    if (!this.decisionLifecycle) {
+      throw new BadRequestException('CeoDecisionLifecycleService not configured.');
+    }
+    return this.decisionLifecycle.evaluateChairmanDirective(companyId, ceoId, directiveText);
+  }
+
+  /**
+   * V16 Slice 3: Conducts comprehensive 14-dimension consequence analysis for a decision.
+   */
+  async analyzeConsequences(params: ConsequenceAnalysisInput) {
+    if (!this.consequenceAnalysis) {
+      throw new BadRequestException('CeoConsequenceAnalysisService not configured.');
+    }
+    return this.consequenceAnalysis.analyzeConsequences(params);
+  }
+
+  /**
+   * V16 Slice 3: Simulates Proposed, Alternative, and No-Action (baseline) scenarios.
+   */
+  async simulateScenarios(params: {
+    companyId: string;
+    ceoId: string;
+    proposedAction: string;
+    category?: CeoDecisionCategory;
+    triggerType?: string;
+    alternativeAction?: string;
+    estimatedCost?: number;
+    targetEntityType?: string;
+    targetEntityId?: string;
+  }) {
+    if (!this.consequenceAnalysis) {
+      throw new BadRequestException('CeoConsequenceAnalysisService not configured.');
+    }
+    const report = await this.consequenceAnalysis.analyzeConsequences({
+      companyId: params.companyId,
+      ceoId: params.ceoId,
+      triggerType: params.triggerType ?? 'SCENARIO_SIMULATION',
+      category: params.category ?? 'OPERATIONS',
+      proposedAction: params.proposedAction,
+      estimatedCost: params.estimatedCost,
+      targetEntityType: params.targetEntityType,
+      targetEntityId: params.targetEntityId,
+      includeSimulation: true,
+    });
+    return report.scenarios;
+  }
+
+  /**
+   * V16 Slice 3: Generates an executive Chairman Decision Brief consuming consequence analysis.
+   */
+  async generateChairmanDecisionBrief(companyId: string, decisionId: string) {
+    if (!this.consequenceAnalysis) {
+      throw new BadRequestException('CeoConsequenceAnalysisService not configured.');
+    }
+    return this.consequenceAnalysis.generateChairmanDecisionBrief(companyId, decisionId);
+  }
+
+  /**
+   * V16 Slice 3: Generates a 3-way consequence comparison for Chairman Disagreement protocol.
+   */
+  async compareDisagreementConsequences(companyId: string, ceoId: string, directiveText: string, ceoAlternativeText: string) {
+    if (!this.consequenceAnalysis) {
+      throw new BadRequestException('CeoConsequenceAnalysisService not configured.');
+    }
+    return this.consequenceAnalysis.compareDisagreementConsequences(companyId, ceoId, directiveText, ceoAlternativeText);
+  }
+
+  /**
+   * Full V16 Autonomous CEO Perception -> Analysis -> Decision -> Authority Validation -> Action / Review Loop.
+   */
+  async runV16AutonomousLoop(companyId: string, ceoId: string) {
+    this.logger.log(`[${companyId}] Running V16 Autonomous CEO Perception-Action Loop`);
+
+    // 1. Perception: Assemble multi-source context (Enterprise Brain, PostgreSQL, KPIs, Risks)
+    const context = await this.assembleContext(companyId);
+
+    // 2. Analysis: Proactively detect signals across 8 dimensions
+    const signals = await this.proactiveDetection!.detectSignals(context);
+
+    const formulatedDecisions = [];
+
+    // 3. Formulation & Authority Validation for actionable signals
+    for (const signal of signals.slice(0, 5)) {
+      if (!this.decisionLifecycle) continue;
+
+      const decisionResult = await this.decisionLifecycle.formulateDecision({
+        companyId,
+        ceoId,
+        category: signal.category,
+        triggerType: signal.dimension,
+        situation: signal.description,
+        observations: signal.title,
+        proposedAction: signal.recommendedAction,
+        targetEntityType: signal.targetEntityType,
+        targetEntityId: signal.targetEntityId,
+        riskLevel: signal.severity,
+        confidence: 'HIGH',
+        reversible: signal.severity !== 'CRITICAL',
+        estimatedCost: signal.category === 'FINANCE' ? 50000 : 0,
+        evidenceUsed: signal.evidence,
+        alternativesConsidered: [
+          {
+            option: 'Take no immediate action and monitor for 24h',
+            tradeOff: 'Preserves liquidity but risks condition worsening',
+            rejectedReason: 'Proactive detection threshold exceeded',
+          },
+        ],
+        assumptions: ['Enterprise Brain authoritative records reflect current state.'],
+        uncertainty: {
+          hasUncertainty: context.uncertaintyContext.hasDiscrepancy,
+          confidenceLevel: context.uncertaintyContext.hasDiscrepancy ? 'MEDIUM' : 'HIGH',
+          discrepancyNote: context.uncertaintyContext.preservedUncertaintyNote ?? undefined,
+        },
+        expectedOutcome: {
+          metric: signal.dimension,
+          targetValue: 'RESOLVED_OR_MITIGATED',
+          timeline: signal.urgency === 'IMMEDIATE' ? '4h' : '24h',
+        },
+      });
+
+      formulatedDecisions.push(decisionResult);
+
+      // 4. Action: Execute auto-approved decisions within authority
+      if (!decisionResult.decision.requiresApproval && decisionResult.decision.executionStatus === 'PENDING') {
+        try {
+          await this.executeDecision(decisionResult.decision.id);
+        } catch (e) {
+          this.logger.error(`Failed to auto-execute decision ${decisionResult.decision.id}: ${e.message}`);
+        }
+      }
+    }
+
+    return {
+      companyId,
+      contextSummary: {
+        headcount: context.resources.headcount,
+        discrepanciesPreserved: context.uncertaintyContext.unresolvedDiscrepancies.length,
+        activeProjects: context.activeWork.activeProjects,
+      },
+      signalsDetected: signals.length,
+      formulatedDecisions: formulatedDecisions.map((d) => ({
+        id: d.decision.id,
+        category: d.decision.category,
+        lifecycleState: d.lifecycleState,
+        requiresApproval: d.decision.requiresApproval,
+      })),
+    };
+  }
 }
-
-
-
-
-

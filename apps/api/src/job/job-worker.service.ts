@@ -1,6 +1,7 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Optional, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JobStatus, BackgroundJob } from '@prisma/client';
+import { JobTaskBridgeService } from './job-task-bridge.service';
 
 @Injectable()
 export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
@@ -9,7 +10,12 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   private timer: NodeJS.Timeout;
   private isPolling = false;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    @Inject(forwardRef(() => JobTaskBridgeService))
+    private readonly taskBridge?: JobTaskBridgeService,
+  ) {}
 
   onModuleInit() {
     this.startPolling();
@@ -104,16 +110,18 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
 
   private async processJob(job: BackgroundJob) {
     try {
-      // Stub execution - we can route this based on job.type
       this.logger.debug(`Executing job logic for type: ${job.type}`);
-      
-      // Assume success for now
+
+      if (job.type === 'TASK_EXECUTION' && this.taskBridge) {
+        await this.taskBridge.executeTaskJob(job);
+      }
+
       await this.prisma.backgroundJob.update({
         where: { id: job.id },
         data: {
           status: JobStatus.COMPLETED,
           completedAt: new Date(),
-        }
+        },
       });
       this.logger.log(`Completed job ${job.id}`);
     } catch (error) {

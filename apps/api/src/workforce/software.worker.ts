@@ -24,12 +24,16 @@ export class SoftwareWorker implements OnModuleInit {
         throw new Error('Task must have a projectId for SoftwareExecution');
       }
 
-      const employee = await this.prisma.employee.findFirst({
-        where: { role: { title: 'ENGINEER' } }
-      }) || await this.prisma.employee.findFirst();
+      const employee = task.assignedEmployeeId
+        ? await this.prisma.employee.findFirst({ where: { id: task.assignedEmployeeId, companyId: task.companyId, status: 'ACTIVE' } })
+        : (await this.prisma.employee.findFirst({
+            where: { companyId: task.companyId, status: 'ACTIVE', role: { title: { contains: 'ENGINEER', mode: 'insensitive' } } }
+          }) || await this.prisma.employee.findFirst({
+            where: { companyId: task.companyId, status: 'ACTIVE' }
+          }));
 
       if (!employee) {
-        throw new Error('No employee available for software execution');
+        throw new Error(`No active AI worker available for software execution in company ${task.companyId}`);
       }
 
       // We execute development

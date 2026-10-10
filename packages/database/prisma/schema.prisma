@@ -43,6 +43,8 @@ model Chairman {
   companies        Company[]
   connectedDevices ConnectedDevice[]
   chairmanCommands ChairmanCommand[]
+  preferences      ChairmanPreference[]
+  disagreementRecords DisagreementRecord[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 }
@@ -286,6 +288,40 @@ model Company {
   // OODA Operating Loop
   operatingLoopCycles    OperatingLoopCycle[]
   ClientMeeting          ClientMeeting[]
+
+  // V17 Phase 1: Execution Foundation
+  taskExecutionAttempts TaskExecutionAttempt[]
+  emergencyStatus       EmergencyState         @default(NORMAL)
+  emergencyDeclaredAt   DateTime?
+  emergencyReason       String?
+
+  // V17 Phase 2: Department Operating Layer
+  departmentWorkstreams       DepartmentWorkstream[]
+  departmentTeams             DepartmentTeam[]
+  departmentHealthSnapshots   DepartmentHealthSnapshot[]
+  departmentResourceProposals DepartmentResourceProposal[]
+
+  // V17 Phase 4: Evidence & Outcomes Verification
+  taskEvidenceRecords         TaskEvidenceRecord[]
+
+  // V17 Phase 5: Authority Integration & Governance
+  authorityGrants             AuthorityGrant[]
+  chairmanPreferences         ChairmanPreference[]
+  authorityProofs             AuthorityProof[]
+  disagreementRecords         DisagreementRecord[]
+
+  // V17 Phase 6: Enterprise Intelligence & Digital Twin
+  enterpriseStateRecords         EnterpriseStateRecord[]
+  enterpriseStateConflicts       EnterpriseStateConflict[]
+  enterpriseIntegrityFindings    EnterpriseIntegrityFinding[]
+  digitalTwinScenarios           DigitalTwinScenario[]
+  enterpriseStateHealthSnapshots EnterpriseStateHealth[]
+  enterprisePlanChangeRecords    EnterprisePlanChangeRecord[]
+
+  // V17 Phase 7: Continuous Evolution & Anti-Entropy
+  entropyFindings                EntropyFinding[]
+  entropyHealthSnapshots         EntropyHealthSnapshot[]
+  entropyRemediationRecords      EntropyRemediationRecord[]
 }
 
 enum RoleAccessLevel {
@@ -315,6 +351,12 @@ model Department {
   performanceEvaluations PerformanceEvaluation[]
   successionPlans        SuccessionPlan[]
   tasks                  Task[]                  @relation("DepartmentTasks")
+
+  // V17 Phase 2: Department Operating Layer
+  workstreams            DepartmentWorkstream[]
+  teams                  DepartmentTeam[]
+  healthSnapshots        DepartmentHealthSnapshot[]
+  resourceProposals      DepartmentResourceProposal[]
 }
 
 model Role {
@@ -441,6 +483,9 @@ model Employee {
   evaluationsGiven        PerformanceEvaluation[] @relation("Evaluator")
   successionPlansAsHolder SuccessionPlan[]        @relation("CurrentHolder")
   successionCandidacies   SuccessionCandidate[]   @relation("EmployeeSuccessionCands")
+
+  // V17 Phase 1: Execution Foundation
+  executionAttempts       TaskExecutionAttempt[]  @relation("WorkerExecutionAttempts")
 
   @@index([companyId])
 }
@@ -695,6 +740,9 @@ model Goal {
   tasks        Task[]
   ceoPlan      Json?
   finalReport  String?
+
+  // V17 Phase 2: Department Operating Layer
+  workstreams  DepartmentWorkstream[]
 }
 
 model Task {
@@ -735,6 +783,39 @@ model Task {
   subTasks             Task[]                @relation("SubTasks")
   departmentId         String?
   department           Department?           @relation("DepartmentTasks", fields: [departmentId], references: [id])
+
+  // V17 Phase 1: Execution Foundation additions
+  claimLockToken       String?
+  claimedAt            DateTime?
+  claimExpiresAt       DateTime?
+  correlationId        String?
+  causationId          String?
+  riskTier             CeoDecisionRiskLevel  @default(LOW)
+  qualityGatePassed    Boolean               @default(false)
+  successCriteria      Json                  @default("[]")
+  evidenceRequirements Json                  @default("[]")
+  stopCriteria         Json                  @default("[]")
+  escalationCriteria   Json                  @default("[]")
+  retryCount           Int                   @default(0)
+  maxRetries           Int                   @default(3)
+  executionAttempts    TaskExecutionAttempt[]
+
+  // V17 Phase 2: Department Operating Layer additions
+  workstreamId         String?
+  workstream           DepartmentWorkstream? @relation(fields: [workstreamId], references: [id], onDelete: SetNull)
+
+  // V17 Phase 3: Reliable Execution & Failure Intelligence additions
+  nextRetryAt          DateTime?
+  lastFailureType      AttemptFailureType?
+  recoveryState        String?               @default("NORMAL")
+
+  // V17 Phase 4: Evidence & Outcomes Verification additions
+  outcomeState         OutcomeVerificationStatus? @default(AUTHORIZED)
+  evidenceRecords      TaskEvidenceRecord[]
+
+  @@index([companyId, status])
+  @@index([claimLockToken])
+  @@index([outcomeState])
 }
 
 model TaskDependency {
@@ -3050,7 +3131,8 @@ enum ApprovalRiskLevel {
 
 model ApprovalRequest {
   id                     String                  @id @default(uuid())
-  companyId              String
+  companyId              String?
+  isGlobal               Boolean                 @default(false)
   requesterId            String
   action                 String
   targetType             String?
@@ -3067,13 +3149,14 @@ model ApprovalRequest {
   decisionReason         String?
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
-  company                Company                 @relation(fields: [companyId], references: [id])
+  company                Company?                @relation(fields: [companyId], references: [id])
   backgroundJobs         BackgroundJob[]
   invoices               Invoice[]
   contracts              Contract[]
   // Phase 25 relations
   customerCommunications CustomerCommunication[]
   chairmanCommands       ChairmanCommand[]
+  runbookExecutions      RunbookExecution[]
 }
 
 enum InvoiceStatus {
@@ -9100,16 +9183,702 @@ model ProjectTestExecution {
 }
 
 model TaskResult {
-  id        String   @id @default(uuid())
-  taskId    String   @unique
-  task      Task     @relation(fields: [taskId], references: [id])
-  workerId  String
-  worker    Employee @relation("WorkerTaskResults", fields: [workerId], references: [id])
-  success   Boolean
-  summary   String
-  output    Json     @default("{}")
-  errors    Json     @default("[]")
-  createdAt DateTime @default(now())
+  id                String                    @id @default(uuid())
+  taskId            String                    @unique
+  task              Task                      @relation(fields: [taskId], references: [id])
+  workerId          String
+  worker            Employee                  @relation("WorkerTaskResults", fields: [workerId], references: [id])
+  success           Boolean
+  summary           String
+  output            Json                      @default("{}")
+  errors            Json                      @default("[]")
+  // V17 Phase 4: Evidence & Outcomes Verification additions
+  outcomeState      OutcomeVerificationStatus @default(TECHNICALLY_COMPLETED)
+  epistemicStatus   EpistemicCertainty        @default(UNKNOWN)
+  verificationScore Float                     @default(0.0)
+  outcomeConfidence Float                     @default(0.0)
+  evidenceSummary   Json                      @default("{}")
+  verifiedAt        DateTime?
+  verifiedBy        String?
+  createdAt         DateTime                  @default(now())
+}
+
+// ==========================================
+// V17 PHASE 1: EXECUTION FOUNDATION
+// ==========================================
+
+enum ExecutionAttemptStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+  TIMED_OUT
+  REJECTED
+}
+
+enum AttemptFailureType {
+  CAPABILITY_FAILURE
+  SAFETY_FAILURE
+  AUTHORITY_FAILURE
+  TRANSIENT
+  TIMEOUT
+  DEPENDENCY_FAILURE
+  VALIDATION_FAILURE
+  RESOURCE_EXHAUSTION
+  EXTERNAL_ACTION_FAILURE
+  CONFLICT
+  UNEXPECTED
+}
+
+enum EmergencyState {
+  NORMAL
+  ELEVATED_CAUTION
+  CONTAINMENT
+  EMERGENCY_STOP
+}
+
+model TaskExecutionAttempt {
+  id              String                 @id @default(uuid())
+  taskId          String
+  task            Task                   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  attemptNumber   Int
+  agentId         String
+  workerId        String
+  worker          Employee               @relation("WorkerExecutionAttempts", fields: [workerId], references: [id])
+  companyId       String
+  company         Company                @relation(fields: [companyId], references: [id])
+  status          ExecutionAttemptStatus @default(RUNNING)
+  failureType     AttemptFailureType?
+  failureMetadata Json                   @default("{}")
+  evidence        Json                   @default("{}")
+  output          Json                   @default("{}")
+  heartbeatAt     DateTime?
+  startedAt       DateTime               @default(now())
+  completedAt     DateTime?
+  costUnits       Int                    @default(0)
+  correlationId   String?
+  causationId     String?
+
+  // V17 Phase 4: Evidence & Outcomes Verification additions
+  evidenceRecords TaskEvidenceRecord[]
+
+  // V17 Phase 5: Authority Integration & Governance additions
+  authorityProofId String?
+  authorityProof   AuthorityProof? @relation(fields: [authorityProofId], references: [id], onDelete: SetNull)
+
+  // V17 Phase 6: Enterprise Intelligence & Digital Twin additions
+  enterpriseStateRecords EnterpriseStateRecord[]
+
+  @@unique([taskId, attemptNumber])
+  @@index([companyId, status])
+  @@index([workerId])
+  @@index([authorityProofId])
+}
+
+// ==========================================
+// V17 PHASE 2: DEPARTMENT OPERATING LAYER
+// ==========================================
+
+enum WorkstreamStatus {
+  PLANNED
+  ACTIVE
+  BLOCKED
+  DEGRADED
+  COMPLETED
+  FAILED
+  CANCELLED
+  PAUSED
+}
+
+enum DepartmentTeamStatus {
+  FORMING
+  ACTIVE
+  COMPLETED
+  DISSOLVED
+  FAILED
+}
+
+enum ResourceProposalStatus {
+  SUBMITTED
+  UNDER_CEO_REVIEW
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  IMPLEMENTED
+}
+
+model DepartmentWorkstream {
+  id            String               @id @default(uuid())
+  companyId     String
+  departmentId  String
+  goalId        String?
+  name          String
+  description   String?
+  status        WorkstreamStatus     @default(PLANNED)
+  priority      TaskPriority         @default(NORMAL)
+  riskTier      CeoDecisionRiskLevel @default(LOW)
+  ownerAgentId  String?
+  correlationId String?
+  causationId   String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  company       Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  department    Department           @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  goal          Goal?                @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  tasks         Task[]
+  teams         DepartmentTeam[]
+
+  @@index([companyId, departmentId])
+  @@index([status])
+}
+
+model DepartmentTeam {
+  id                   String               @id @default(uuid())
+  companyId            String
+  departmentId         String
+  workstreamId         String?
+  name                 String
+  formationReason      String
+  expectedOutcome      String?
+  status               DepartmentTeamStatus @default(ACTIVE)
+  leadAgentId          String
+  memberAgentIds       Json                 @default("[]")
+  requiredCapabilities Json                 @default("[]")
+  authorityScope       Json                 @default("{}")
+  terminationCondition String?
+  startedAt            DateTime             @default(now())
+  endedAt              DateTime?
+  correlationId        String?
+  causationId          String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  company              Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  department           Department            @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  workstream           DepartmentWorkstream? @relation(fields: [workstreamId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, departmentId])
+  @@index([status])
+}
+
+model DepartmentHealthSnapshot {
+  id                 String     @id @default(uuid())
+  companyId          String
+  departmentId       String
+  overallScore       Int        // 0 - 100
+  overallStatus      String     // OPTIMAL, HEALTHY, DEGRADED, CRITICAL
+  dimensions         Json       // { capacityHealth, executionHealth, reliabilityHealth, alignmentHealth, riskHealth, workloadHealth, financialHealth }
+  evidence           Json       @default("{}")
+  bottlenecks        Json       @default("[]")
+  improvementSignals Json       @default("[]")
+  triggerEvent       String?
+  confidence         Float      @default(1.0)
+  timestamp          DateTime   @default(now())
+
+  company            Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  department         Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, departmentId, timestamp])
+}
+
+model DepartmentResourceProposal {
+  id                String                 @id @default(uuid())
+  companyId         String
+  departmentId      String
+  requestedResource String                 // e.g. "ADDITIONAL_AGENT", "SPECIALIST_ASSIGNMENT", "COMPUTE_ALLOCATION"
+  reason            String
+  expectedOutcome   String
+  urgency           String                 @default("MEDIUM")
+  cost              Int                    @default(0)
+  riskTier          CeoDecisionRiskLevel   @default(LOW)
+  status            ResourceProposalStatus @default(SUBMITTED)
+  opportunityCost   String?
+  alternatives      Json                   @default("[]")
+  expectedDuration  String?
+  successCriteria   Json                   @default("[]")
+  proposerAgentId   String
+  reviewerComment   String?
+  reviewedAt        DateTime?
+  correlationId     String?
+  causationId       String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  company           Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  department        Department             @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, departmentId])
+  @@index([status])
+}
+
+// ==========================================
+// V17 PHASE 4: EVIDENCE & OUTCOMES VERIFICATION
+// ==========================================
+
+enum EvidenceNature {
+  RAW
+  DERIVED
+  AI_INFERENCE
+}
+
+enum EpistemicCertainty {
+  FACT
+  VERIFIED_FACT
+  DERIVED_FACT
+  INFERENCE
+  HYPOTHESIS
+  UNKNOWN
+  CONFLICTED
+}
+
+enum EvidenceVerificationStatus {
+  UNVERIFIED
+  VERIFIED
+  REJECTED
+  EXPIRED
+  CONFLICTED
+}
+
+enum OutcomeVerificationStatus {
+  AUTHORIZED
+  EXECUTED
+  TECHNICALLY_COMPLETED
+  EVIDENCE_VERIFIED
+  OUTCOME_VERIFIED
+  STRATEGICALLY_SUCCESSFUL
+  SUSTAINABLE
+  OUTCOME_FAILED
+  REOPENED
+}
+
+model TaskEvidenceRecord {
+  id                 String                     @id @default(uuid())
+  companyId          String
+  company            Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  taskId             String
+  task               Task                       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  attemptId          String?
+  attempt            TaskExecutionAttempt?      @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+
+  nature             EvidenceNature             @default(RAW)
+  epistemicStatus    EpistemicCertainty         @default(UNKNOWN)
+  verificationStatus EvidenceVerificationStatus @default(UNVERIFIED)
+
+  evidenceType       String                     // "API_RESPONSE", "METRIC_SNAPSHOT", "FILE_HASH", "EXTERNAL_RECEIPT", "DATABASE_RECORD", "SYSTEM_LOG", "OFFER_PURCHASE", etc.
+  source             String                     // Source system or agent identifier
+  sourceType         String                     // "INTERNAL_SYSTEM", "EXTERNAL_API", "AI_AGENT", "DATABASE", "V16_GATEWAY", "V24_OFFER"
+  contentHash        String                     // SHA-256 canonical hash of evidence content
+  payload            Json                       // Evidence payload (immutable once recorded)
+  integrityMetadata  Json                       @default("{}") // Signatures, checksums, origin metadata
+
+  confidence         Float                      @default(1.0) // 0.0 to 1.0
+  isIndependent      Boolean                    @default(false)
+  isExternal         Boolean                    @default(false)
+
+  capturedAt         DateTime                   @default(now())
+  effectiveAt        DateTime?
+  expiresAt          DateTime?
+
+  verifiedAt         DateTime?
+  verifiedBy         String?                    // Verifier id or "EVIDENCE_VERIFICATION_ENGINE" or Chairman
+  verificationNotes  String?
+
+  // Append-only correction & derivation model
+  supersedesId       String?
+  supersededByRecord TaskEvidenceRecord?        @relation("EvidenceCorrections", fields: [supersedesId], references: [id])
+  supersededRecords  TaskEvidenceRecord[]       @relation("EvidenceCorrections")
+
+  correlationId      String?
+  causationId        String?
+
+  // V17 Phase 5: Authority Integration & Governance additions
+  authorityProofId   String?
+  authorityProof     AuthorityProof?            @relation(fields: [authorityProofId], references: [id], onDelete: SetNull)
+
+  // V17 Phase 6: Enterprise Intelligence & Digital Twin additions
+  enterpriseStateRecords EnterpriseStateRecord[]
+
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+
+  @@index([companyId, taskId])
+  @@index([companyId, contentHash])
+  @@index([attemptId])
+  @@index([verificationStatus])
+  @@index([epistemicStatus])
+  @@index([authorityProofId])
+}
+
+// ==========================================
+// V17 PHASE 5: AUTHORITY INTEGRATION & GOVERNANCE
+// ==========================================
+
+enum AuthorityTier {
+  CHAIRMAN           // Tier 0: Sovereign human authority
+  CEO                // Tier 1: Autonomous enterprise executive
+  DEPARTMENT_LEADER  // Tier 2: Functional department leadership
+  WORKFORCE_AGENT    // Tier 3: Autonomous AI agent worker
+  EPHEMERAL_DELEGATE // Tier 4: Delegated sub-agent / child agent
+}
+
+enum AuthorityGrantStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+  EXPIRED
+}
+
+model AuthorityGrant {
+  id               String               @id @default(uuid())
+  companyId        String
+  company          Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  granterId        String               // Actor ID who granted the authority
+  granterRole      String               // "CHAIRMAN", "CEO", "DEPARTMENT_LEADER", "AGENT"
+  granterTier      AuthorityTier
+  granteeId        String               // Actor/Employee ID receiving the authority
+  granteeRole      String
+  granteeTier      AuthorityTier
+
+  capability       String               // e.g. "SOFTWARE_DEVELOPMENT", "FINANCIAL_ALLOCATION", "CUSTOMER_COMMUNICATION", "OFFER_DISPATCH"
+  actionScope      Json                 @default("[]") // Specific actions permitted (e.g. ["SEND_EMAIL", "DISPATCH_OFFER"])
+  resourceScope    Json                 @default("[]") // Specific resources/targets permitted
+  maxRiskTier      CeoDecisionRiskLevel @default(LOW)
+
+  delegationDepth  Int                  @default(0) // 0 = root grant, increments with delegation
+  parentGrantId    String?
+  parentGrant      AuthorityGrant?      @relation("GrantDelegation", fields: [parentGrantId], references: [id], onDelete: Cascade)
+  childGrants      AuthorityGrant[]     @relation("GrantDelegation")
+
+  status           AuthorityGrantStatus @default(ACTIVE)
+  revokedAt        DateTime?
+  revokedBy        String?
+  revocationReason String?
+
+  validFrom        DateTime             @default(now())
+  expiresAt        DateTime?
+
+  commandId        String?              // Linked ChairmanCommand if granted by explicit command
+  correlationId    String?
+  causationId      String?
+
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  authorityProofs  AuthorityProof[]
+
+  @@index([companyId, granteeId, status])
+  @@index([companyId, capability])
+  @@index([expiresAt])
+  @@index([status])
+}
+
+model ChairmanPreference {
+  id             String    @id @default(uuid())
+  companyId      String
+  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  chairmanId     String
+  chairman       Chairman  @relation(fields: [chairmanId], references: [id], onDelete: Cascade)
+
+  domain         String    // e.g. "RISK_TOLERANCE", "COMMUNICATION_TONE", "EXPENSE_PACE", "HIRING_POLICY"
+  statement      String    // Natural language guidance or stated preference
+  weight         Float     @default(0.5) // Advisory guidance weight (0.0 to 1.0)
+  isBinding      Boolean   @default(false) // ALWAYS FALSE: Explicit commands are binding; preferences are advisory only
+  version        Int       @default(1)
+  supersededById String?
+
+  correlationId  String?
+  causationId    String?
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([companyId, domain])
+  @@index([chairmanId])
+}
+
+model AuthorityProof {
+  id                  String               @id @default(uuid())
+  companyId           String
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actorId             String
+  actorRole           String
+  actorTier           AuthorityTier
+  actionType          String
+  targetEntity        String?
+  targetId            String?
+  parametersHash      String               // SHA-256 of canonical action parameters
+  authorityGrantId    String?
+  authorityGrant      AuthorityGrant?      @relation(fields: [authorityGrantId], references: [id], onDelete: SetNull)
+  commandId           String?
+  approvalId          String?
+  riskTier            CeoDecisionRiskLevel @default(LOW)
+  policyVersion       String               @default("1.0.0")
+  delegationChain     Json                 @default("[]") // Array of grant IDs in delegation lineage
+  isAuthorized        Boolean
+  rejectionReason     String?
+  replayedFromProofId String?              // If created via deterministic audit replay
+
+  correlationId       String?
+  causationId         String?
+
+  timestamp           DateTime             @default(now())
+
+  executionAttempts   TaskExecutionAttempt[]
+  evidenceRecords     TaskEvidenceRecord[]
+  enterpriseStateRecords EnterpriseStateRecord[]
+  enterprisePlanChanges  EnterprisePlanChangeRecord[]
+
+  @@index([companyId, actorId])
+  @@index([companyId, actionType])
+  @@index([parametersHash])
+  @@index([authorityGrantId])
+}
+
+model DisagreementRecord {
+  id                     String    @id @default(uuid())
+  companyId              String
+  company                Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  chairmanId             String
+  chairman               Chairman  @relation(fields: [chairmanId], references: [id], onDelete: Cascade)
+  ceoId                  String
+
+  topic                  String
+  situation              String
+  chairmanPosition       String
+  ceoPosition            String
+  evidenceIds            Json      @default("[]")
+  alternativesConsidered Json      @default("[]")
+
+  councilConsulted       String?   // e.g. "EXECUTIVE_AI_COUNCIL"
+  councilVotes           Json      @default("[]") // [{ agentId, vote, rationale, expertiseDomain }]
+  isCouncilVoteBinding   Boolean   @default(false) // ALWAYS FALSE: Chairman sovereignty is absolute
+
+  resolved               Boolean   @default(false)
+  resolutionDecision     String?   // Chairman's sovereign final ruling
+  finalCommandId         String?
+  resolvedAt             DateTime?
+
+  correlationId          String?
+  causationId            String?
+
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@index([companyId, resolved])
+}
+
+// ==========================================
+// V17 PHASE 6: ENTERPRISE INTELLIGENCE & DIGITAL TWIN
+// ==========================================
+
+model EnterpriseStateRecord {
+  id                  String                 @id @default(uuid())
+  companyId           String
+  company             Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  streamKey           String                 // e.g. "ORGANIZATION", "WORKFORCE", "PROJECTS", "TASKS", "FINANCIAL", "HEALTH", "RISK", "SPATIAL_WORLD", "GOVERNANCE", "EXTERNAL"
+  entityType          String                 // e.g. "TASK", "PROJECT", "EMPLOYEE", "DEPARTMENT", "GOAL", "SPATIAL_WORKSPACE", "LEDGER", "COMPANY"
+  entityId            String
+  stateKey            String                 // e.g. "STATUS", "HEALTH", "PROGRESS", "LOCATION", "OUTCOME", "CAPACITY", "AGGREGATE"
+  stateValue          Json                   // Authoritative state payload
+  version             Int                    @default(1)
+
+  epistemicStatus     EpistemicCertainty     @default(FACT)
+  confidence          Float                  @default(1.0)
+
+  source              String                 // e.g. "TASK_EXECUTION_ENGINE", "OUTCOME_VERIFICATION_SERVICE", "V15_SPATIAL_GATEWAY", "BANK_LEDGER", "AI_INFERENCE"
+  sourceType          String                 // "INTERNAL_SYSTEM", "EXTERNAL_API", "DATABASE", "V15_WORLD", "AI_AGENT", "V16_GATEWAY"
+  sourceEventId       String?
+
+  evidenceRecordId    String?
+  evidenceRecord      TaskEvidenceRecord?    @relation(fields: [evidenceRecordId], references: [id], onDelete: SetNull)
+
+  authorityProofId    String?
+  authorityProof      AuthorityProof?        @relation(fields: [authorityProofId], references: [id], onDelete: SetNull)
+
+  attemptId           String?
+  attempt             TaskExecutionAttempt?  @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+
+  observedAt          DateTime               @default(now())
+  validFrom           DateTime               @default(now())
+  validUntil          DateTime?
+  freshnessWindowMs   Int?                   // TTL in ms, e.g. 300000 for 5m
+  isStale             Boolean                @default(false)
+
+  isConflicted        Boolean                @default(false)
+  conflictReason      String?
+
+  supersedesId        String?
+  supersededByRecord  EnterpriseStateRecord?  @relation("StateRevisions", fields: [supersedesId], references: [id], onDelete: SetNull)
+  supersededRecords   EnterpriseStateRecord[] @relation("StateRevisions")
+
+  isCurrent           Boolean                @default(true)
+
+  isSimulation        Boolean                @default(false) // STRICT INVIOLABLE BOUNDARY: true = simulation, false = production reality
+  scenarioId          String?
+  scenario            DigitalTwinScenario?   @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  correlationId       String?
+  causationId         String?
+
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  @@index([companyId, isCurrent, entityType, entityId])
+  @@index([companyId, streamKey, isCurrent])
+  @@index([companyId, isSimulation])
+  @@index([companyId, observedAt])
+  @@index([supersedesId])
+  @@index([evidenceRecordId])
+  @@index([authorityProofId])
+  @@index([attemptId])
+  @@index([scenarioId])
+}
+
+model EnterpriseStateConflict {
+  id                   String    @id @default(uuid())
+  companyId            String
+  company              Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  entityType           String
+  entityId             String
+  field                String
+
+  primaryStateId       String?
+  secondaryStateId     String?
+
+  conflictType         String    // "CONTRADICTORY_VALUE", "STALE_VS_FRESH", "SIMULATION_AS_REALITY", "V15_SPATIAL_MISMATCH", "COMPETING_OBSERVATIONS"
+  primarySource        String
+  primaryValue         Json
+  secondarySource      String
+  secondaryValue       Json
+
+  resolutionStatus     String    @default("OPEN") // "OPEN", "RECONCILED", "ESCALATED", "DISMISSED"
+  resolutionRationale  String?
+  reconciledById       String?
+  reconciledAt         DateTime?
+  escalatedToChairman  Boolean   @default(false)
+
+  correlationId        String?
+  causationId          String?
+
+  detectedAt           DateTime  @default(now())
+
+  @@index([companyId, resolutionStatus])
+  @@index([companyId, entityType, entityId])
+}
+
+model EnterpriseIntegrityFinding {
+  id                   String    @id @default(uuid())
+  companyId            String
+  company              Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  findingType          String    // "IMPOSSIBLE_DEPENDENCY", "MISSING_EVIDENCE_FOR_OUTCOME", "UNAUTHORIZED_ATTEMPT", "INACTIVE_WORKER_ASSIGNMENT", "CROSS_COMPANY_REFERENCE", "SIMULATION_LEAKAGE", "V15_SPATIAL_CONTRADICTION", "ORPHAN_CHILD_STATE"
+  severity             String    @default("HIGH") // "WARNING", "HIGH", "CRITICAL"
+  entityType           String
+  entityId             String
+  description          String
+  details              Json      @default("{}")
+
+  status               String    @default("DETECTED") // "DETECTED", "ACKNOWLEDGED", "RESOLVED", "EXPLAINED"
+  resolvedAt           DateTime?
+  resolvedBy           String?
+  resolutionNotes      String?
+
+  correlationId        String?
+  causationId          String?
+
+  createdAt            DateTime  @default(now())
+
+  @@index([companyId, status])
+  @@index([companyId, findingType])
+}
+
+model DigitalTwinScenario {
+  id                       String                  @id @default(uuid())
+  companyId                String
+  company                  Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name                     String
+  description              String?
+  status                   String                  @default("DRAFT") // "DRAFT", "RUNNING", "COMPLETED", "EXPIRED", "ARCHIVED"
+
+  baselineSnapshot         Json                    @default("{}")
+  assumptions              Json                    @default("[]")
+  hypotheticalChanges      Json                    @default("[]")
+  projectedOutcomes        Json                    @default("[]")
+  consequenceReport        Json                    @default("{}") // Structured Consequence from V16 engine
+
+  confidenceScore          Float                   @default(0.5)
+  uncertaintyNotes         String?
+  expiresAt                DateTime?
+
+  createdBy                String
+  isPromotionAttempt       Boolean                 @default(false)
+  promotionRejectionReason String?
+
+  correlationId            String?
+  causationId              String?
+
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+
+  simulatedStates          EnterpriseStateRecord[]
+
+  @@index([companyId, status])
+  @@index([companyId, expiresAt])
+}
+
+model EnterpriseStateHealth {
+  id                              String   @id @default(uuid())
+  companyId                       String
+  company                         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  completenessScore               Float    @default(1.0)
+  freshnessScore                  Float    @default(1.0)
+  conflictRate                    Float    @default(0.0)
+  unknownRate                     Float    @default(0.0)
+  staleMaterialStateRate          Float    @default(0.0)
+  provenanceCoverage              Float    @default(1.0)
+  reconciliationLagMs             Int      @default(0)
+  openIntegrityFindings           Int      @default(0)
+  simulationLeakageViolations     Int      @default(0)
+  crossCompanyIsolationViolations Int      @default(0)
+  unresolvedMaterialConflicts     Int      @default(0)
+
+  healthTier                      String   @default("HEALTHY") // "HEALTHY", "DEGRADED", "CRITICAL"
+  metrics                         Json     @default("{}")
+  computedAt                      DateTime @default(now())
+
+  @@index([companyId, computedAt])
+}
+
+model EnterprisePlanChangeRecord {
+  id                   String          @id @default(uuid())
+  companyId            String
+  company              Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  triggerEvent         String
+  triggerReason        String
+  affectedEntityTypes  Json            @default("[]")
+  affectedEntityIds    Json            @default("[]")
+  planModifications    Json            @default("[]")
+  explanation          String
+  deduplicationKey     String
+
+  authorityProofId     String?
+  authorityProof       AuthorityProof? @relation(fields: [authorityProofId], references: [id], onDelete: SetNull)
+
+  isThrottled          Boolean         @default(false)
+
+  correlationId        String?
+  causationId          String?
+
+  createdAt            DateTime        @default(now())
+
+  @@index([companyId, deduplicationKey])
+  @@index([companyId, createdAt])
+  @@index([authorityProofId])
 }
 
 // ==========================================
@@ -9156,9 +9925,34 @@ model ImprovementProposal {
   completedAt    DateTime?
   rolledBackAt   DateTime?
 
+  // V17 Phase 7 Extended Governance & Validation Fields
+  targetDomain             String? // WORKFORCE_ASSIGNMENT, PROCESS_CONFIGURATION, QUALITY_GATE, RETRY_POLICY, OPERATIONAL_THRESHOLD, CAPABILITY_REQUIREMENT, TASK_DECOMPOSITION, SCHEDULING, DEPARTMENT_WORKFLOW, RESOURCE_ALLOCATION, KNOWLEDGE_RETRIEVAL, PLANNING_HEURISTICS, ORGANIZATIONAL_STRUCTURE, CONSTITUTIONAL_CHANGE
+  reversibility            String?   @default("REVERSIBLE") // REVERSIBLE, IRREVERSIBLE, ESCALATION_REQUIRED
+  blastRadius              String?   @default("LOCAL") // LOCAL, DEPARTMENT, ENTERPRISE, CONSTITUTIONAL
+  validationCriteria       Json?     @default("[]")
+  rollbackCriteria         Json?     @default("[]")
+  simulationRequirement    String?   @default("OPTIONAL") // NONE, RECOMMENDED, MANDATORY
+  authorityRequirement     String?   @default("GOVERNED_DELEGATION") // AUTONOMOUS_DELEGATED, APPROVAL_REQUIRED, CHAIRMAN_REQUIRED, CONSTITUTIONAL_CHANGE
+  simulationScenarioId     String?
+  simulationEvaluated      Boolean   @default(false)
+  authorityProofId         String?
+  validationStatus         String?   @default("PENDING") // PENDING, OBSERVING, VALIDATED, FAILED, ROLLED_BACK, INCONCLUSIVE
+  validationObservedAt     DateTime?
+  validationEvidence       Json?     @default("{}")
+  rollbackReason           String?
+  rollbackEvidence         Json?     @default("{}")
+  version                  Int       @default(1)
+  supersedesId             String?
+  correlationId            String?
+  causationId              String?
+
   // Relationships
   company  Company              @relation(fields: [companyId], references: [id])
   outcomes ImprovementOutcome[]
+
+  @@index([companyId, status])
+  @@index([companyId, targetDomain])
+  @@index([companyId, createdAt])
 }
 
 model ImprovementOutcome {
@@ -9171,6 +9965,92 @@ model ImprovementOutcome {
   createdAt             DateTime @default(now())
 
   proposal ImprovementProposal @relation(fields: [improvementProposalId], references: [id])
+
+  @@index([improvementProposalId])
+}
+
+// ==========================================
+// PHASE V17.7: CONTINUOUS EVOLUTION & ANTI-ENTROPY
+// ==========================================
+
+model EntropyFinding {
+  id                  String    @id @default(uuid())
+  companyId           String
+  company             Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  category            String    // ARCHITECTURE, DATA, GOVERNANCE, EXECUTION, ORGANIZATIONAL, KNOWLEDGE, SIMULATION
+  severity            String    // LOW, MEDIUM, HIGH, CRITICAL
+  detectionSource     String    // e.g. "ANTI_ENTROPY_AUDIT_ENGINE"
+  affectedEntity      String    // e.g. "TASK:task_1", "EMPLOYEE:emp_2"
+  evidence            Json      @default("{}")
+  stateVersion        Int       @default(1)
+  recommendedAction   String
+  autoRemediable      Boolean   @default(false)
+  authorityRequirement String   @default("AUTO_SAFE") // AUTO_SAFE, PROPOSE, APPROVAL_REQUIRED, CHAIRMAN_REQUIRED, NEVER_AUTO_REMEDIATE
+  status              String    @default("OPEN") // OPEN, REMEDIATED, ESCALATED, DISMISSED, ACKNOWLEDGED
+
+  remediatedAt        DateTime?
+  remediatedBy        String?
+  remediationDetails  Json?     @default("{}")
+
+  correlationId       String?
+  causationId         String?
+
+  detectedAt          DateTime  @default(now())
+
+  @@index([companyId, status])
+  @@index([companyId, category])
+  @@index([companyId, severity])
+}
+
+model EntropyHealthSnapshot {
+  id                          String    @id @default(uuid())
+  companyId                   String
+  company                     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  architectureEntropyScore    Float     @default(0.0) // 0 (healthy) - 100 (critical entropy)
+  dataEntropyScore            Float     @default(0.0)
+  governanceEntropyScore      Float     @default(0.0)
+  executionEntropyScore       Float     @default(0.0)
+  organizationalEntropyScore  Float     @default(0.0)
+  knowledgeEntropyScore       Float     @default(0.0)
+  simulationEntropyScore      Float     @default(0.0)
+  totalEntropyScore           Float     @default(0.0)
+
+  criticalFindingCount        Int       @default(0)
+  unresolvedFindingCount      Int       @default(0)
+  autoRemediationSuccessRate  Float     @default(1.0)
+  remediationRecurrenceRate   Float     @default(0.0)
+
+  healthTier                  String    @default("HEALTHY") // HEALTHY, ELEVATED, CRITICAL
+  metrics                     Json      @default("{}")
+
+  computedAt                  DateTime  @default(now())
+
+  @@index([companyId, computedAt])
+}
+
+model EntropyRemediationRecord {
+  id                    String    @id @default(uuid())
+  companyId             String
+  company               Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  findingId             String
+  findingCategory       String
+  remediationAction     String
+  remediationTier       String    // AUTO_SAFE, PROPOSE, APPROVAL_REQUIRED, CHAIRMAN_REQUIRED
+  success               Boolean   @default(true)
+  details               Json      @default("{}")
+  performedBy           String    // "AUTO_REMEDIATION_ENGINE" or actor ID
+  authorityProofId      String?
+
+  correlationId         String?
+  causationId           String?
+
+  remediatedAt          DateTime  @default(now())
+
+  @@index([companyId, findingCategory])
+  @@index([companyId, remediatedAt])
 }
 
 // ==========================================
@@ -9513,4 +10393,272 @@ model V12SpatialHistoryEvent {
   @@index([companyId, eventType, sequence])
   @@index([companyId, correlationId])
   @@index([companyId, causationId])
+}
+
+// ==========================================
+// V18 PHASE 1: TELEMETRY, HEALTH PROBING & INFRASTRUCTURE METRICS
+// ==========================================
+
+enum ProbeTargetType {
+  DATABASE_POOL
+  PROCESS_MEMORY
+  EVENT_LOOP_LAG
+  BACKGROUND_QUEUE
+  MODEL_GATEWAY
+  EXTERNAL_API
+}
+
+enum ProbeResultStatus {
+  HEALTHY
+  DEGRADED
+  UNHEALTHY
+  TIMEOUT
+}
+
+model SystemHealthProbe {
+  id               String            @id @default(uuid())
+  companyId        String?           // Null for global infrastructure, specific companyId for tenant workloads
+  targetType       ProbeTargetType
+  targetName       String
+  description      String?
+  endpoint         String?
+  intervalSeconds  Int               @default(60)
+  timeoutMs        Int               @default(5000)
+  failureThreshold Int               @default(3)
+  consecutiveFails Int               @default(0)
+  lastStatus       ProbeResultStatus @default(HEALTHY)
+  lastObservedAt   DateTime?
+  lastLatencyMs    Int?
+  isActive         Boolean           @default(true)
+  metadata         Json              @default("{}")
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  observations     HealthProbeObservation[]
+
+  @@index([companyId, targetType])
+  @@index([lastStatus])
+  @@index([isActive, targetType])
+}
+
+model HealthProbeObservation {
+  id               String            @id @default(uuid())
+  probeId          String
+  probe            SystemHealthProbe @relation(fields: [probeId], references: [id], onDelete: Cascade)
+  companyId        String?
+  status           ProbeResultStatus
+  latencyMs        Int
+  errorMessage     String?
+  details          Json              @default("{}")
+  isProtected      Boolean           @default(false) // Protected from retention deletion (audit / incident lock)
+  observedAt       DateTime          @default(now())
+  correlationId    String?
+
+  @@index([probeId, observedAt])
+  @@index([companyId, observedAt])
+  @@index([isProtected, observedAt])
+}
+
+// ==========================================
+// V18 PHASE 2: INCIDENT MANAGEMENT, ANOMALY DETECTION & TRIAGE
+// ==========================================
+
+enum IncidentSeverity {
+  SEV1_CRITICAL
+  SEV2_HIGH
+  SEV3_MEDIUM
+  SEV4_LOW
+}
+
+enum IncidentStatus {
+  DETECTED
+  TRIAGED
+  INVESTIGATING
+  MITIGATED
+  RESOLVED
+  CLOSED
+}
+
+enum IncidentEventType {
+  STATUS_CHANGE
+  SEVERITY_UPDATE
+  TRIAGE_NOTE
+  ESCALATION
+  EVIDENCE_ATTACHED
+  TASK_LINKED
+  DIAGNOSTIC_REPORT_ATTACHED
+  REMEDIATION_PLANNED
+  REMEDIATION_STARTED
+  REMEDIATION_COMPLETED
+  REMEDIATION_VERIFIED
+  REMEDIATION_FAILED
+  REMEDIATION_ROLLED_BACK
+}
+
+enum DiagnosticReportStatus {
+  COMPLETED
+  INCONCLUSIVE
+  FAILED
+}
+
+model SystemIncident {
+  id                   String            @id @default(uuid())
+  companyId            String?           // Null for global infrastructure, specific for tenant workloads
+  title                String
+  description          String
+  severity             IncidentSeverity  @default(SEV3_MEDIUM)
+  status               IncidentStatus    @default(DETECTED)
+  targetType           ProbeTargetType
+  targetName           String
+  detectionSource      String            @default("HEALTH_PROBE_ANOMALY_DETECTOR")
+  deduplicationKey     String
+  correlationId        String?
+  causationId          String?
+  occurrenceCount      Int               @default(1)
+
+  triageSummary        String?
+  hypotheses           Json              @default("[]") // Array of hypothesis objects with epistemic certainty
+  affectedServices     Json              @default("[]") // Subsystem identifiers
+
+  taskId               String?           // Link to urgent task in existing task engine
+  escalationRequired   Boolean           @default(false)
+  escalatedTo          String?           // "CHAIRMAN" or "CEO"
+
+  mitigatedAt          DateTime?
+  resolvedAt           DateTime?
+  closedAt             DateTime?
+
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  events               IncidentTimelineEvent[]
+  diagnosticReports    IncidentDiagnosticReport[]
+  runbookExecutions    RunbookExecution[]
+
+  @@index([companyId, status])
+  @@index([companyId, severity])
+  @@index([deduplicationKey, status])
+  @@index([createdAt])
+  @@index([taskId])
+}
+
+model IncidentTimelineEvent {
+  id           String            @id @default(uuid())
+  incidentId   String
+  incident     SystemIncident    @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  companyId    String?
+  eventType    IncidentEventType
+  fromStatus   IncidentStatus?
+  toStatus     IncidentStatus?
+  note         String?
+  evidence     Json              @default("{}")
+  actorId      String?           // Accountable actor id
+  actorRole    String?           // "CHAIRMAN", "CEO", "SYSTEM_TRIAGE", etc.
+  createdAt    DateTime          @default(now())
+
+  @@index([incidentId, createdAt])
+  @@index([companyId, createdAt])
+}
+
+model IncidentDiagnosticReport {
+  id                 String                  @id @default(uuid())
+  incidentId         String
+  incident           SystemIncident          @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  companyId          String?
+  status             DiagnosticReportStatus  @default(COMPLETED)
+  diagnosticContext  Json                    // Assembled context with provenance, gaps, and contradictory signals
+  rankedHypotheses   Json                    // Ranked hypotheses with supporting/contradicting evidence
+  evidenceGaps       Json                    @default("[]")
+  contradictions     Json                    @default("[]")
+  recommendedAction  String?
+  confidenceScore    Float
+  isInconclusive     Boolean                 @default(false)
+  inconclusiveReason String?
+  analyzedBy         String                  @default("SYSTEM_DIAGNOSTIC_ENGINE")
+  createdAt          DateTime                @default(now())
+
+  @@index([incidentId, createdAt])
+  @@index([companyId, createdAt])
+}
+
+// ==========================================
+// V18 PHASE 4: RUNBOOK ENGINE & GOVERNED REMEDIATION EXECUTION
+// ==========================================
+
+enum RunbookActionType {
+  SERVICE_RESTART
+  CONNECTION_POOL_REBALANCE
+  QUEUE_PURGE_STALE_LOCKS
+  CACHE_INVALIDATION
+  TRAFFIC_THROTTLE
+}
+
+enum RunbookRiskTier {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RunbookExecutionStatus {
+  PENDING_APPROVAL
+  APPROVED
+  EXECUTING
+  COMPLETED
+  VERIFYING
+  VERIFIED_HEALTHY
+  FAILED
+  ROLLED_BACK
+  ROLLBACK_FAILED
+}
+
+model RunbookDefinition {
+  id                       String              @id @default(uuid())
+  companyId                String?             // Null for global templates, specific for tenant templates
+  name                     String
+  description              String
+  targetType               ProbeTargetType
+  actionType               RunbookActionType
+  riskTier                 RunbookRiskTier     @default(LOW)
+  isReversible             Boolean             @default(true)
+  parameters               Json                @default("{}")
+  preconditions            Json                @default("[]")
+  postVerificationCriteria Json                @default("{}")
+  maxAttempts              Int                 @default(2)
+  cooldownMinutes          Int                 @default(15)
+  isActive                 Boolean             @default(true)
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+
+  executions               RunbookExecution[]
+
+  @@index([companyId, targetType])
+  @@index([actionType])
+}
+
+model RunbookExecution {
+  id                       String                 @id @default(uuid())
+  companyId                String?                // Null for global infrastructure, specific for tenant
+  incidentId               String
+  incident                 SystemIncident         @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  runbookId                String
+  runbook                  RunbookDefinition      @relation(fields: [runbookId], references: [id], onDelete: Cascade)
+  actionType               RunbookActionType
+  status                   RunbookExecutionStatus @default(EXECUTING)
+  parameters               Json                   @default("{}")
+  preExecutionSnapshot     Json                   @default("{}")
+  stepResults              Json                   @default("[]")
+  postVerificationSnapshot Json                   @default("{}")
+  rollbackResults          Json                   @default("{}")
+  riskTier                 RunbookRiskTier
+  approvalRequestId        String?                // Linked to V16 Gateway / Governance if HIGH/CRITICAL
+  approvalRequest          ApprovalRequest?       @relation(fields: [approvalRequestId], references: [id])
+  executedBy               String                 @default("SYSTEM_SELF_HEALING_ENGINE")
+  startedAt                DateTime               @default(now())
+  completedAt              DateTime?
+  rolledBackAt             DateTime?
+  createdAt                DateTime               @default(now())
+
+  @@index([incidentId, createdAt])
+  @@index([companyId, status])
 }

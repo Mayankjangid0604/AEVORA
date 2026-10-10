@@ -361,5 +361,106 @@ export class CeoController {
   async createReplacementRecommendation(@Request() req, @Body() body: { planId: string; candidateId: string; reason: string }) {
     return this.succession.createReplacementRecommendation(req.user.companyId, req.user.actorId, body.planId, body.candidateId, body.reason);
   }
-}
 
+  // =========================================================================
+  // V16 SLICE 2: AUTONOMOUS CEO CORE ENGINE ENDPOINTS
+  // =========================================================================
+
+  @Get('context')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async getCeoContext(@Request() req) {
+    return this.autonomous.assembleContext(req.user.companyId);
+  }
+
+  @Get('proactive-signals')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async getProactiveSignals(@Request() req) {
+    return this.autonomous.detectProactiveSignals(req.user.companyId);
+  }
+
+  @Post('run-autonomous-loop')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async runV16AutonomousLoop(@Request() req) {
+    const ceo = await findCeo(this.prisma, req.user.companyId);
+    if (!ceo) throw new NotFoundException('Active CEO employee record not found.');
+    return this.autonomous.runV16AutonomousLoop(req.user.companyId, ceo.id);
+  }
+
+  @Post('decompose-objective')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async decomposeObjective(@Request() req, @Body() body: any) {
+    const ceo = await findCeo(this.prisma, req.user.companyId);
+    if (!ceo) throw new NotFoundException('Active CEO employee record not found.');
+    return this.autonomous.decomposeObjective(req.user.companyId, ceo.id, body);
+  }
+
+  @Get('objective-lineage/:taskId')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async getObjectiveLineage(@Request() req, @Param('taskId') taskId: string) {
+    return this.autonomous.traceObjectiveLineage(req.user.companyId, taskId);
+  }
+
+  @Post('replan-objective/:objectiveId')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async replanObjective(@Request() req, @Param('objectiveId') objectiveId: string) {
+    const ceo = await findCeo(this.prisma, req.user.companyId);
+    if (!ceo) throw new NotFoundException('Active CEO employee record not found.');
+    return this.autonomous.replanObjective(req.user.companyId, ceo.id, objectiveId);
+  }
+
+  @Post('review-decision/:decisionId')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async reviewDecisionOutcome(@Request() req, @Param('decisionId') decisionId: string) {
+    return this.autonomous.reviewDecisionOutcome(req.user.companyId, decisionId);
+  }
+
+  @Post('evaluate-directive')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async evaluateChairmanDirective(@Request() req, @Body() body: { directive: string }) {
+    const ceo = await findCeo(this.prisma, req.user.companyId);
+    if (!ceo) throw new NotFoundException('Active CEO employee record not found.');
+    return this.autonomous.evaluateChairmanDirective(req.user.companyId, ceo.id, body.directive);
+  }
+
+  // =========================================================================
+  // V16 SLICE 3: CONSEQUENCE-ANALYSIS ENGINE & SIMULATION ENDPOINTS
+  // =========================================================================
+
+  @Post('consequence-analysis')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async analyzeConsequences(@Request() req, @Body() body: any) {
+    const ceo = await findCeo(this.prisma, req.user.companyId);
+    if (!ceo) throw new NotFoundException('Active CEO employee record not found.');
+    return this.autonomous.analyzeConsequences({
+      ...body,
+      companyId: req.user.companyId,
+      ceoId: ceo.id,
+    });
+  }
+
+  @Post('simulate-scenarios')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async simulateScenarios(@Request() req, @Body() body: any) {
+    const ceo = await findCeo(this.prisma, req.user.companyId);
+    if (!ceo) throw new NotFoundException('Active CEO employee record not found.');
+    return this.autonomous.simulateScenarios({
+      ...body,
+      companyId: req.user.companyId,
+      ceoId: ceo.id,
+    });
+  }
+
+  @Get('decision-brief/:decisionId')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async getDecisionBrief(@Request() req, @Param('decisionId') decisionId: string) {
+    return this.autonomous.generateChairmanDecisionBrief(req.user.companyId, decisionId);
+  }
+
+  @Post('disagreement-consequences')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async compareDisagreementConsequences(@Request() req, @Body() body: { directive: string; alternative: string }) {
+    const ceo = await findCeo(this.prisma, req.user.companyId);
+    if (!ceo) throw new NotFoundException('Active CEO employee record not found.');
+    return this.autonomous.compareDisagreementConsequences(req.user.companyId, ceo.id, body.directive, body.alternative);
+  }
+}

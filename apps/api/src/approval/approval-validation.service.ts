@@ -5,7 +5,7 @@ import { normalizeParams, isDeepEqualStrict } from './parameter-binding.util';
 import { StructuredLoggerService } from '../logger/structured-logger.service';
 
 export interface ExecutionValidationContext {
-  companyId: string;
+  companyId?: string | null;
   action: string;
   targetType?: string;
   targetId?: string;
@@ -38,7 +38,10 @@ export class ApprovalValidationService {
         throw new BadRequestException(`Approval ${approvalId} not found`);
       }
 
-      if (approval.companyId !== context.companyId) {
+      const approvalCompanyId = approval.companyId ?? null;
+      const contextCompanyId = context.companyId ?? null;
+
+      if (approvalCompanyId !== contextCompanyId) {
         throw new UnauthorizedException('Approval does not belong to the execution company');
       }
 

@@ -27,10 +27,71 @@ import { CeoSuccessionService } from './ceo-succession.service';
 import { CommunicationModule } from '../communication/communication.module';
 import { ManagementModule } from '../management/management.module';
 import { WorkforceModule } from '../workforce/workforce.module';
+import { EnterpriseBrainModule } from '../enterprise-brain/enterprise-brain.module';
+import { CeoContextAssemblyService } from './ceo-context-assembly.service';
+import { CeoProactiveDetectionService } from './ceo-proactive-detection.service';
+import { CeoObjectiveDecompositionService } from './ceo-objective-decomposition.service';
+import { CeoDecisionLifecycleService } from './ceo-decision-lifecycle.service';
+import { CeoConsequenceAnalysisService } from './ceo-consequence-analysis.service';
+
 @Module({
-  imports: [DevicesModule, forwardRef(() => TaskModule), VenturesModule, LeadGenModule, SalesOutreachModule, IntegrationModule, IdeasModule, VoiceModule, forwardRef(() => CommunicationModule), ManagementModule, forwardRef(() => WorkforceModule)],
-  providers: [CeoStrategicPlanningService, CeoReviewService, CeoDecisionsService, PipelineManagementService, WeeklyReportService, SelfImprovementService, CeoDialogueService, CeoHiringService, HeadHiringService, ProjectStaffingService, CeoOperatingService, CeoAutonomousService, CeoBudgetService, CeoFinancialAuthorityService, CeoPerformanceService, CeoSuccessionService],
+  imports: [
+    DevicesModule,
+    forwardRef(() => TaskModule),
+    VenturesModule,
+    LeadGenModule,
+    SalesOutreachModule,
+    IntegrationModule,
+    IdeasModule,
+    VoiceModule,
+    forwardRef(() => CommunicationModule),
+    ManagementModule,
+    forwardRef(() => WorkforceModule),
+    EnterpriseBrainModule,
+  ],
+  providers: [
+    CeoStrategicPlanningService,
+    CeoReviewService,
+    CeoDecisionsService,
+    PipelineManagementService,
+    WeeklyReportService,
+    SelfImprovementService,
+    CeoDialogueService,
+    CeoHiringService,
+    HeadHiringService,
+    ProjectStaffingService,
+    CeoOperatingService,
+    CeoAutonomousService,
+    CeoBudgetService,
+    CeoFinancialAuthorityService,
+    CeoPerformanceService,
+    CeoSuccessionService,
+    CeoContextAssemblyService,
+    CeoProactiveDetectionService,
+    CeoObjectiveDecompositionService,
+    CeoDecisionLifecycleService,
+    CeoConsequenceAnalysisService,
+  ],
   controllers: [CeoController],
-  exports: [CeoStrategicPlanningService, CeoReviewService, CeoDecisionsService, CeoHiringService, HeadHiringService, ProjectStaffingService, CeoDialogueService, CeoOperatingService, CeoAutonomousService, CeoBudgetService, CeoFinancialAuthorityService, CeoPerformanceService, CeoSuccessionService],
+  exports: [
+    CeoStrategicPlanningService,
+    CeoReviewService,
+    CeoDecisionsService,
+    CeoHiringService,
+    HeadHiringService,
+    ProjectStaffingService,
+    CeoDialogueService,
+    CeoOperatingService,
+    CeoAutonomousService,
+    CeoBudgetService,
+    CeoFinancialAuthorityService,
+    CeoPerformanceService,
+    CeoSuccessionService,
+    CeoContextAssemblyService,
+    CeoProactiveDetectionService,
+    CeoObjectiveDecompositionService,
+    CeoDecisionLifecycleService,
+    CeoConsequenceAnalysisService,
+  ],
 })
 export class CeoModule {}

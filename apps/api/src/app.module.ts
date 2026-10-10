@@ -76,12 +76,25 @@ import { ChairmanMailModule } from './notifications/chairman-mail.module';
 import { BrowserAiModule } from './browser-ai/browser-ai.module';
 import { AutomationOrchestrationModule } from './automation-orchestration/automation-orchestration.module';
 import { ContinuousImprovementModule } from './continuous-improvement/continuous-improvement.module';
+import { ReliabilityModule } from './reliability/reliability.module';
 import { WorldStateGatewayModule } from './world-state-gateway/world-state-gateway.module';
 import { V12SpatialModule } from './v12-spatial/v12-spatial.module';
+import { EnterpriseBrainModule } from './enterprise-brain/enterprise-brain.module';
+import { ExternalActionGatewayModule } from './external-action-gateway/external-action-gateway.module';
+import { OrganizationalMemoryModule } from './organizational-memory/organizational-memory.module';
+
+import { GovernanceModule } from './governance/governance.module';
+import { EnterpriseIntelligenceModule } from './enterprise-intelligence/enterprise-intelligence.module';
 
 @Module({
   imports: [
+    GovernanceModule,
+    EnterpriseIntelligenceModule,
+    EnterpriseBrainModule,
+    ExternalActionGatewayModule,
+    OrganizationalMemoryModule,
     ContinuousImprovementModule,
+    ReliabilityModule,
     PrismaModule,
     EconomyModule,
     CompanyModule,

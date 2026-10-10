@@ -1,5 +1,6 @@
-import { CeoWorkspace } from '@/components/ceo-views';
+import { ExecutiveConsole } from '@/components/executive/ExecutiveConsole';
 
 export default async function Page({ params }: { params: Promise<{ companyId: string }> }) {
-  return <CeoWorkspace companyId={(await params).companyId} />;
+  const { companyId } = await params;
+  return <ExecutiveConsole companyId={companyId} />;
 }
