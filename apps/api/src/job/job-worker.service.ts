@@ -13,17 +13,15 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   private timer: NodeJS.Timeout;
   private isPolling = false;
   private isProcessing = false;
-
   constructor(
     private readonly prisma: PrismaService,
     @Optional()
     @Inject(forwardRef(() => JobTaskBridgeService))
     private readonly taskBridge?: JobTaskBridgeService,
-    workerId?: string,
+    @Optional() workerId?: string,
   ) {
     if (workerId) this.workerId = workerId;
   }
-
   getWorkerId(): string {
     return this.workerId;
   }

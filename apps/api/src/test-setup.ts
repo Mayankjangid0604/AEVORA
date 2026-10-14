@@ -14,5 +14,8 @@ process.env.REAL_PROVIDER_CALL = 'false'; // keep model calls on the local provi
 process.env.UNSUBSCRIBE_SECRET = 'test-unsubscribe-secret-0123456789abcdef';
 process.env.PUBLIC_API_URL = 'http://localhost:4011';
 process.env.DEMO_PUBLISHING_ENABLED = 'false';
+process.env.COMPANY_NAME = 'AEVORA Synthetic Test Co';
+process.env.COMPANY_EMAIL = 'outreach@aevora.local';
+process.env.COMPANY_PHONE = '+1 555-0199';
 delete process.env.AEVORA_EMERGENCY_STOP;
 delete process.env.VERCEL_API_TOKEN;
