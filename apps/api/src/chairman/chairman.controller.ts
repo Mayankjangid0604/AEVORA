@@ -80,7 +80,7 @@ export class ChairmanController {
 
   @Get('commands')
   async getCommands(@Request() req: any, @Query('status') status?: string, @Query('riskLevel') riskLevel?: string, @Query('since') since?: string, @Query('limit') limit?: string) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
     return this.commandService.getCommands(company.id, {
       status, riskLevel,
@@ -114,7 +114,7 @@ export class ChairmanController {
 
   @Post('broadcast')
   async broadcast(@Request() req: any, @Body() body: { text: string }) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
     return this.commandService.broadcastCommand(company.id, body.text);
   }
@@ -131,7 +131,7 @@ export class ChairmanController {
 
   @Get('overview')
   async getOverview(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     const [
@@ -181,7 +181,7 @@ export class ChairmanController {
 
   @Get('financials')
   async getFinancials(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     const realMoneyAccount = await this.prisma.realMoneyAccount.findUnique({ where: { companyId: company.id } });
@@ -220,7 +220,7 @@ export class ChairmanController {
 
   @Get('employees')
   async getEmployees(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.prisma.employee.findMany({
@@ -242,7 +242,7 @@ export class ChairmanController {
     @Param('id') id: string,
     @Request() req: any,
   ) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     const employee = await this.prisma.employee.findUnique({
@@ -271,7 +271,7 @@ export class ChairmanController {
 
   @Get('projects')
   async getProjects(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.prisma.project.findMany({
@@ -291,7 +291,7 @@ export class ChairmanController {
     @Param('id') id: string,
     @Request() req: any,
   ) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     const project = await this.prisma.project.findUnique({
@@ -321,7 +321,7 @@ export class ChairmanController {
 
   @Get('departments')
   async getDepartments(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     const departments = await this.prisma.department.findMany({
@@ -338,7 +338,7 @@ export class ChairmanController {
 
   @Get('alerts')
   async getAlerts(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.prisma.operationalAlert.findMany({
@@ -350,7 +350,7 @@ export class ChairmanController {
 
   @Post('alerts/:id/read')
   async readAlert(@Request() req: any, @Param('id') id: string) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.prisma.operationalAlert.updateMany({
@@ -361,7 +361,7 @@ export class ChairmanController {
 
   @Post('alerts/:id/resolve')
   async resolveAlert(@Request() req: any, @Param('id') id: string) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.prisma.operationalAlert.updateMany({
@@ -374,7 +374,7 @@ export class ChairmanController {
 
   @Get('decisions')
   async getDecisions(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.prisma.managementDecision.findMany({
@@ -416,7 +416,7 @@ export class ChairmanController {
 
   @Get('activity')
   async getActivity(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.prisma.companyEvent.findMany({
@@ -430,7 +430,7 @@ export class ChairmanController {
 
   @Get('simulation')
   async getSimulation(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     const state = await this.simulationService.getSimulationState(company.id);
@@ -443,14 +443,14 @@ export class ChairmanController {
 
   @Post('simulation/start')
   async startSimulation(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
     return this.simulationService.start(company.id);
   }
 
   @Post('simulation/pause')
   async pauseSimulation(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
     return this.simulationService.pause(company.id);
   }
@@ -459,7 +459,7 @@ export class ChairmanController {
 
   @Post('simulation/resume')
   async resumeSimulation(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
     return this.simulationService.resume(company.id);
   }
@@ -468,7 +468,7 @@ export class ChairmanController {
 
   @Get('world')
   async getWorld(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     // Fetch required state for 2D world
@@ -531,7 +531,7 @@ export class ChairmanController {
 
   @Get('communication/conversations')
   async getConversations(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.prisma.conversation.findMany({
@@ -552,7 +552,7 @@ export class ChairmanController {
     @Param('id') id: string,
     @Request() req: any,
   ) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     const conv = await this.conversationService.getConversation(company.id, id);
@@ -568,7 +568,7 @@ export class ChairmanController {
 
   @Get('communication/meetings')
   async getMeetings(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.prisma.meeting.findMany({
@@ -588,7 +588,7 @@ export class ChairmanController {
     @Param('id') id: string,
     @Request() req: any,
   ) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.meetingService.getMeeting(company.id, id);
@@ -598,7 +598,7 @@ export class ChairmanController {
 
   @Get('communication/notifications')
   async getNotifications(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.prisma.notification.findMany({
@@ -613,7 +613,7 @@ export class ChairmanController {
 
   @Get('knowledge')
   async getKnowledge(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.knowledgeRetrievalService.searchKnowledge(company.id, {});
@@ -626,7 +626,7 @@ export class ChairmanController {
     @Param('id') id: string,
     @Request() req: any,
   ) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.knowledgeService.getKnowledgeById(company.id, id);
@@ -639,7 +639,7 @@ export class ChairmanController {
     @Param('id') id: string,
     @Request() req: any,
   ) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.knowledgeProvenanceService.getProvenanceForKnowledge(company.id, id);
@@ -653,7 +653,7 @@ export class ChairmanController {
     @Body() body: { result: KnowledgeValidationResult; reason?: string },
     @Request() req: any,
   ) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.knowledgeValidationService.validateKnowledge(company.id, id, {
@@ -670,7 +670,7 @@ export class ChairmanController {
     @Param('id') id: string,
     @Request() req: any,
   ) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
 
     return this.knowledgeService.archiveKnowledge(company.id, id);
@@ -680,7 +680,7 @@ export class ChairmanController {
 
   @Get('training-configurations')
   async getTrainingConfigurations(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
     return this.prisma.trainingConfiguration.findMany({ where: { companyId: company.id } });
   }
@@ -689,7 +689,7 @@ export class ChairmanController {
 
   @Get('training-runs')
   async getTrainingRuns(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
     return this.prisma.trainingRun.findMany({ where: { companyId: company.id }, include: { configuration: true, attempts: true } });
   }
@@ -698,7 +698,7 @@ export class ChairmanController {
 
   @Get('training-metrics')
   async getTrainingMetrics(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
     return this.prisma.trainingMetric.findMany({
       where: {
@@ -715,7 +715,7 @@ export class ChairmanController {
 
   @Get('training-checkpoints')
   async getTrainingCheckpoints(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
     return this.prisma.trainingCheckpoint.findMany({
       where: {
@@ -732,7 +732,7 @@ export class ChairmanController {
 
   @Get('artifacts')
   async getArtifacts(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
     return this.prisma.modelArtifact.findMany({
       where: {
@@ -745,7 +745,7 @@ export class ChairmanController {
 
   @Get('candidate-models')
   async getCandidateModels(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user.actorId);
+    await this.requireChairman(req.user.actorId);
     const company = await this.getCompanyForChairman(req);
     return this.prisma.modelVersion.findMany({
       where: { companyId: company.id }
@@ -806,14 +806,14 @@ export class ChairmanController {
 
   @Get('operating-loop/cycles')
   async getOodaCycles(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user?.chairmanId);
+    await this.requireChairman(req.user?.chairmanId);
     const company = await this.getCompanyForChairman(req);
     return this.operatingLoop.listCycles(company.id);
   }
 
   @Get('operating-loop/pending')
   async getOodaPending(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user?.chairmanId);
+    await this.requireChairman(req.user?.chairmanId);
     const company = await this.getCompanyForChairman(req);
     return this.operatingLoop.getPendingApprovals(company.id);
   }
@@ -833,14 +833,14 @@ export class ChairmanController {
 
   @Post('operating-loop/trigger')
   async triggerOoda(@Request() req: any, @Body() body: { trigger?: string }) {
-    const chairman = await this.requireChairman(req.user?.chairmanId);
+    await this.requireChairman(req.user?.chairmanId);
     const company = await this.getCompanyForChairman(req);
     return this.operatingLoop.runFullCycle(company.id, body.trigger || 'chairman_manual');
   }
 
   @Get('agent-performance')
   async getAgentPerformance(@Request() req: any) {
-    const chairman = await this.requireChairman(req.user?.chairmanId);
+    await this.requireChairman(req.user?.chairmanId);
     const company = await this.getCompanyForChairman(req);
     return this.perfAgg.getCompanyPerformance(company.id);
   }

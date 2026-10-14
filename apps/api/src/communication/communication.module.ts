@@ -3,7 +3,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CommunicationService } from './communication.service';
 import { MessageService } from './message.service';
 import { ConversationService } from './conversation.service';
-import { PrismaModule } from '../prisma/prisma.module';
 import { MeetingService } from './meeting.service';
 import { NotificationService } from './notification.service';
 import { RelationshipService } from './relationship.service';

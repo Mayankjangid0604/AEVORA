@@ -31,8 +31,8 @@ describe('Enterprise Brain HTTP & Tenant Isolation (V16 Slice 1)', () => {
       }
       return null; // Denied / Not found
     }),
-    getDetectedConflicts: jest.fn(async (companyId: string) => []),
-    evaluateSignificance: jest.fn(async (companyId: string, body: any) => ({
+    getDetectedConflicts: jest.fn(async (_companyId: string) => []),
+    evaluateSignificance: jest.fn(async (_companyId: string, _body: any) => ({
       score: 80,
       tier: 'CRITICAL',
       escalateToChairman: true,

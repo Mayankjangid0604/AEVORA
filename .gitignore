@@ -30,6 +30,9 @@ __pycache__/
 apps/api/.data/
 playwright-report/
 test-results/
+lint-results.json
+parsed-errors.json
+*-results.json
 .turbo/
 */.turbo/
 packages/*/.turbo/

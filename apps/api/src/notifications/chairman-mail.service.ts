@@ -154,12 +154,16 @@ export class ChairmanMailService implements OnModuleInit, OnModuleDestroy {
       const who = d.inbound?.lead?.name ?? 'the client';
       if (/^\s*ignore\b/i.test(text)) { await this.inbound.ignore(companyId, d.messageId); return `Ignored. Nothing was sent to ${who}.`; }
       const own = text.match(/^\s*reply\s*[:\-]\s*([\s\S]+)$/i);
-      if (own) { await this.inbound.sendReply(companyId, d.messageId, own[1].trim()); return `Sent your reply to ${who}:\n"${own[1].trim()}"`; }
+      // Emailed commands are not an authenticated approval (mail can be spoofed): they only queue a draft for the Inbox.
+      if (own) {
+        return this.inbound.sendReply(companyId, d.messageId, own[1].trim())
+          .then(() => `Sent your reply to ${who}:\n"${own[1].trim()}"`, (e) => `Not sent: ${e.message}. Approve it in the AEVORA Inbox.`);
+      }
       if (/^\s*(send|yes|approve|go ahead)\b/i.test(text)) {
         const draft = d.inbound?.draftReply;
         if (!draft) return 'There is no drafted answer for this message. Reply with "REPLY: <your text>" and I will send it.';
-        await this.inbound.sendReply(companyId, d.messageId, draft);
-        return `Sent the drafted answer to ${who}.`;
+        return this.inbound.sendReply(companyId, d.messageId, draft)
+          .then(() => `Sent the drafted answer to ${who}.`, (e) => `Not sent: ${e.message}. Approve it in the AEVORA Inbox.`);
       }
     }
 

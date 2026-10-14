@@ -1,9 +1,8 @@
-import { Injectable, Logger, ForbiddenException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ExternalActionRequest,
   GatewayRiskTier,
-  ActionTarget,
 } from './external-action-gateway.types';
 import { CeoFinancialAuthorityService } from '../ceo/ceo-financial-authority.service';
 import { CeoFinancialOperation } from '@prisma/client';
@@ -229,7 +228,7 @@ export class GatewayAuthorityValidatorService {
     }
 
     // 5. FINANCIAL AUTHORITY VERIFICATION (IF FINANCIAL EXPOSURE > 0)
-    let singleLimit = 100000; // default baseline limit (100k AC)
+    const singleLimit = 100000; // default baseline limit (100k AC)
     if (financialExposure > 0) {
       const operation: CeoFinancialOperation = this.mapActionToFinancialOperation(actionType);
 

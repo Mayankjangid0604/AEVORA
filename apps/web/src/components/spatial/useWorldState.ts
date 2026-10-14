@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useMemo, useState, useEffect, useSyncExternalStore } from 'react';
 import {
   WorldStateConsumer,
   ConnectionState,
@@ -24,42 +24,93 @@ export interface UseWorldStateReturn {
   errorMessage: string | null;
 }
 
+interface WorldStateSnapshot {
+  connectionState: ConnectionState;
+  sequence: number;
+  entities: Map<V12EntityId, WorldEntity>;
+  errorMessage: string | null;
+}
+
 /**
- * React hook binding the authoritative WorldStateConsumer to React state.
- * Consumes the initial server-provided snapshot immediately and establishes
- * an authenticated SSE stream using ephemeral 60s stream-tokens via the BFF.
+ * External store orchestrating WorldStateConsumer lifecycle and React subscriptions.
+ * Adheres to React 18/19 subscription and snapshot requirements via useSyncExternalStore.
  */
-export function useWorldState({ companyId, initialSnapshot }: UseWorldStateOptions): UseWorldStateReturn {
-  const [connectionState, setConnectionState] = useState<ConnectionState>(
-    initialSnapshot ? ConnectionState.SYNCHRONIZED : ConnectionState.INITIALIZING
-  );
-  const [sequence, setSequence] = useState<number>(initialSnapshot?.sequence ?? 0);
-  const [entities, setEntities] = useState<Map<V12EntityId, WorldEntity>>(() => {
-    const map = new Map<V12EntityId, WorldEntity>();
+class WorldStateStore {
+  private companyId: string;
+  private initialSnapshot?: WorldSnapshot | null;
+  private listeners = new Set<() => void>();
+  private snapshot: WorldStateSnapshot;
+  private consumer: WorldStateConsumer | null = null;
+  private isConnecting = false;
+  private isDisposed = false;
+
+  constructor(companyId: string, initialSnapshot?: WorldSnapshot | null) {
+    this.companyId = companyId;
+    this.initialSnapshot = initialSnapshot;
+
+    const initialMap = new Map<V12EntityId, WorldEntity>();
     if (initialSnapshot?.entities) {
       for (const [id, entity] of Object.entries(initialSnapshot.entities)) {
-        map.set(id, entity);
+        initialMap.set(id, entity);
       }
     }
-    return map;
-  });
-  const [selectedEntity, setSelectedEntity] = useState<WorldEntity | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const consumerRef = useRef<WorldStateConsumer | null>(null);
+    this.snapshot = {
+      connectionState: initialSnapshot ? ConnectionState.SYNCHRONIZED : ConnectionState.INITIALIZING,
+      sequence: initialSnapshot?.sequence ?? 0,
+      entities: initialMap,
+      errorMessage: null,
+    };
+  }
 
-  const initConsumer = useCallback(async () => {
-    if (!companyId) return;
+  public getSnapshot = (): WorldStateSnapshot => {
+    return this.snapshot;
+  };
 
+  private update(partial: Partial<WorldStateSnapshot>) {
+    this.snapshot = {
+      ...this.snapshot,
+      ...partial,
+    };
+    for (const listener of this.listeners) {
+      listener();
+    }
+  }
+
+  public subscribe = (listener: () => void): (() => void) => {
+    this.isDisposed = false;
+    this.listeners.add(listener);
+
+    if (this.listeners.size === 1 && !this.consumer && !this.isConnecting) {
+      this.initConsumer();
+    }
+
+    return () => {
+      this.listeners.delete(listener);
+      if (this.listeners.size === 0) {
+        if (this.consumer) {
+          this.consumer.disconnect();
+          this.consumer = null;
+        }
+      }
+    };
+  };
+
+  public reconnect = async (): Promise<void> => {
+    await this.initConsumer();
+  };
+
+  private async initConsumer(): Promise<void> {
+    if (!this.companyId) return;
+
+    this.isConnecting = true;
     try {
-      setErrorMessage(null);
-
       // Fetch stream token and API base URL via BFF
       const tokenRes = await fetch('/api/bff/stream-token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-aevora-company': companyId,
+          'x-aevora-company': this.companyId,
         },
       });
 
@@ -70,10 +121,15 @@ export function useWorldState({ companyId, initialSnapshot }: UseWorldStateOptio
       const tokenData = await tokenRes.json();
       const apiBaseUrl = tokenData.apiBaseUrl || 'http://localhost:13000';
 
+      if (this.isDisposed) return;
+
       // Clean up any existing consumer instance
-      if (consumerRef.current) {
-        consumerRef.current.disconnect();
+      if (this.consumer) {
+        this.consumer.disconnect();
+        this.consumer = null;
       }
+
+      const companyId = this.companyId;
 
       // Configure WorldStateConsumer with BFF-backed snapshot fetch and stream token provider
       const consumer = new WorldStateConsumer({
@@ -112,54 +168,92 @@ export function useWorldState({ companyId, initialSnapshot }: UseWorldStateOptio
       });
 
       // Synchronize internal consumer entity map with initial snapshot if present
-      if (initialSnapshot?.entities) {
+      if (this.initialSnapshot?.entities) {
         const consumerEntities = consumer.getEntities();
-        for (const [id, entity] of Object.entries(initialSnapshot.entities)) {
+        for (const [id, entity] of Object.entries(this.initialSnapshot.entities)) {
           consumerEntities.set(id, entity);
         }
       }
 
       consumer.onStateChange((state) => {
-        setConnectionState(state);
-        setSequence(consumer.getSequence());
+        if (this.isDisposed) return;
+        this.update({
+          connectionState: state,
+          sequence: consumer.getSequence(),
+          errorMessage: null,
+        });
       });
 
-      consumer.onEntityUpdated((_entity) => {
-        setEntities(new Map(consumer.getEntities()));
-        setSequence(consumer.getSequence());
+      consumer.onEntityUpdated(() => {
+        if (this.isDisposed) return;
+        this.update({
+          entities: new Map(consumer.getEntities()),
+          sequence: consumer.getSequence(),
+        });
       });
 
-      consumer.onEntityRemoved((_id) => {
-        setEntities(new Map(consumer.getEntities()));
-        setSequence(consumer.getSequence());
+      consumer.onEntityRemoved(() => {
+        if (this.isDisposed) return;
+        this.update({
+          entities: new Map(consumer.getEntities()),
+          sequence: consumer.getSequence(),
+        });
       });
 
-      consumerRef.current = consumer;
+      this.consumer = consumer;
+      this.isConnecting = false;
+      this.update({ errorMessage: null });
+
       await consumer.connect();
-    } catch (err: any) {
-      setConnectionState(ConnectionState.ERROR);
-      setErrorMessage(err.message || 'Connection failed');
+    } catch (err: unknown) {
+      if (this.isDisposed) return;
+      this.isConnecting = false;
+      this.update({
+        connectionState: ConnectionState.ERROR,
+        errorMessage: err instanceof Error ? err.message : 'Connection failed',
+      });
     }
-  }, [companyId, initialSnapshot]);
+  }
+
+  public dispose(): void {
+    this.isDisposed = true;
+    if (this.consumer) {
+      this.consumer.disconnect();
+      this.consumer = null;
+    }
+    this.listeners.clear();
+  }
+}
+
+/**
+ * React hook binding the authoritative WorldStateConsumer to React state.
+ * Uses an external store subscription pattern via useSyncExternalStore to avoid
+ * synchronous cascading renders within effects and maintain concurrency safety.
+ */
+export function useWorldState({ companyId, initialSnapshot }: UseWorldStateOptions): UseWorldStateReturn {
+  const store = useMemo(() => new WorldStateStore(companyId, initialSnapshot), [companyId, initialSnapshot]);
 
   useEffect(() => {
-    initConsumer();
-
     return () => {
-      if (consumerRef.current) {
-        consumerRef.current.disconnect();
-        consumerRef.current = null;
-      }
+      store.dispose();
     };
-  }, [initConsumer]);
+  }, [store]);
+
+  const snapshot = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getSnapshot
+  );
+
+  const [selectedEntity, setSelectedEntity] = useState<WorldEntity | null>(null);
 
   return {
-    connectionState,
-    sequence,
-    entities,
+    connectionState: snapshot.connectionState,
+    sequence: snapshot.sequence,
+    entities: snapshot.entities,
     selectedEntity,
     setSelectedEntity,
-    reconnect: initConsumer,
-    errorMessage,
+    reconnect: store.reconnect,
+    errorMessage: snapshot.errorMessage,
   };
 }

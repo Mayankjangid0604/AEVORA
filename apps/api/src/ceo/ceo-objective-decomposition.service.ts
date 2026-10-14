@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TaskService } from '../task/task.service';
 import {
@@ -6,7 +6,7 @@ import {
   ObjectiveLineageResult,
   ObjectiveTraceNode,
 } from './ceo-core.types';
-import { ObjectivePriority, ObjectiveStatus, StrategicInitiativeStatus } from '@prisma/client';
+import { ObjectiveStatus, StrategicInitiativeStatus } from '@prisma/client';
 
 @Injectable()
 export class CeoObjectiveDecompositionService {
@@ -152,7 +152,6 @@ export class CeoObjectiveDecompositionService {
 
     // 2. Initiative Level (StrategicInitiative or Project)
     let departmentObjectiveId: string | null = null;
-    let initiativeTitle = 'Direct Operational Assignment';
 
     if (task.departmentId) {
       const init = await this.prisma.strategicInitiative.findFirst({
@@ -160,7 +159,6 @@ export class CeoObjectiveDecompositionService {
         orderBy: { createdAt: 'desc' },
       });
       if (init) {
-        initiativeTitle = init.title;
         departmentObjectiveId = init.objectiveId;
         chain.push({
           level: 'INITIATIVE',

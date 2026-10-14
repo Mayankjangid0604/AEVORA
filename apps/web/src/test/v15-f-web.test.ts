@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { WorldStateConsumer, ConnectionState, type WorldEntity, type WorldSnapshot, V12EntityType } from '@aevora/shared';
+import { type WorldEntity, V12EntityType } from '@aevora/shared';
 
 describe('V15-F Web Test Suite: Matrix Points X, AB, AE', () => {
   describe('Test X: WebGL Fallback Detection & Graceful Degradation', () => {
-    function isWebGLAvailable(mockCanvasContext: any): boolean {
+    function isWebGLAvailable(mockCanvasContext: unknown): boolean {
       try {
         if (!mockCanvasContext) return false;
         return Boolean(mockCanvasContext);

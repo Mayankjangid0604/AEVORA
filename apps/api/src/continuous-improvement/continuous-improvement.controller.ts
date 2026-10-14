@@ -4,6 +4,7 @@ import { AntiEntropyEngineService } from './anti-entropy-engine.service';
 import { AuthorizationService } from '../authorization/authorization.service';
 import { RolesGuard } from '../authorization/roles.guard';
 import { Roles } from '../authorization/roles.decorator';
+import { AuthorityTier } from '../governance/authority-context.types';
 
 @UseGuards(RolesGuard)
 @Controller('continuous-improvement')
@@ -63,13 +64,11 @@ export class ContinuousImprovementController {
   @Post('proposals/:id/approve')
   async approveProposal(@Param('id') id: string, @Body() body: any, @Request() req) {
     await this.authz.assertResourceAccess(req.user, 'improvementProposal', id);
-    if (body?.approverTier !== undefined || body?.authorityProofId !== undefined) {
-      return this.ciService.approveProposal(id, req.user.actorId, {
-        approverTier: body?.approverTier,
-        authorityProofId: body?.authorityProofId,
-      });
-    }
-    return this.ciService.approveProposal(id, req.user.actorId);
+    const approverTier = req.user?.actorRole === 'CHAIRMAN' ? AuthorityTier.CHAIRMAN : AuthorityTier.EPHEMERAL_DELEGATE;
+    return this.ciService.approveProposal(id, req.user.actorId, {
+      approverTier,
+      authorityProofId: body?.authorityProofId,
+    });
   }
 
   @Roles('CHAIRMAN', 'MANAGEMENT')
@@ -79,10 +78,45 @@ export class ContinuousImprovementController {
     return this.ciService.rejectProposal(id, req.user.actorId, body?.reason);
   }
 
+  @Get('company/:companyId/rank')
+  async rankOpportunities(
+    @Param('companyId') companyId: string,
+    @Request() req,
+  ) {
+    await this.authz.assertCompanyAccess(req.user, companyId);
+    return this.ciService.rankImprovementOpportunities(companyId);
+  }
+
+  @Get('company/:companyId/oscillation/:entity')
+  async checkOscillation(
+    @Param('companyId') companyId: string,
+    @Param('entity') entity: string,
+    @Request() req,
+  ) {
+    await this.authz.assertCompanyAccess(req.user, companyId);
+    return this.ciService.detectOscillation(companyId, entity);
+  }
+
+  @Post('company/:companyId/cycle')
+  async runImprovementCycle(
+    @Param('companyId') companyId: string,
+    @Body() body: any,
+    @Request() req,
+  ) {
+    await this.authz.assertCompanyAccess(req.user, companyId);
+    return this.ciService.runGovernedSelfImprovementCycle(companyId, req.user.actorId, body);
+  }
+
   @Post('proposals/:id/execute')
   async executeProposal(@Param('id') id: string, @Body() body: any, @Request() req) {
     await this.authz.assertResourceAccess(req.user, 'improvementProposal', id);
-    return this.ciService.executeProposal(id, body?.companyId);
+    const actorTier = req.user?.actorRole === 'CHAIRMAN' ? AuthorityTier.CHAIRMAN : AuthorityTier.WORKFORCE_AGENT;
+    return this.ciService.executeProposal(id, body?.companyId, {
+      ...body,
+      actorId: req.user?.actorId,
+      actorRole: req.user?.actorRole,
+      actorTier,
+    });
   }
 
   @Post('proposals/:id/validate')

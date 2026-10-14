@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { Subject } from 'rxjs';
 import { EnterpriseBrainService } from './enterprise-brain.service';
-import { ConflictResolutionEngine, SOURCE_OF_TRUTH_HIERARCHY } from './conflict-resolution.engine';
+import { ConflictResolutionEngine } from './conflict-resolution.engine';
 import { RelationshipGraphBuilder } from './relationship-graph.builder';
 import { SignificanceFilterService } from './significance-filter.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,7 +11,7 @@ import { SalesPipelineService } from '../sales/sales-pipeline.service';
 describe('AEVORA V16 Slice 1 — Enterprise Brain Foundation', () => {
   let brainService: EnterpriseBrainService;
   let conflictEngine: ConflictResolutionEngine;
-  let graphBuilder: RelationshipGraphBuilder;
+  let _graphBuilder: RelationshipGraphBuilder;
   let significanceFilter: SignificanceFilterService;
   let mockPrisma: any;
   let mockCompanyState: any;
@@ -93,7 +93,7 @@ describe('AEVORA V16 Slice 1 — Enterprise Brain Foundation', () => {
 
     brainService = module.get<EnterpriseBrainService>(EnterpriseBrainService);
     conflictEngine = module.get<ConflictResolutionEngine>(ConflictResolutionEngine);
-    graphBuilder = module.get<RelationshipGraphBuilder>(RelationshipGraphBuilder);
+    _graphBuilder = module.get<RelationshipGraphBuilder>(RelationshipGraphBuilder);
     significanceFilter = module.get<SignificanceFilterService>(SignificanceFilterService);
 
     brainService.onModuleInit();

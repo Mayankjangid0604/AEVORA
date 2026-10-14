@@ -6,10 +6,11 @@ import { LocalTestResearchProvider } from './providers/local-test-research.provi
 import { ExternalSearchProvider } from './providers/external-search.provider';
 import { ResearchIntegrationService } from './research-integration.service';
 import { IntegrationController } from './integration.controller';
+import { UnsubscribeController } from './unsubscribe.controller';
 
 @Module({
   providers: [IntegrationService, SandboxEmailProvider, ProductionEmailProvider, LocalTestResearchProvider, ExternalSearchProvider, ResearchIntegrationService],
-  controllers: [IntegrationController],
+  controllers: [IntegrationController, UnsubscribeController],
   exports: [IntegrationService, ResearchIntegrationService],
 })
 export class IntegrationModule {}

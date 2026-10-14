@@ -11,6 +11,8 @@ export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const hasSession = req.cookies.has(SESSION_COOKIE);
 
+  // Public customer request form: no session involved (it talks only to /api/public/*).
+  if (pathname === '/request') return NextResponse.next();
   if (pathname === '/login') {
     if (hasSession && req.nextUrl.searchParams.get('reason') !== 'expired') return NextResponse.redirect(new URL(safeNextPath(req.nextUrl.searchParams.get('next')), req.url));
     return NextResponse.next();

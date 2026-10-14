@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WorkforceAuditService } from './workforce-audit.service';
 import { WorkerProfileService } from './worker-profile.service';
 import { ApprovalValidationService } from '../approval/approval-validation.service';
-import { HqCapacityService } from '../v12-spatial/hq-capacity.service';
+import { HqCapacityService } from '../spatial/hq-capacity.service';
 import {
   WorkerType, HiringRequestStatus, EmployeeStatus, ExecutionEnvironment,
 } from '@prisma/client';
@@ -297,7 +297,7 @@ export class HiringService {
         // Critical V15-C failure isolation invariant:
         // Spatial reconciliation failure must NEVER rollback or fail the authoritative employee transaction
         this.logger.warn(
-          `[V15-C Failure Isolation] Spatial capacity reconciliation failed after provisioning ${provisionedEmployees.length} employees for department ${dept.id}: ${spatialErr?.message}`,
+          `[Spatial Capacity Failure Isolation] Spatial capacity reconciliation failed after provisioning ${provisionedEmployees.length} employees for department ${dept.id}: ${spatialErr?.message}`,
         );
       }
     }

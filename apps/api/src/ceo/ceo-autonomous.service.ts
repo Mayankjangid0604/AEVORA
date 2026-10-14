@@ -1,11 +1,10 @@
 import { Injectable, Logger, ForbiddenException, NotFoundException, BadRequestException, Inject, forwardRef, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CeoDecisionCategory, CeoDecisionRiskLevel, CeoDecisionConfidence, CeoDecisionApprovalStatus, CeoDecisionExecutionStatus } from '@prisma/client';
+import { CeoDecisionCategory, CeoDecisionRiskLevel, CeoDecisionConfidence } from '@prisma/client';
 import { TaskService } from '../task/task.service';
 import { TaskOrchestratorService } from '../task/task-orchestrator.service';
 import { WorkerRegistryService } from '../workforce/worker-registry.service';
 import { ModelGateway, ModelTier } from '@aevora/model-gateway';
-import { GoalStatus, TaskStatus } from '@prisma/client';
 import { chairmanMailer } from '../notifications/chairman-mailer';
 import { CeoContextAssemblyService } from './ceo-context-assembly.service';
 import { CeoProactiveDetectionService } from './ceo-proactive-detection.service';
@@ -743,7 +742,7 @@ export class CeoAutonomousService {
      });
   }
 
-  async approveDecision(companyId: string, decisionId: string, chairmanId: string) {
+  async approveDecision(companyId: string, decisionId: string, _chairmanId: string) {
       const decision = await this.prisma.ceoAutonomousDecision.findUnique({
          where: { id: decisionId, companyId }
       });
@@ -759,7 +758,7 @@ export class CeoAutonomousService {
       return this.executeDecision(decisionId, true);
   }
   
-  async rejectDecision(companyId: string, decisionId: string, chairmanId: string) {
+  async rejectDecision(companyId: string, decisionId: string, _chairmanId: string) {
       const decision = await this.prisma.ceoAutonomousDecision.findUnique({
          where: { id: decisionId, companyId }
       });
@@ -1047,7 +1046,7 @@ Examples:
     retryCount: number;
     departmentId?: string | null;
   }) {
-    const { taskId, companyId, failureType, errorMessage, retryCount, departmentId } = options;
+    const { taskId, companyId, failureType, retryCount, departmentId } = options;
 
     let classification:
       | 'ISOLATED_EXECUTION_FAILURE'

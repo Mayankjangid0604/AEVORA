@@ -55,6 +55,7 @@ export enum IntegrityFindingType {
   SIMULATION_LEAKAGE = 'SIMULATION_LEAKAGE',
   V15_SPATIAL_CONTRADICTION = 'V15_SPATIAL_CONTRADICTION',
   ORPHAN_CHILD_STATE = 'ORPHAN_CHILD_STATE',
+  FORECAST_DISCREPANCY = 'FORECAST_DISCREPANCY',
 }
 
 export enum HealthTier {
@@ -159,4 +160,107 @@ export interface ReplanningEvaluationResult {
   reason?: string;
   planChangeRecordId?: string;
   modifications?: any[];
+}
+
+export enum ScenarioBranchType {
+  PROPOSED = 'PROPOSED',
+  ALTERNATIVE = 'ALTERNATIVE',
+  NO_ACTION = 'NO_ACTION',
+}
+
+export interface ScenarioBranchOutcome {
+  branch: ScenarioBranchType;
+  description: string;
+  projectedStates: any[];
+  consequenceAnalysis: any;
+  confidenceScore: number;
+  financialImpact: {
+    estimatedSpend: number;
+    estimatedRevenueGain: number;
+    runwayImpactMonths: number;
+    cashAfterAction: number;
+  };
+  operationalImpact: {
+    workforceSaturationDeltaPct: number;
+    deliveryMilestoneRisk: string;
+    incidentRiskLevel: string;
+    spatialDeskUtilizationDeltaPct?: number;
+    marketingLeadLoadDeltaPct?: number;
+    pricingMarginImpactPct?: number;
+  };
+  strategicScore: number;
+  uncertaintyFactor: number;
+}
+
+export interface CancelScenarioDto {
+  companyId: string;
+  scenarioId: string;
+  cancelledBy: string;
+  reason: string;
+}
+
+export interface ReconcileScenarioOutcomesDto {
+  companyId: string;
+  scenarioId: string;
+  reconciledBy: string;
+  actualMetrics: {
+    financialSpend?: number;
+    revenueGain?: number;
+    profitMarginChange?: number;
+    timelineVarianceDays?: number;
+    kpiMovements?: Record<string, number>;
+    incidentOccurred?: boolean;
+    observedRisks?: string[];
+    [key: string]: any;
+  };
+}
+
+export interface ScenarioReconciliationResult {
+  scenarioId: string;
+  companyId: string;
+  status: string;
+  reconciledAt: Date;
+  reconciledBy: string;
+  variances: {
+    metric: string;
+    predicted: number;
+    actual: number;
+    absoluteVariance: number;
+    variancePercentage: number;
+    directionalAccuracy: boolean;
+  }[];
+  overallForecastAccuracyPct: number;
+  overallDirectionalAccuracyPct?: number;
+  forecastBias: 'OVER_OPTIMISTIC' | 'OVER_PESSIMISTIC' | 'NEUTRAL' | 'ACCURATE';
+  integrityFindingId?: string;
+  discrepancyFlagged: boolean;
+  calibrationNote: string;
+}
+
+export interface ExecutiveDecisionBrief {
+  scenarioId: string;
+  scenarioName: string;
+  companyId: string;
+  generatedAt: Date;
+  modelRulesVersion: string;
+  inputHash: string;
+  realityBoundaryDisclaimer: string;
+  advisoryGovernanceNotice: string;
+  executiveSummary: string;
+  branchComparisons: Record<ScenarioBranchType, ScenarioBranchOutcome>;
+  comparativeMatrix: {
+    dimension: string;
+    proposed: string | number;
+    alternative: string | number;
+    noAction: string | number;
+    recommendationAdvantage: string;
+  }[];
+  criticalAssumptions: string[];
+  downstreamDependencies: string[];
+  governanceRecommendation: {
+    recommendedBranch: ScenarioBranchType;
+    rationale: string;
+    requiredApprovals: string[];
+    constitutionalBoundaryCheck: string;
+  };
 }

@@ -24,14 +24,12 @@ import {
   AttemptFailureType,
   EpistemicCertainty,
   EvidenceNature,
-  EvidenceVerificationStatus,
   OutcomeVerificationStatus,
   ImprovementStatus,
   TaskStatus,
 } from '@prisma/client';
 import {
   AuthorityTier,
-  AuthorityGrantStatus,
   CeoDecisionRiskLevel,
 } from '../governance/authority-context.types';
 import {
@@ -44,7 +42,6 @@ import {
   RemediationTier,
 } from '../continuous-improvement/continuous-improvement.types';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import * as crypto from 'crypto';
 
 describe('AEVORA V17 — Phase 8: Full End-to-End Validation & Final Release Gate', () => {
   let taskExecutionService: TaskExecutionService;
@@ -53,10 +50,10 @@ describe('AEVORA V17 — Phase 8: Full End-to-End Validation & Final Release Gat
   let evidenceService: EvidenceVerificationService;
   let authorityService: GovernedAuthorityService;
   let workerAssignment: WorkerAssignmentService;
-  let deptService: DepartmentLeaderAutonomousService;
+  let _deptService: DepartmentLeaderAutonomousService;
   let stateService: CanonicalEnterpriseStateService;
-  let conflictService: EnterpriseConflictIntegrityService;
-  let digitalTwin: DigitalTwinScenarioService;
+  let _conflictService: EnterpriseConflictIntegrityService;
+  let _digitalTwin: DigitalTwinScenarioService;
   let ciService: ContinuousImprovementService;
   let entropyEngine: AntiEntropyEngineService;
   let lessonExtractor: LessonPatternExtractionService;
@@ -764,10 +761,10 @@ describe('AEVORA V17 — Phase 8: Full End-to-End Validation & Final Release Gat
     evidenceService = module.get<EvidenceVerificationService>(EvidenceVerificationService);
     authorityService = module.get<GovernedAuthorityService>(GovernedAuthorityService);
     workerAssignment = module.get<WorkerAssignmentService>(WorkerAssignmentService);
-    deptService = module.get<DepartmentLeaderAutonomousService>(DepartmentLeaderAutonomousService);
+    _deptService = module.get<DepartmentLeaderAutonomousService>(DepartmentLeaderAutonomousService);
     stateService = module.get<CanonicalEnterpriseStateService>(CanonicalEnterpriseStateService);
-    conflictService = module.get<EnterpriseConflictIntegrityService>(EnterpriseConflictIntegrityService);
-    digitalTwin = module.get<DigitalTwinScenarioService>(DigitalTwinScenarioService);
+    _conflictService = module.get<EnterpriseConflictIntegrityService>(EnterpriseConflictIntegrityService);
+    _digitalTwin = module.get<DigitalTwinScenarioService>(DigitalTwinScenarioService);
     ciService = module.get<ContinuousImprovementService>(ContinuousImprovementService);
     entropyEngine = module.get<AntiEntropyEngineService>(AntiEntropyEngineService);
     lessonExtractor = module.get<LessonPatternExtractionService>(LessonPatternExtractionService);
@@ -1090,10 +1087,10 @@ describe('AEVORA V17 — Phase 8: Full End-to-End Validation & Final Release Gat
     expect(claimed.claimLockToken).toBe(token);
 
     // 2. DAG Failure Isolation: Sibling independent tasks continue when one branch fails
-    const parentTask = await prisma.task.create({
+    await prisma.task.create({
       data: { companyId: compA, title: 'Parent Pipeline', status: TaskStatus.COMPLETED },
     });
-    const failingBranch = await prisma.task.create({
+    await prisma.task.create({
       data: { companyId: compA, title: 'Failing Branch', status: TaskStatus.CANCELLED },
     });
     const independentBranch = await prisma.task.create({

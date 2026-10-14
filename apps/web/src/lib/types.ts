@@ -232,3 +232,127 @@ export interface ChairmanMailView { id: string; ref: string; event: string; cate
 
 /** GET /agents — Agent record; configuration (provider/model/system instructions) and budget dropped. */
 export interface AgentView { id: string; employeeId: string; status: string; autonomyLevel: string; createdAt: string }
+
+/** V24 Offer Market — Offer View */
+export interface OfferView {
+  id: string;
+  companyId: string;
+  name: string;
+  description: string;
+  status: string;
+  creatorRole: string;
+  version: number;
+  termsVersion: number;
+  originalPrice: number;
+  discountType: string;
+  discountValue: number;
+  finalPrice: number;
+  currency: string;
+  validFrom: string;
+  validUntil: string;
+  maxRedemptions: number | null;
+  currentRedemptions: number;
+  targetAudience: string;
+  termsAndConditions: string;
+  isChairmanGated: boolean;
+  requiresChairmanApproval: boolean;
+  hasApproval: boolean;
+  approvalId?: string;
+  approvedBy?: string;
+  parametersHash?: string;
+  rejectionReason?: string;
+  suspensionReason?: string;
+  termsHistory?: Array<{ version: number; terms: string; changedAt: string; changedBy: string; changeReason?: string }>;
+  financialAnalysis?: OfferFinancialAnalysisView;
+  ceoEvaluation?: OfferCeoEvaluationView;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OfferFinancialAnalysisView {
+  expectedRevenue: number;
+  baselineRevenue: number;
+  incrementalRevenue: number;
+  discountCost: number;
+  grossProfit: number;
+  contributionProfit: number;
+  postDiscountMarginPct: number;
+  marginErosionPct: number;
+  breakEvenVolume: number;
+  cannibalizationRisk: { percentage: number; estimatedRevenueLoss: number; severity: string };
+  scenarios: {
+    bestCase: { volume: number; revenue: number; grossProfit: number; contributionProfit: number };
+    expectedCase: { volume: number; revenue: number; grossProfit: number; contributionProfit: number };
+    worstCase: { volume: number; revenue: number; grossProfit: number; contributionProfit: number };
+  };
+  hasSufficientEvidence: boolean;
+  overallConfidence: number;
+  missingDataItems: string[];
+  guardrailViolations: string[];
+}
+
+export interface OfferCeoEvaluationView {
+  verdict: 'APPROVE' | 'REVISE' | 'REJECT' | 'FURTHER_ANALYSIS_REQUIRED';
+  scores: {
+    profitabilityScore: number;
+    strategicValueScore: number;
+    riskScore: number;
+    customerImpactScore: number;
+    operationalFeasibilityScore: number;
+    compositeScore: number;
+  };
+  explanation: {
+    executiveSummary: string;
+    evidenceSummary: string;
+    tradeOffAnalysis: string;
+    riskEscalationTriggers: string[];
+  };
+  escalationRequired: boolean;
+  escalationReason?: string;
+  advisoryDisclaimer: string;
+}
+
+export interface OfferMeasurementView {
+  offerId: string;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  redemptions: number;
+  conversionRatePct: number;
+  totalGrossRevenue: number;
+  totalDiscountCost: number;
+  totalNetRevenue: number;
+  totalContributionProfit: number;
+  forecastVariance: {
+    predictedRedemptions: number;
+    actualRedemptions: number;
+    varianceRedemptionsPct: number;
+    predictedRevenue: number;
+    actualRevenue: number;
+    varianceRevenuePct: number;
+    isSignificantDrift: boolean;
+  };
+  causalConfidenceDisclaimer: string;
+}
+
+export interface OfferOptimizationView {
+  offerId: string;
+  action: string;
+  confidenceScore: number;
+  rationale: string;
+  evidencePoints: string[];
+  requiresChairmanApproval: boolean;
+}
+
+/** Gate 4A operator request queue (operator-only fields; never served on public routes). */
+export interface InquiryView {
+  id: string; reference: string | null; status: string; title: string; description: string;
+  businessName: string | null; contactName: string | null; contactEmail: string | null; contactPhone: string | null;
+  service: string | null; source: string | null; notes: string | null; receivedAt: string; updatedAt: string;
+}
+
+/** Gate 4A background-job controls (no payload is forwarded). */
+export interface JobView {
+  id: string; type: string; status: string; attempts: number; maxAttempts: number;
+  lastError: string | null; createdAt: string; updatedAt: string; completedAt: string | null;
+}

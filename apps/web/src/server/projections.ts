@@ -3,7 +3,7 @@
  * (e.g. Employee.salary, identitySeed, performance scores). Only the listed fields ever reach the browser.
  * A projection returning `undefined` means "not found" (the BFF answers 404).
  */
-import type { AgentView, AssistantMessageView, ChairmanMailView, OperatingCycleView, ContentPostView, LeadGenRunView, SalesLeadView, CeoFeedItem, CeoQuestionView, ManagementDecision, OperationalAlert, TaskDetail, TaskSummary, AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance } from '@/lib/types';
+import type { AgentView, AssistantMessageView, ChairmanMailView, OperatingCycleView, ContentPostView, LeadGenRunView, SalesLeadView, CeoFeedItem, CeoQuestionView, ManagementDecision, OperationalAlert, TaskDetail, TaskSummary, AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance, OfferView, OfferMeasurementView, OfferOptimizationView, InquiryView, JobView } from '@/lib/types';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -271,6 +271,26 @@ function agents(v: unknown): AgentView[] {
 /** companyId = the explicit company context of the request (for context-ownership checks). */
 export type Projection = (body: unknown, companyId?: string) => unknown;
 
+// Gate 4A operator queue. Inquiry rows come from a tenant-scoped endpoint; the projection also drops other tenants'
+// rows defensively (none carry companyId, so it is enforced by the backend select) and keeps only operator fields.
+const INQUIRY_STATUSES = ['NEW', 'UNDER_REVIEW', 'QUALIFIED', 'REJECTED', 'CONVERTED'];
+function inquiry(v: unknown): InquiryView | undefined {
+  if (!isObj(v) || !str(v.id) || !INQUIRY_STATUSES.includes(str(v.status) ?? '')) return undefined;
+  return {
+    id: v.id as string, reference: str(v.publicRef), status: v.status as string, title: str(v.title) ?? '',
+    description: str(v.description) ?? '', businessName: str(v.businessName), contactName: str(v.contactName),
+    contactEmail: str(v.contactEmail), contactPhone: str(v.contactPhone), service: str(v.serviceRequested),
+    source: str(v.source), notes: str(v.internalNotes), receivedAt: str(v.receivedAt) ?? '', updatedAt: str(v.updatedAt) ?? '',
+  };
+}
+function job(v: unknown): JobView | undefined {
+  if (!isObj(v) || !str(v.id) || !str(v.type) || !str(v.status)) return undefined;
+  return {
+    id: v.id as string, type: v.type as string, status: v.status as string, attempts: num(v.attempts) ?? 0, maxAttempts: num(v.maxAttempts) ?? 0,
+    lastError: str(v.lastError), createdAt: str(v.createdAt) ?? '', updatedAt: str(v.updatedAt) ?? '', completedAt: str(v.completedAt),
+  };
+}
+
 export const projections = {
   departments: list(department),
   department, // backend returns null for a missing or foreign id -> undefined -> 404
@@ -299,4 +319,162 @@ export const projections = {
   chairmanMail,
   unreadCount,
   agents,
+  offers: list(offer),
+  offer,
+  offerMeasurement,
+  offerOptimization,
+  inquiries: list(inquiry),
+  inquiry,
+  jobs: list(job),
+  job,
 } satisfies Record<string, Projection>;
+
+function offer(v: unknown): OfferView | undefined {
+  if (!isObj(v) || !str(v.id) || !str(v.name)) return undefined;
+  const mt = isObj(v.materialTerms) ? v.materialTerms : {};
+  const hasAppr = isObj(v.approvalBinding) && !!v.approvalBinding.approvalId;
+
+  return {
+    id: v.id as string,
+    companyId: str(v.companyId) ?? '',
+    name: v.name as string,
+    description: str(v.description) ?? '',
+    status: str(v.status) ?? 'DRAFT',
+    creatorRole: str(v.creatorRole) ?? 'CHAIRMAN',
+    version: num(v.version) ?? 1,
+    termsVersion: num(v.termsVersion) ?? 1,
+    originalPrice: num(mt.originalPrice) ?? 0,
+    discountType: str(mt.discountType) ?? 'PERCENTAGE',
+    discountValue: num(mt.discountValue) ?? 0,
+    finalPrice: num(mt.finalPrice) ?? 0,
+    currency: str(mt.currency) ?? 'USD',
+    validFrom: str(mt.validFrom) ?? '',
+    validUntil: str(mt.validUntil) ?? '',
+    maxRedemptions: num(mt.maxRedemptions),
+    currentRedemptions: num(v.currentRedemptions) ?? 0,
+    targetAudience: str(mt.targetAudience) ?? 'GENERAL',
+    termsAndConditions: str(mt.termsAndConditions) ?? '',
+    isChairmanGated: !!v.isChairmanGated,
+    requiresChairmanApproval: !!v.requiresChairmanApproval,
+    hasApproval: hasAppr,
+    approvalId: isObj(v.approvalBinding) ? str(v.approvalBinding.approvalId) ?? undefined : undefined,
+    approvedBy: isObj(v.approvalBinding) ? str(v.approvalBinding.approvedBy) ?? undefined : undefined,
+    parametersHash: isObj(v.approvalBinding) ? str(v.approvalBinding.parametersHash) ?? undefined : undefined,
+    rejectionReason: str(v.rejectionReason) ?? undefined,
+    suspensionReason: str(v.suspensionReason) ?? undefined,
+    termsHistory: arr(v.termsHistory).filter(isObj).map((th) => ({
+      version: num(th.version) ?? 1,
+      terms: str(th.terms) ?? '',
+      changedAt: str(th.changedAt) ?? '',
+      changedBy: str(th.changedBy) ?? '',
+      changeReason: str(th.changeReason) ?? undefined,
+    })),
+    financialAnalysis: isObj(v.financialAnalysis) ? {
+      expectedRevenue: num(v.financialAnalysis.expectedRevenue) ?? 0,
+      baselineRevenue: num(v.financialAnalysis.baselineRevenue) ?? 0,
+      incrementalRevenue: num(v.financialAnalysis.incrementalRevenue) ?? 0,
+      discountCost: num(v.financialAnalysis.discountCost) ?? 0,
+      grossProfit: num(v.financialAnalysis.grossProfit) ?? 0,
+      contributionProfit: num(v.financialAnalysis.contributionProfit) ?? 0,
+      postDiscountMarginPct: num(v.financialAnalysis.postDiscountMarginPct) ?? 0,
+      marginErosionPct: num(v.financialAnalysis.marginErosionPct) ?? 0,
+      breakEvenVolume: isObj(v.financialAnalysis.breakEven) ? num(v.financialAnalysis.breakEven.volume) ?? 0 : 0,
+      cannibalizationRisk: isObj(v.financialAnalysis.cannibalizationRisk) ? {
+        percentage: num(v.financialAnalysis.cannibalizationRisk.percentage) ?? 0,
+        estimatedRevenueLoss: num(v.financialAnalysis.cannibalizationRisk.estimatedRevenueLoss) ?? 0,
+        severity: str(v.financialAnalysis.cannibalizationRisk.severity) ?? 'LOW',
+      } : { percentage: 0, estimatedRevenueLoss: 0, severity: 'LOW' },
+      scenarios: isObj(v.financialAnalysis.scenarios) ? {
+        bestCase: isObj(v.financialAnalysis.scenarios.bestCase) ? {
+          volume: num(v.financialAnalysis.scenarios.bestCase.volume) ?? 0,
+          revenue: num(v.financialAnalysis.scenarios.bestCase.revenue) ?? 0,
+          grossProfit: num(v.financialAnalysis.scenarios.bestCase.grossProfit) ?? 0,
+          contributionProfit: num(v.financialAnalysis.scenarios.bestCase.contributionProfit) ?? 0,
+        } : { volume: 0, revenue: 0, grossProfit: 0, contributionProfit: 0 },
+        expectedCase: isObj(v.financialAnalysis.scenarios.expectedCase) ? {
+          volume: num(v.financialAnalysis.scenarios.expectedCase.volume) ?? 0,
+          revenue: num(v.financialAnalysis.scenarios.expectedCase.revenue) ?? 0,
+          grossProfit: num(v.financialAnalysis.scenarios.expectedCase.grossProfit) ?? 0,
+          contributionProfit: num(v.financialAnalysis.scenarios.expectedCase.contributionProfit) ?? 0,
+        } : { volume: 0, revenue: 0, grossProfit: 0, contributionProfit: 0 },
+        worstCase: isObj(v.financialAnalysis.scenarios.worstCase) ? {
+          volume: num(v.financialAnalysis.scenarios.worstCase.volume) ?? 0,
+          revenue: num(v.financialAnalysis.scenarios.worstCase.revenue) ?? 0,
+          grossProfit: num(v.financialAnalysis.scenarios.worstCase.grossProfit) ?? 0,
+          contributionProfit: num(v.financialAnalysis.scenarios.worstCase.contributionProfit) ?? 0,
+        } : { volume: 0, revenue: 0, grossProfit: 0, contributionProfit: 0 },
+      } : {
+        bestCase: { volume: 0, revenue: 0, grossProfit: 0, contributionProfit: 0 },
+        expectedCase: { volume: 0, revenue: 0, grossProfit: 0, contributionProfit: 0 },
+        worstCase: { volume: 0, revenue: 0, grossProfit: 0, contributionProfit: 0 },
+      },
+      hasSufficientEvidence: isObj(v.financialAnalysis.provenance) ? !!v.financialAnalysis.provenance.hasSufficientEvidence : true,
+      overallConfidence: isObj(v.financialAnalysis.provenance) ? num(v.financialAnalysis.provenance.overallConfidence) ?? 1.0 : 1.0,
+      missingDataItems: isObj(v.financialAnalysis.provenance) && Array.isArray(v.financialAnalysis.provenance.missingDataItems) ? v.financialAnalysis.provenance.missingDataItems as string[] : [],
+      guardrailViolations: Array.isArray(v.financialAnalysis.guardrailViolations) ? v.financialAnalysis.guardrailViolations as string[] : [],
+    } : undefined,
+    ceoEvaluation: isObj(v.ceoEvaluation) ? {
+      verdict: (['APPROVE', 'REVISE', 'REJECT', 'FURTHER_ANALYSIS_REQUIRED'].includes(str(v.ceoEvaluation.verdict) ?? '')
+        ? (str(v.ceoEvaluation.verdict) as 'APPROVE' | 'REVISE' | 'REJECT' | 'FURTHER_ANALYSIS_REQUIRED')
+        : 'APPROVE'),
+      scores: isObj(v.ceoEvaluation.scores) ? {
+        profitabilityScore: num(v.ceoEvaluation.scores.profitabilityScore) ?? 0,
+        strategicValueScore: num(v.ceoEvaluation.scores.strategicValueScore) ?? 0,
+        riskScore: num(v.ceoEvaluation.scores.riskScore) ?? 0,
+        customerImpactScore: num(v.ceoEvaluation.scores.customerImpactScore) ?? 0,
+        operationalFeasibilityScore: num(v.ceoEvaluation.scores.operationalFeasibilityScore) ?? 0,
+        compositeScore: num(v.ceoEvaluation.scores.compositeScore) ?? 0,
+      } : { profitabilityScore: 0, strategicValueScore: 0, riskScore: 0, customerImpactScore: 0, operationalFeasibilityScore: 0, compositeScore: 0 },
+      explanation: isObj(v.ceoEvaluation.explanation) ? {
+        executiveSummary: str(v.ceoEvaluation.explanation.executiveSummary) ?? '',
+        evidenceSummary: str(v.ceoEvaluation.explanation.evidenceSummary) ?? '',
+        tradeOffAnalysis: str(v.ceoEvaluation.explanation.tradeOffAnalysis) ?? '',
+        riskEscalationTriggers: Array.isArray(v.ceoEvaluation.explanation.riskEscalationTriggers) ? v.ceoEvaluation.explanation.riskEscalationTriggers as string[] : [],
+      } : { executiveSummary: '', evidenceSummary: '', tradeOffAnalysis: '', riskEscalationTriggers: [] },
+      escalationRequired: !!v.ceoEvaluation.escalationRequired,
+      escalationReason: str(v.ceoEvaluation.escalationReason) ?? undefined,
+      advisoryDisclaimer: str(v.ceoEvaluation.advisoryDisclaimer) ?? '',
+    } : undefined,
+    createdAt: str(v.createdAt) ?? '',
+    updatedAt: str(v.updatedAt) ?? '',
+  };
+}
+
+function offerMeasurement(v: unknown): OfferMeasurementView | undefined {
+  if (!isObj(v) || !str(v.offerId)) return undefined;
+  const fv = isObj(v.forecastVariance) ? v.forecastVariance : {};
+  return {
+    offerId: v.offerId as string,
+    impressions: num(v.impressions) ?? 0,
+    clicks: num(v.clicks) ?? 0,
+    conversions: num(v.conversions) ?? 0,
+    redemptions: num(v.redemptions) ?? 0,
+    conversionRatePct: num(v.conversionRatePct) ?? 0,
+    totalGrossRevenue: num(v.totalGrossRevenue) ?? 0,
+    totalDiscountCost: num(v.totalDiscountCost) ?? 0,
+    totalNetRevenue: num(v.totalNetRevenue) ?? 0,
+    totalContributionProfit: num(v.totalContributionProfit) ?? 0,
+    forecastVariance: {
+      predictedRedemptions: num(fv.predictedRedemptions) ?? 0,
+      actualRedemptions: num(fv.actualRedemptions) ?? 0,
+      varianceRedemptionsPct: num(fv.varianceRedemptionsPct) ?? 0,
+      predictedRevenue: num(fv.predictedRevenue) ?? 0,
+      actualRevenue: num(fv.actualRevenue) ?? 0,
+      varianceRevenuePct: num(fv.varianceRevenuePct) ?? 0,
+      isSignificantDrift: !!fv.isSignificantDrift,
+    },
+    causalConfidenceDisclaimer: str(v.causalConfidenceDisclaimer) ?? '',
+  };
+}
+
+function offerOptimization(v: unknown): OfferOptimizationView | undefined {
+  if (!isObj(v) || !str(v.offerId)) return undefined;
+  return {
+    offerId: v.offerId as string,
+    action: str(v.action) ?? 'MONITOR',
+    confidenceScore: num(v.confidenceScore) ?? 0,
+    rationale: str(v.rationale) ?? '',
+    evidencePoints: Array.isArray(v.evidencePoints) ? v.evidencePoints as string[] : [],
+    requiresChairmanApproval: !!v.requiresChairmanApproval,
+  };
+}

@@ -20,7 +20,7 @@ import {
   WorkerType,
   TaskPriority,
 } from '@prisma/client';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 
 describe('V17 Phase 3 — Reliable Execution & Failure Intelligence Specification Tests', () => {
   let taskOrchestrator: TaskOrchestratorService;
@@ -28,7 +28,7 @@ describe('V17 Phase 3 — Reliable Execution & Failure Intelligence Specificatio
   let retryPolicy: RetryPolicyService;
   let qualityGate: TaskQualityGateService;
   let workerAssignment: WorkerAssignmentService;
-  let leaderService: DepartmentLeaderAutonomousService;
+  let _leaderService: DepartmentLeaderAutonomousService;
   let healthService: DepartmentHealthService;
   let ceoService: CeoAutonomousService;
   let memoryService: LessonPatternExtractionService;
@@ -150,7 +150,7 @@ describe('V17 Phase 3 — Reliable Execution & Failure Intelligence Specificatio
     retryPolicy = module.get<RetryPolicyService>(RetryPolicyService);
     qualityGate = module.get<TaskQualityGateService>(TaskQualityGateService);
     workerAssignment = module.get<WorkerAssignmentService>(WorkerAssignmentService);
-    leaderService = module.get<DepartmentLeaderAutonomousService>(DepartmentLeaderAutonomousService);
+    _leaderService = module.get<DepartmentLeaderAutonomousService>(DepartmentLeaderAutonomousService);
     healthService = module.get<DepartmentHealthService>(DepartmentHealthService);
     ceoService = module.get<CeoAutonomousService>(CeoAutonomousService);
     memoryService = module.get<LessonPatternExtractionService>(LessonPatternExtractionService);

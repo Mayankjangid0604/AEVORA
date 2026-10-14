@@ -76,7 +76,11 @@ export class JobTaskBridgeService {
       correlationId?: string;
     };
 
-    const { taskId, companyId } = payload;
+    // Tenant scope is the job's own companyId (server-set at enqueue), never the payload's.
+    const companyId = job.companyId;
+    if (!companyId) throw new Error(`Job ${job.id} has no tenant; refusing to execute`);
+    if (payload.companyId && payload.companyId !== companyId) throw new Error(`Job ${job.id} payload tenant mismatch; refusing to execute`);
+    const { taskId } = payload;
     let workerId = payload.workerId;
 
     this.logger.log(`[JobTaskBridge] Executing background task job ${job.id} for task ${taskId}`);
@@ -166,7 +170,7 @@ export class JobTaskBridgeService {
         });
         return completed;
       } else {
-        const failed = await this.taskExecution.failAttempt({
+        await this.taskExecution.failAttempt({
           attemptId: attempt.id,
           companyId,
           failureType: AttemptFailureType.UNEXPECTED,

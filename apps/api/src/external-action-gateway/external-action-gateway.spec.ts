@@ -19,7 +19,6 @@ import {
   UnauthorizedException,
   ConflictException,
 } from '@nestjs/common';
-import { ExecutionEnvironment } from '@prisma/client';
 
 describe('ExternalActionGatewayService (V16 Slice 4)', () => {
   let service: ExternalActionGatewayService;

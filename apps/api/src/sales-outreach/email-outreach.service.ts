@@ -1,8 +1,8 @@
 import { realProfile } from './demo-site/next-template';
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { ExecutionEnvironment, OutreachChannel, Prisma, SalesLead } from '@prisma/client';
+import { OutreachChannel, SalesLead } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { IntegrationService } from '../integration/integration.service';
+import { IntegrationService, outreachEnv } from '../integration/integration.service';
 import { DemoFactoryService } from './demo-factory.service';
 import { companyLine, companyProfile, requireCompanyContact } from '../config/company';
 
@@ -82,9 +82,7 @@ export function templateVars(lead: Pick<SalesLead, 'name' | 'industry'>): Record
   };
 }
 
-export function outreachEnv(): ExecutionEnvironment {
-  return ExecutionEnvironment[process.env.OUTREACH_ENVIRONMENT as ExecutionEnvironment] ?? ExecutionEnvironment.SANDBOX;
-}
+export { outreachEnv } from '../integration/integration.service';
 
 export async function isKilled(prisma: PrismaService, companyId: string, features: string[]) {
   const hit = await prisma.killSwitchConfig.findFirst({
@@ -335,6 +333,7 @@ Rules:
         },
         agentId,
       );
+      if (sent?.pendingApproval) return await this.awaitingApproval(campaign.id, sent.draftId!);
       return await this.prisma.outreachCampaign.update({
         where: { id: campaign.id },
         data: {
@@ -353,6 +352,14 @@ Rules:
       });
       throw e;
     }
+  }
+
+  /** The gate queued the email as a draft: the campaign stays SCHEDULED until a human approves and sends it. */
+  private awaitingApproval(campaignId: string, draftId: string) {
+    return this.prisma.outreachCampaign.update({
+      where: { id: campaignId },
+      data: { status: 'SCHEDULED', scriptId: null, notes: `Awaiting human approval: OutreachDraft ${draftId}` },
+    });
   }
 
   /** Second-touch email for an earlier campaign. Enforces the same persistent 30-minute rate limit. */
@@ -435,6 +442,7 @@ Rules:
         rateLimitStatus: { allowed: true, windowMinutes: Number(process.env.OUTREACH_RATE_LIMIT_MINUTES ?? 30) },
         correlationId: campaign.id,
       }, agentId);
+      if (sent?.pendingApproval) return await this.awaitingApproval(campaign.id, sent.draftId!);
       return await this.prisma.outreachCampaign.update({
         where: { id: campaign.id },
         data: {

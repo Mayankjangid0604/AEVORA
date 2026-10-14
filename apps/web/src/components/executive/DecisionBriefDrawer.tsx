@@ -97,7 +97,7 @@ export function DecisionBriefDrawer({
 
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {ca?.dimensions &&
-                Object.entries(ca.dimensions).map(([dim, scoreData]: [string, any]) => (
+                Object.entries(ca.dimensions).map(([dim, scoreData]: [string, { score: number; confidence?: number }]) => (
                   <div key={dim} className="rounded-control border border-border/40 bg-surface-2/30 p-2">
                     <p className="capitalize text-muted">{dim}</p>
                     <div className="mt-1 flex items-baseline justify-between">

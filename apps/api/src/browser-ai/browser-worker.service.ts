@@ -77,7 +77,7 @@ export class BrowserWorkerService implements OnApplicationShutdown {
     return page;
   }
 
-  async sendMessage(profileId: string, message: string): Promise<string> {
+  async sendMessage(profileId: string, _message: string): Promise<string> {
     // Basic generic implementation for demonstration.
     // In a real system, provider adapters would do this based on the specific DOM.
     const page = this.activePages.get(profileId);

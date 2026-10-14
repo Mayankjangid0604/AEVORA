@@ -1,0 +1,15 @@
+# /etc/cron.d/aevora-backup
+# AEVORA Staging/Production Database Backup Recurring Cron Schedule
+# Runs daily at 02:00 UTC
+#
+# Environment variables:
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+POSTGRES_CONTAINER=aevora_postgres_staging
+BACKUP_DIR=/var/backups/aevora
+BACKUP_FORMAT=custom
+RETENTION_DAYS=30
+CLEANUP_OLD_BACKUPS=true
+
+# Schedule: Minute Hour Day Month DayOfWeek User Command
+0 2 * * * root /opt/aevora/infrastructure/scripts/backup-db.sh ${POSTGRES_CONTAINER} >> /var/log/aevora-backup.log 2>&1

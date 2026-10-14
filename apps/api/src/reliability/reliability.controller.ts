@@ -397,7 +397,7 @@ export class ReliabilityController {
   async executeRemediation(
     @Request() req: any,
     @Param('executionId') executionId: string,
-    @Body() body?: { approvedBy?: string },
+    @Body() _body?: { approvedBy?: string },
   ) {
     const execution = await this.getEngine().getExecutionById(executionId);
     if (execution.companyId) {

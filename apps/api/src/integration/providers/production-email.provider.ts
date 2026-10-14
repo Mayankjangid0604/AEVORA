@@ -45,6 +45,7 @@ export class ProductionEmailProvider {
           from: { email: this.fromEmail },
           subject: payload.subject,
           content: [{ type: 'text/plain', value: payload.body }],
+          ...(payload.headers ? { headers: payload.headers } : {}),
         }),
       });
 
@@ -82,6 +83,7 @@ export class ProductionEmailProvider {
       to: payload.to,
       subject: payload.subject,
       text: payload.body,
+      headers: payload.headers,
     });
     this.logger.log(`[SMTP] Sent email to ${payload.to} (${info.messageId})`);
     return { success: true, message: 'Sent via SMTP', referenceId: info.messageId };

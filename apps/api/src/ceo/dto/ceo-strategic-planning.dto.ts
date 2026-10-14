@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsDateString, IsEnum, IsNumber, Min, Max, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsDateString, IsEnum, IsNumber, Min, Max } from 'class-validator';
 import { ObjectivePriority, RiskLevel } from '@prisma/client';
 
 export class CreatePlanDto {

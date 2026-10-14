@@ -288,7 +288,11 @@ describe('V14 tenant isolation over HTTP (legacy controllers + /auth/*)', () => 
     it('improvement approval records the token actor, and employees cannot approve', async () => {
       await http().post('/continuous-improvement/proposals/imp-A/approve').set('Authorization', empA()).expect(403);
       await http().post('/continuous-improvement/proposals/imp-A/approve').set('Authorization', chairA()).send({}).expect(201);
-      expect(services.ci.approveProposal).toHaveBeenCalledWith('imp-A', 'chair-A');
+      expect(services.ci.approveProposal).toHaveBeenCalledWith(
+        'imp-A',
+        'chair-A',
+        expect.objectContaining({ approverTier: 'CHAIRMAN' }),
+      );
     });
   });
 });

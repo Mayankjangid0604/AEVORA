@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ContinuousImprovementService } from '../continuous-improvement/continuous-improvement.service';
 import { OutcomeService } from '../intelligence/services/outcome.service';
 import { CeoStrategicPlanningService } from '../ceo/ceo-strategic-planning.service';
-import { AeObjectiveStatus, GoalStatus } from '@prisma/client';
+import { AeObjectiveStatus } from '@prisma/client';
 
 describe('V11 Enterprise Orchestrator (e2e)', () => {
   let service: EnterpriseOrchestratorService;

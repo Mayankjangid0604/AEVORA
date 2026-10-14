@@ -9,8 +9,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompanyStatus } from '@prisma/client';
-import { HqCapacityService } from '../v12-spatial/hq-capacity.service';
-import { V12VehicleService } from '../v12-spatial/v12-vehicle.service';
+import { HqCapacityService } from '../spatial/hq-capacity.service';
+import { V12VehicleService } from '../spatial/vehicle.service';
 import { WorldStateEventService } from '../world-state-gateway/world-state-event.service';
 import { V12EntityType } from '@aevora/shared';
 

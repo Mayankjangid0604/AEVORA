@@ -13,8 +13,8 @@ try {
 
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../src/app.module';
-import { V12SpatialService } from '../src/v12-spatial/v12-spatial.service';
-import { V12VehicleService } from '../src/v12-spatial/v12-vehicle.service';
+import { SpatialService, V12SpatialService } from '../src/spatial/spatial.service';
+import { VehicleService, V12VehicleService } from '../src/spatial/vehicle.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 async function bootstrap() {

@@ -11,7 +11,19 @@ import { ContentCalendarService, CreateCalendarEntryDto } from './content-calend
 import { MarketingAnalyticsService, RecordAnalyticsDto } from './marketing-analytics.service';
 import { BrandConsistencyService } from './brand-consistency.service';
 import { MarketingAgentService, MarketingAgentRole } from './marketing-agent.service';
-import { CampaignStatus, ContentStatus } from '@prisma/client';
+import { MultiChannelCopyService } from './multi-channel-copy.service';
+import { CreativeAssetService } from './creative-asset.service';
+import { SocialPublishingGatewayService } from './social-publishing-gateway.service';
+import { AttributionTrackingService, CreateTrackingLinkDto } from './attribution-tracking.service';
+import {
+  AssetType,
+  AttributionModelType,
+  ImageGenerationRequestDto,
+  ModerationStatus,
+  MultiChannelCopyRequestDto,
+  VideoGenerationRequestDto,
+} from './marketing.types';
+import { CampaignStatus, ContentStatus, MarketingChannel } from '@prisma/client';
 
 @Controller('marketing')
 @UseGuards(JwtAuthGuard)
@@ -26,6 +38,10 @@ export class MarketingController {
     private readonly analyticsSvc: MarketingAnalyticsService,
     private readonly brandConsistencySvc: BrandConsistencyService,
     private readonly agentSvc: MarketingAgentService,
+    private readonly multiChannelCopySvc: MultiChannelCopyService,
+    private readonly creativeAssetSvc: CreativeAssetService,
+    private readonly publishingGatewaySvc: SocialPublishingGatewayService,
+    private readonly attributionTrackingSvc: AttributionTrackingService,
   ) {}
 
   // ── BRAND ──────────────────────────────────────────────────────────────────
@@ -216,5 +232,132 @@ export class MarketingController {
   @Get('agent/campaign-ideas')
   generateCampaignIdeas(@Request() req, @Query('objective') objective: string) {
     return this.agentSvc.generateCampaignIdeas(req.user.companyId, req.user.actorId, objective ?? 'growth');
+  }
+
+  // ── V20 MULTI-CHANNEL COPY ──────────────────────────────────────────────────
+  @Post('multi-channel-copy')
+  generateMultiChannelCopy(@Request() req, @Body() dto: MultiChannelCopyRequestDto) {
+    return this.multiChannelCopySvc.generateMultiChannelCopy(req.user.companyId, req.user.actorId, dto);
+  }
+
+  // ── V20 CREATIVE ASSETS ─────────────────────────────────────────────────────
+  @Post('creative/image')
+  generateCreativeImage(
+    @Request() req,
+    @Body() dto: ImageGenerationRequestDto,
+    @Query('provider') provider?: string,
+  ) {
+    return this.creativeAssetSvc.generateImage(req.user.companyId, req.user.actorId, dto, provider);
+  }
+
+  @Post('creative/video')
+  generateCreativeVideo(
+    @Request() req,
+    @Body() dto: VideoGenerationRequestDto,
+    @Query('provider') provider?: string,
+  ) {
+    return this.creativeAssetSvc.generateVideo(req.user.companyId, req.user.actorId, dto, provider);
+  }
+
+  @Get('creative/assets')
+  listCreativeAssets(
+    @Request() req,
+    @Query('campaignId') campaignId?: string,
+    @Query('assetType') assetType?: AssetType,
+    @Query('moderationStatus') moderationStatus?: ModerationStatus,
+  ) {
+    return this.creativeAssetSvc.listAssets(req.user.companyId, {
+      campaignId,
+      assetType,
+      moderationStatus,
+    });
+  }
+
+  @Get('creative/assets/:id')
+  getCreativeAsset(@Request() req, @Param('id') id: string) {
+    return this.creativeAssetSvc.getAsset(req.user.companyId, id);
+  }
+
+  @Put('creative/assets/:id/moderation')
+  updateCreativeModeration(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() body: { status: ModerationStatus; reason?: string },
+  ) {
+    return this.creativeAssetSvc.updateModerationStatus(
+      req.user.companyId,
+      req.user.actorId,
+      id,
+      body.status,
+      body.reason,
+    );
+  }
+
+  // ── V20 GOVERNED PUBLISHING GATEWAY ─────────────────────────────────────────
+  @Post('publish-gateway')
+  publishViaGateway(
+    @Request() req,
+    @Body()
+    body: {
+      contentId: string;
+      approvalId: string;
+      idempotencyKey: string;
+      requireLivePublication?: boolean;
+      metadata?: Record<string, any>;
+    },
+  ) {
+    return this.publishingGatewaySvc.publish(
+      req.user.companyId,
+      req.user.actorId,
+      body.contentId,
+      body.approvalId,
+      body.idempotencyKey,
+      {
+        requireLivePublication: body.requireLivePublication,
+        metadata: body.metadata,
+      },
+    );
+  }
+
+  @Get('publish-gateway/verify')
+  verifyPublication(
+    @Request() req,
+    @Query('contentId') contentId: string,
+    @Query('externalPostId') externalPostId: string,
+    @Query('channel') channel?: MarketingChannel,
+  ) {
+    return this.publishingGatewaySvc.verifyPublication(
+      req.user.companyId,
+      contentId,
+      externalPostId,
+      channel,
+    );
+  }
+
+  // ── V20 TRACKING & ATTRIBUTION ──────────────────────────────────────────────
+  @Post('tracking-links')
+  createTrackingLink(@Request() req, @Body() dto: CreateTrackingLinkDto) {
+    return this.attributionTrackingSvc.createTrackingLink(req.user.companyId, req.user.actorId, dto);
+  }
+
+  @Get('tracking-links')
+  listTrackingLinks(@Request() req, @Query('campaignId') campaignId?: string) {
+    return this.attributionTrackingSvc.listTrackingLinks(req.user.companyId, campaignId);
+  }
+
+  @Get('attribution')
+  calculateAttribution(
+    @Request() req,
+    @Query('model') model?: AttributionModelType,
+    @Query('campaignId') campaignId?: string,
+    @Query('lookbackDays') lookbackDays?: string,
+  ) {
+    const days = lookbackDays ? parseInt(lookbackDays, 10) : 30;
+    return this.attributionTrackingSvc.calculateAttribution(
+      req.user.companyId,
+      model || AttributionModelType.LINEAR,
+      campaignId,
+      days,
+    );
   }
 }

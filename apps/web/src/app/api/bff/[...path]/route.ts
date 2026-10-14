@@ -3,6 +3,7 @@ import { backendFetch, readSessionToken } from '@/server/api';
 import { projections, type Projection } from '@/server/projections';
 import { SESSION_COOKIE, sessionCookieOptions } from '@/lib/session-cookie';
 import { COMPANY_HEADER, isSafeId } from '@/lib/http';
+import { isSameOrigin } from '@/server/origin';
 
 /**
  * Browser -> BFF read proxy. Only explicitly verified, isolation-safe GET routes are reachable.
@@ -68,6 +69,26 @@ const ROUTES: RouteRule[] = [
   // only rows whose companyId equals the selected company). There is no company-wide task listing endpoint.
   { pattern: new RegExp(`^employees/${ID}/tasks$`), company: true, project: projections.employeeTasks },
   { pattern: new RegExp(`^tasks/${ID}$`), company: true, project: projections.task },
+  // V24 Offer Market: Governed offer listing, details, measurement, and optimization
+  { pattern: /^offers$/, company: true, project: projections.offers },
+  { pattern: new RegExp(`^offers/${ID}$`), company: true, project: projections.offer },
+  { pattern: new RegExp(`^offers/${ID}/measurement$`), company: true, project: projections.offerMeasurement },
+  { pattern: new RegExp(`^offers/${ID}/optimization$`), company: true, project: projections.offerOptimization },
+  // Gate 4A: request queue + job controls (InquiryController / JobController: tenant = req.user.companyId, foreign ids 404).
+  { pattern: /^inquiries$/, company: true, project: projections.inquiries },
+  { pattern: new RegExp(`^inquiries/${ID}$`), company: true, project: projections.inquiry },
+  { pattern: /^job$/, company: true, project: projections.jobs },
+  { pattern: new RegExp(`^job/${ID}$`), company: true, project: projections.job },
+];
+
+/**
+ * State-changing routes reachable from the browser. Same-origin only, explicit company, JSON body re-built from
+ * known fields (nothing else is forwarded). The backend enforces role + tenant on each.
+ */
+const MUTATIONS: { pattern: RegExp; fields: string[]; project: Projection }[] = [
+  { pattern: new RegExp(`^inquiries/${ID}/transition$`), fields: ['from', 'to'], project: projections.inquiry },
+  { pattern: new RegExp(`^inquiries/${ID}/notes$`), fields: ['note'], project: projections.inquiry },
+  { pattern: new RegExp(`^job/${ID}/(pause|resume|replay)$`), fields: [], project: projections.job },
 ];
 
 const noStore = { 'Cache-Control': 'no-store' };
@@ -96,6 +117,27 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ path: strin
       ? NextResponse.json({ status: 404, kind: 'not_found', message: 'Not found' }, { status: 404, headers: noStore })
       : NextResponse.json(body, { status: r.status, headers: noStore });
   }
+  if (r.status === 401) res.cookies.set(SESSION_COOKIE, '', { ...sessionCookieOptions(), maxAge: 0 });
+  return res;
+}
+
+export async function POST(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+  if (!isSameOrigin(req)) return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+  const path = (await ctx.params).path.join('/');
+  const rule = MUTATIONS.find((r) => r.pattern.test(path));
+  if (!rule) return NextResponse.json({ message: 'Not available' }, { status: 404 });
+
+  const companyId = req.headers.get(COMPANY_HEADER) ?? undefined;
+  if (!companyId || !isSafeId(companyId)) return NextResponse.json({ message: 'Company context required' }, { status: 400 });
+  const token = await readSessionToken();
+  if (!token) return NextResponse.json({ message: 'Not authenticated' }, { status: 401 });
+
+  const raw = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const body = Object.fromEntries(rule.fields.filter((k) => typeof raw?.[k] === 'string').map((k) => [k, (raw[k] as string).slice(0, 2000)]));
+  const r = await backendFetch<unknown>(path, { method: 'POST', body, companyId, token, signal: req.signal });
+  const res = r.ok
+    ? NextResponse.json(rule.project(r.data, companyId) ?? { message: 'Not found' }, { status: r.status, headers: noStore })
+    : NextResponse.json(r.error, { status: r.status, headers: noStore });
   if (r.status === 401) res.cookies.set(SESSION_COOKIE, '', { ...sessionCookieOptions(), maxAge: 0 });
   return res;
 }

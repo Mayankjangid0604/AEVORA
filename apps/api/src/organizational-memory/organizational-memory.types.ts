@@ -1,6 +1,5 @@
 import { OrgMemoryType } from '@prisma/client';
-import { ConsequenceSeverity, ReversibilityLevel } from '../ceo/ceo-consequence.types';
-import { GatewayRiskTier } from '../external-action-gateway/external-action-gateway.types';
+import { ConsequenceSeverity } from '../ceo/ceo-consequence.types';
 
 /**
  * AEVORA V16 Slice 5 — Organizational Memory & Strategic Reflection Types

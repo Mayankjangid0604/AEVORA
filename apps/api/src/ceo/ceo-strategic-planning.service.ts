@@ -215,7 +215,7 @@ export class CeoStrategicPlanningService {
   }
 
   async createObjective(companyId: string, ceoId: string, data: CreateObjectiveDto) {
-    const plan = await this.getPlan(companyId, data.strategicPlanId);
+    await this.getPlan(companyId, data.strategicPlanId);
 
     const obj = await this.prisma.companyObjective.create({
       data: {

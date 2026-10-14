@@ -3,9 +3,10 @@
  * Directly reflects @aevora/shared/src/v12/world-state.ts without exposing internal server internals.
  */
 
-export type V12EntityId = string;
+export type SpatialEntityId = string;
+export type V12EntityId = SpatialEntityId;
 
-export enum V12EntityType {
+export enum SpatialEntityType {
   WORLD = 'WORLD',
   REGION = 'REGION',
   COUNTRY = 'COUNTRY',
@@ -24,6 +25,9 @@ export enum V12EntityType {
   COMPANY = 'COMPANY',
   UNKNOWN = 'UNKNOWN',
 }
+export const V12EntityType = SpatialEntityType;
+export type V12EntityType = SpatialEntityType;
+
 
 export interface Vector3D {
   x: number;

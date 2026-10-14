@@ -80,8 +80,12 @@ export class AuthorizationService {
    * A row in another tenant is reported as 404 so ids cannot be probed across companies.
    */
   async assertResourceAccess(user: AuthUser, model: CompanyScopedModel, id: string): Promise<string> {
+    const isProject = model === 'project';
     const row = typeof id === 'string' && id
-      ? await (this.prisma[model] as any).findUnique({ where: { id }, select: { companyId: true } })
+      ? await (this.prisma[model] as any).findUnique({
+          where: { id },
+          select: isProject ? { companyId: true, clientId: true } : { companyId: true },
+        })
       : null;
     if (!row) throw new NotFoundException('Resource not found');
     try {
@@ -89,7 +93,72 @@ export class AuthorizationService {
     } catch {
       throw new NotFoundException('Resource not found');
     }
+    if (isProject && user.actorRole === 'CLIENT') {
+      if (!row.clientId || row.clientId !== user.actorId) {
+        throw new ForbiddenException('Client is not authorized for this project');
+      }
+    }
     return row.companyId;
+  }
+
+  /**
+   * Resolves a ProjectDelivery, validates company access, and for CLIENT actors,
+   * ensures the authenticated client is assigned to the parent project.
+   * Returns verified delivery and parent project metadata.
+   */
+  async assertDeliveryClientAccess(
+    user: AuthUser,
+    deliveryId: string,
+  ): Promise<{ projectId: string; companyId: string; clientId: string }> {
+    if (!user?.actorId || typeof deliveryId !== 'string' || !deliveryId) {
+      throw new NotFoundException('Resource not found');
+    }
+    const delivery = await this.prisma.projectDelivery.findUnique({
+      where: { id: deliveryId },
+      select: {
+        id: true,
+        projectId: true,
+        project: {
+          select: {
+            id: true,
+            companyId: true,
+            clientId: true,
+          },
+        },
+      },
+    });
+
+    const projectId = delivery?.projectId || delivery?.project?.id;
+    let project = delivery?.project;
+
+    if (!project && projectId) {
+      project = await this.prisma.project.findUnique({
+        where: { id: projectId },
+        select: { id: true, companyId: true, clientId: true },
+      });
+    }
+
+    if (!delivery || !project) {
+      throw new NotFoundException('Resource not found');
+    }
+
+    try {
+      await this.assertCompanyAccess(user, project.companyId);
+    } catch {
+      throw new NotFoundException('Resource not found');
+    }
+
+    if (user.actorRole === 'CLIENT') {
+      if (!project.clientId || project.clientId !== user.actorId) {
+        throw new ForbiddenException('Client is not authorized for this project delivery');
+      }
+    }
+
+    return {
+      projectId,
+      companyId: project.companyId,
+      clientId: project.clientId,
+    };
   }
 
   /** Throws 403 unless the authenticated Chairman owns the group. */

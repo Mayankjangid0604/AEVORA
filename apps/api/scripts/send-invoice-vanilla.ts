@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import * as nodemailer from 'nodemailer';
 
 const prisma = new PrismaClient();
 
@@ -97,24 +96,10 @@ Best regards,
 Aevora Finance & Sales Team
 `;
 
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // true for 465, false for other ports
-    auth: {
-      user: 'Saahvik2026@gmail.com',
-      pass: 'fmcqweacchstuehl', 
-    }
-  });
+  // Direct SMTP sends are disabled: they bypassed approval, suppression and sandboxing, and embedded a credential.
+  // Queue the message instead (POST /integration/email) and approve it via POST /outreach/drafts/:id/approve.
+  throw new Error(`Direct send disabled; queue a draft for approval instead (to=${to}, subject=${subject})`);
 
-  const info = await transporter.sendMail({
-    from: 'Saahvik2026@gmail.com',
-    to,
-    subject,
-    text: body
-  });
-
-  console.log('Email sent:', info.messageId);
 }
 
 main().finally(() => process.exit(0));

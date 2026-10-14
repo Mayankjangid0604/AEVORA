@@ -1,16 +1,44 @@
-version: '3.8'
-
 services:
+  traefik:
+    image: traefik:v2.10
+    container_name: aevora_traefik_staging
+    restart: always
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+    ports:
+      - "${STAGING_HTTP_PORT:-8080}:80"
+      - "${STAGING_HTTPS_PORT:-8443}:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
+    labels:
+      - "traefik.enable=true"
+      # Global Security Headers Middleware
+      - "traefik.http.middlewares.secHeaders.headers.sslredirect=true"
+      - "traefik.http.middlewares.secHeaders.headers.framedeny=true"
+      - "traefik.http.middlewares.secHeaders.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.secHeaders.headers.browserxssfilter=true"
+      - "traefik.http.middlewares.secHeaders.headers.referrerpolicy=same-origin"
+      - "traefik.http.middlewares.secHeaders.headers.stsseconds=86400"
+      - "traefik.http.middlewares.secHeaders.headers.stsincludesubdomains=true"
+      - "traefik.http.middlewares.secHeaders.headers.stspreload=false"
+
   postgres:
     image: postgres:15-alpine
     container_name: aevora_postgres_staging
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
     ports:
-      - "5433:5432" # Map to a different host port to avoid conflict with dev postgres if any
+      - "127.0.0.1:${STAGING_POSTGRES_PORT:-5434}:5432" # Non-conflicting local port; not exposed publicly
     volumes:
       - postgres_staging_data:/var/lib/postgresql/data
     healthcheck:
@@ -23,18 +51,33 @@ services:
     image: redis:7-alpine
     container_name: aevora_redis_staging
     restart: always
-    command: redis-server --requirepass ${REDIS_PASSWORD} --save 60 1 --loglevel warning
+    command: redis-server --requirepass "${REDIS_PASSWORD:?REDIS_PASSWORD is required}" --save 60 1 --loglevel warning
     ports:
-      - "6380:6379" # Map to a different port
+      - "127.0.0.1:${STAGING_REDIS_PORT:-6380}:6379" # Non-conflicting local port; not exposed publicly
     volumes:
       - redis_staging_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  migration:
+    image: aevora-api:staging
+    build:
+      context: ../../
+      dockerfile: apps/api/Dockerfile
+    container_name: aevora_migration_staging
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npx", "prisma", "migrate", "deploy", "--schema=packages/database/prisma/schema.prisma"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+
   api:
+    image: aevora-api:staging
     build:
       context: ../../
       dockerfile: apps/api/Dockerfile
@@ -45,15 +88,80 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migration:
+        condition: service_completed_successfully
     ports:
-      - "3001:3001"
+      - "127.0.0.1:${API_PORT:-3001}:3001"
     environment:
       NODE_ENV: staging
       PORT: ${API_PORT:-3001}
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      JWT_SECRET: ${JWT_SECRET}
-      CORS_ORIGINS: ${CORS_ORIGINS}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,https://${STAGING_DOMAIN:-staging.aevora.local}}
+      TRUST_PROXY: "1"
+      WEBHOOK_SECRET_PROD: ${WEBHOOK_SECRET_PROD:?WEBHOOK_SECRET_PROD is required}
+      WEBHOOK_SECRET_SIM: ${WEBHOOK_SECRET_SIM:?WEBHOOK_SECRET_SIM is required}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      # Direct API paths route to NestJS with priority 50
+      - "traefik.http.routers.api.rule=Host(`${STAGING_DOMAIN:-staging.aevora.local}`) && (PathPrefix(`/health`) || PathPrefix(`/delivery/webhooks`) || PathPrefix(`/world-state`) || PathPrefix(`/socket.io`))"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.priority=50"
+      - "traefik.http.routers.api.middlewares=secHeaders"
+      - "traefik.http.services.api.loadbalancer.server.port=3001"
+      # Optional dedicated subdomain routing with priority 40
+      - "traefik.http.routers.api-subdomain.rule=Host(`${STAGING_API_DOMAIN:-api.staging.aevora.local}`)"
+      - "traefik.http.routers.api-subdomain.entrypoints=websecure"
+      - "traefik.http.routers.api-subdomain.priority=40"
+      - "traefik.http.routers.api-subdomain.middlewares=secHeaders"
+      - "traefik.http.services.api-subdomain.loadbalancer.server.port=3001"
+
+  web:
+    image: aevora-web:staging
+    build:
+      context: ../../
+      dockerfile: apps/web/Dockerfile
+    container_name: aevora_web_staging
+    restart: always
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: staging
+      PORT: ${WEB_PORT:-3000}
+      AEVORA_API_URL: http://api:3001
+      NEXT_TELEMETRY_DISABLED: 1
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/login || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      # Next.js BFF paths MUST be routed to web with priority 100
+      - "traefik.http.routers.web-bff.rule=Host(`${STAGING_DOMAIN:-staging.aevora.local}`) && PathPrefix(`/api/bff`)"
+      - "traefik.http.routers.web-bff.entrypoints=websecure"
+      - "traefik.http.routers.web-bff.priority=100"
+      - "traefik.http.routers.web-bff.middlewares=secHeaders"
+      - "traefik.http.services.web-bff.loadbalancer.server.port=3000"
+      # Catch-all web route with priority 10
+      - "traefik.http.routers.web.rule=Host(`${STAGING_DOMAIN:-staging.aevora.local}`)"
+      - "traefik.http.routers.web.entrypoints=websecure"
+      - "traefik.http.routers.web.priority=10"
+      - "traefik.http.routers.web.middlewares=secHeaders"
+      - "traefik.http.services.web.loadbalancer.server.port=3000"
 
 volumes:
   postgres_staging_data:

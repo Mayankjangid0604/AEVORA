@@ -6,7 +6,6 @@ import { bffGet, bffPost } from '@/lib/bff-client';
 import { companyKeys } from '@/lib/query-keys';
 import { PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-state';
-import { SystemState } from '@/components/system-state';
 
 import type {
   CeoOperatingState,
@@ -19,19 +18,19 @@ import type {
   StructuredMemoryItem,
   StrategicReflectionReportItem,
   DirectiveEvaluationResult,
-  V15SpatialContext,
-  V24OfferContext,
+  SpatialContext,
+  OfferContext,
 } from '@/lib/executive-types';
 
 import { CeoOperatingLoopVisualizer } from './CeoOperatingLoopVisualizer';
-import { CeoCommandInterface } from './CeoCommandInterface';
+import { CeoCommandInterface, type DisagreementComparisonResult } from './CeoCommandInterface';
 import { CeoDecisionCenter } from './CeoDecisionCenter';
 import { DecisionBriefDrawer } from './DecisionBriefDrawer';
 import { ChairmanApprovalModal } from './ChairmanApprovalModal';
 import { ExternalActionGatewayConsole } from './ExternalActionGatewayConsole';
 import { EnterpriseBrainViewer } from './EnterpriseBrainViewer';
 import { OrganizationalMemoryConsole } from './OrganizationalMemoryConsole';
-import { V15SpatialContextBadge } from './V15SpatialContextBadge';
+import { SpatialContextBadge } from './SpatialContextBadge';
 
 export type ExecutiveConsoleTab = 'operations' | 'decisions' | 'actions' | 'brain' | 'memory';
 
@@ -86,15 +85,18 @@ export function ExecutiveConsole({ companyId }: Props) {
     queryFn: ({ signal }) => bffGet<StrategicReflectionReportItem>('executive/reflection', { companyId, signal }),
   });
 
-  const v15Query = useQuery({
-    queryKey: companyKeys.ceo(companyId, 'console', 'v15'),
-    queryFn: ({ signal }) => bffGet<V15SpatialContext>('executive/v15-context', { companyId, signal }),
+  const spatialQuery = useQuery({
+    queryKey: companyKeys.ceo(companyId, 'console', 'spatial'),
+    queryFn: ({ signal }) => bffGet<SpatialContext>('executive/spatial-context', { companyId, signal }),
   });
 
-  const v24Query = useQuery({
-    queryKey: companyKeys.ceo(companyId, 'console', 'v24'),
-    queryFn: ({ signal }) => bffGet<V24OfferContext>('executive/v24-context', { companyId, signal }),
+  const offerQuery = useQuery({
+    queryKey: companyKeys.ceo(companyId, 'console', 'offer'),
+    queryFn: ({ signal }) => bffGet<OfferContext>('executive/offer-context', { companyId, signal }),
   });
+
+  const spatialData = spatialQuery.data ?? queryClient.getQueryData<SpatialContext>(companyKeys.ceo(companyId, 'console', 'v15'));
+  const offerData = offerQuery.data ?? queryClient.getQueryData<OfferContext>(companyKeys.ceo(companyId, 'console', 'v24'));
 
   // 2. Mutations
   const runLoopMutation = useMutation({
@@ -103,8 +105,9 @@ export function ExecutiveConsole({ companyId }: Props) {
       queryClient.invalidateQueries({ queryKey: companyKeys.ceo(companyId) });
       setFeedbackNotice('Autonomous operating loop executed successfully.');
     },
-    onError: (err: any) => {
-      setFeedbackNotice(`Operating loop failed: ${err.message}`);
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      setFeedbackNotice(`Operating loop failed: ${msg}`);
     },
   });
 
@@ -121,14 +124,15 @@ export function ExecutiveConsole({ companyId }: Props) {
     try {
       const res = await bffPost<DirectiveEvaluationResult>('executive/directive/evaluate', { directive }, { companyId });
       return res;
-    } catch (err: any) {
-      setFeedbackNotice(`Directive evaluation failed: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setFeedbackNotice(`Directive evaluation failed: ${msg}`);
       return null;
     }
   };
 
-  const compareDisagreement = async (directive: string, alternative: string) => {
-    return bffPost('executive/directive/disagreement', { directive, alternative }, { companyId });
+  const compareDisagreement = async (directive: string, alternative: string): Promise<DisagreementComparisonResult | null> => {
+    return bffPost<DisagreementComparisonResult>('executive/directive/disagreement', { directive, alternative }, { companyId });
   };
 
   const openBrief = async (decisionId: string) => {
@@ -136,8 +140,9 @@ export function ExecutiveConsole({ companyId }: Props) {
       const brief = await bffGet<DecisionBrief>(`executive/decision-brief/${decisionId}`, { companyId });
       setActiveBrief(brief);
       setIsBriefOpen(true);
-    } catch (err: any) {
-      setFeedbackNotice(`Failed to load decision brief: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setFeedbackNotice(`Failed to load decision brief: ${msg}`);
     }
   };
 
@@ -150,8 +155,9 @@ export function ExecutiveConsole({ companyId }: Props) {
       setIsBriefOpen(false);
       setFeedbackNotice('Decision resolution recorded by Chairman.');
     },
-    onError: (err: any) => {
-      setFeedbackNotice(`Approval failed: ${err.message}`);
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      setFeedbackNotice(`Approval failed: ${msg}`);
     },
   });
 
@@ -163,8 +169,9 @@ export function ExecutiveConsole({ companyId }: Props) {
       setIsBriefOpen(false);
       setFeedbackNotice('Authorized decision dispatched to External Action Gateway.');
     },
-    onError: (err: any) => {
-      setFeedbackNotice(`Execution rejected: ${err.message}`);
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      setFeedbackNotice(`Execution rejected: ${msg}`);
     },
   });
 
@@ -177,7 +184,7 @@ export function ExecutiveConsole({ companyId }: Props) {
     },
   });
 
-  const recordOutcomeFeedback = async (actionId: string, outcomeMetrics: any) => {
+  const recordOutcomeFeedback = async (actionId: string, outcomeMetrics: Record<string, unknown>) => {
     await bffPost('executive/memory/evaluate', { decisionId: actionId, actualMetrics: outcomeMetrics }, { companyId });
     queryClient.invalidateQueries({ queryKey: companyKeys.ceo(companyId, 'console', 'actions') });
     setFeedbackNotice('Real-world outcome recorded and calibrated in Organizational Memory.');
@@ -192,11 +199,11 @@ export function ExecutiveConsole({ companyId }: Props) {
       {/* Page Header */}
       <PageHeader
         title="Autonomous CEO & Executive Console"
-        description="AEVORA V16 autonomous operating loop: real-time consequence analysis, 4-tier risk gateway, and closed-loop organizational memory."
+        description="AEVORA autonomous operating loop: real-time consequence analysis, 4-tier risk gateway, and closed-loop organizational memory."
       />
 
-      {/* V15 Spatial Digital-Twin Context Badge */}
-      <V15SpatialContextBadge companyId={companyId} spatial={v15Query.data} />
+      {/* Spatial Digital-Twin Context Badge */}
+      <SpatialContextBadge companyId={companyId} spatial={spatialData ?? spatialQuery.data} />
 
       {/* Temporary feedback banner */}
       {feedbackNotice && (
@@ -217,7 +224,7 @@ export function ExecutiveConsole({ companyId }: Props) {
         {[
           { key: 'operations', label: 'Command & Operations' },
           { key: 'decisions', label: `Decisions & Lifecycle (${decisionsQuery.data?.length ?? 0})` },
-          { key: 'actions', label: `Action Gateway & V24 (${actionsQuery.data?.length ?? 0})` },
+          { key: 'actions', label: `Action Gateway & Offers (${actionsQuery.data?.length ?? 0})` },
           { key: 'brain', label: 'Enterprise Brain & Topology' },
           { key: 'memory', label: `Memory & Reflection (${memoryQuery.data?.length ?? 0})` },
         ].map((tab) => (
@@ -310,11 +317,12 @@ export function ExecutiveConsole({ companyId }: Props) {
         />
       )}
 
-      {/* Tab 3: Action Gateway & V24 Offer Engine */}
+      {/* Tab 3: Action Gateway & Offer Engine */}
       {activeTab === 'actions' && (
         <ExternalActionGatewayConsole
           actions={actionsQuery.data || []}
-          v24Context={v24Query.data}
+          offerContext={offerData ?? offerQuery.data}
+          v24Context={offerData ?? offerQuery.data}
           isLoading={actionsQuery.isPending}
           onRecordOutcomeFeedback={recordOutcomeFeedback}
         />

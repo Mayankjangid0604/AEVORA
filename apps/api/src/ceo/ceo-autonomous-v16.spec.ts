@@ -12,7 +12,7 @@ import { CeoContextAssemblyService } from './ceo-context-assembly.service';
 import { CeoProactiveDetectionService } from './ceo-proactive-detection.service';
 import { CeoObjectiveDecompositionService } from './ceo-objective-decomposition.service';
 import { CeoDecisionLifecycleService } from './ceo-decision-lifecycle.service';
-import { ObjectivePriority, ObjectiveStatus, StrategicInitiativeStatus } from '@prisma/client';
+import { ObjectivePriority, ObjectiveStatus } from '@prisma/client';
 
 describe('AEVORA V16 Slice 2 — Autonomous CEO Core Engine', () => {
   let ceoAutonomous: CeoAutonomousService;
@@ -24,7 +24,6 @@ describe('AEVORA V16 Slice 2 — Autonomous CEO Core Engine', () => {
   let mockBrain: any;
   let mockCompanyState: any;
   let mockTaskService: any;
-  let mockFinanceAuth: any;
 
   const companyA = 'comp_alpha_123';
   const companyB = 'comp_beta_456';

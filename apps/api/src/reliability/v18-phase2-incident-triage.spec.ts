@@ -12,7 +12,7 @@ import {
   IncidentEventType,
 } from './incident.types';
 import { ProbeTargetType, ProbeResultStatus } from './health-probe.types';
-import { ForbiddenException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, BadRequestException } from '@nestjs/common';
 import { JwtAuthGuard } from '../authorization/jwt-auth.guard';
 
 describe('V18 Phase 2: Incident Management, Anomaly Detection & Triage', () => {
@@ -72,7 +72,7 @@ describe('V18 Phase 2: Incident Management, Anomaly Detection & Triage', () => {
         return Promise.resolve({ ...found, events });
       }),
       findMany: jest.fn().mockImplementation(({ where }) => {
-        let results = mockIncidents.filter((inc) => {
+        const results = mockIncidents.filter((inc) => {
           if (where?.companyId && inc.companyId !== where.companyId) return false;
           if (where?.status && inc.status !== where.status) return false;
           return true;

@@ -1,7 +1,7 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EpistemicCertainty } from '@prisma/client';
-import { ConflictType, IntegrityFindingType } from './enterprise-intelligence.types';
+import { IntegrityFindingType } from './enterprise-intelligence.types';
 
 @Injectable()
 export class EnterpriseConflictIntegrityService {

@@ -88,7 +88,7 @@ describe('slice 9 BFF routes', () => {
     'continuous-improvement/company/A/detect', 'continuous-improvement/company/A/proposals', 'continuous-improvement/proposals/p1/approve',
     'autonomous-enterprise/operating-cycles', 'autonomous-enterprise/operating-cycles/open', 'autonomous-enterprise/decisions/d1/decide',
     'autonomous-enterprise/escalations', 'autonomous-enterprise/objectives', 'boardroom/meetings', 'boardroom/meetings/m1/transcript',
-    'ceo/weekly-reports', 'ceo/weekly-reports/run', 'groups/g1/report', 'job', 'agents/a1/run',
+    'ceo/weekly-reports', 'ceo/weekly-reports/run', 'groups/g1/report', 'job/j1/run', 'agents/a1/run',
   ])('%s stays blocked (404, no backend call)', async (p) => {
     expect((await call(p, { 'x-aevora-company': 'A' })).status).toBe(404);
     expect(fetchMock).not.toHaveBeenCalled();

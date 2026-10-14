@@ -143,7 +143,7 @@ export class AnomalyDetectionService {
    * Generates diagnostic hypotheses with explicit epistemic uncertainty.
    * Hypotheses are marked 'HYPOTHESIS' and never presented as verified ground truth.
    */
-  private generateHypotheses(input: AnomalyDetectionInput, severity: IncidentSeverity): IncidentHypothesis[] {
+  private generateHypotheses(input: AnomalyDetectionInput, _severity: IncidentSeverity): IncidentHypothesis[] {
     const hypotheses: IncidentHypothesis[] = [];
 
     switch (input.targetType) {

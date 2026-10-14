@@ -1,2 +1,2 @@
 export * from './currency';
-export * from './v12';
+export * from './spatial';

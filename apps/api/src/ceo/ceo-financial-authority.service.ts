@@ -1,9 +1,9 @@
-import { Injectable, ForbiddenException, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CeoBudgetService } from './ceo-budget.service';
 import { NotificationService, NotificationPriority } from '../communication/notification.service';
-import { CeoFinancialOperation, CeoFinancialAuthorityStatus, CeoFinancialDecision } from '@prisma/client';
-import { GrantAuthorityDto, CheckAuthorityDto } from './dto/ceo-financial-authority.dto';
+import { CeoFinancialOperation } from '@prisma/client';
+import { GrantAuthorityDto } from './dto/ceo-financial-authority.dto';
 
 export interface AuthorityCheckResult {
   allowed: boolean;

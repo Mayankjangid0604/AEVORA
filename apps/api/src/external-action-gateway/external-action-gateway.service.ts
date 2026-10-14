@@ -5,7 +5,6 @@ import {
   ExternalActionRequest,
   ExternalActionResult,
   ValidatedActionContext,
-  GatewayRiskTier,
   ExternalActionAuditRecord,
   GatewayApprovalPreparation,
   ExecutionState,

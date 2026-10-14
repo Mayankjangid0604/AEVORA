@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { CeoAutonomousDecisionSummary, DecisionRiskTier } from '@/lib/executive-types';
+import type { CeoAutonomousDecisionSummary } from '@/lib/executive-types';
 
 interface Props {
   decision: CeoAutonomousDecisionSummary | null;

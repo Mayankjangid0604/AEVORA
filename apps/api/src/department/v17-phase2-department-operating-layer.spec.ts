@@ -17,7 +17,7 @@ import {
   CeoDecisionRiskLevel,
   TaskPriority,
 } from '@prisma/client';
-import { BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
 
 describe('V17 Phase 2 — Department Operating Layer Specification Tests', () => {
   let healthService: DepartmentHealthService;
@@ -30,7 +30,7 @@ describe('V17 Phase 2 — Department Operating Layer Specification Tests', () =>
   let workerAssignment: WorkerAssignmentService;
 
   const compA = 'company-alpha-100';
-  const compB = 'company-beta-200';
+  const _compB = 'company-beta-200';
   const deptAId = 'dept-eng-001';
   const deptBId = 'dept-sales-002';
   const agent1Id = 'emp-agent-1';

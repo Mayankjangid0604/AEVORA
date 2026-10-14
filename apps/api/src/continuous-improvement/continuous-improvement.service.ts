@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ImprovementStatus, EmergencyState, EpistemicCertainty } from '@prisma/client';
+import { ImprovementStatus, EmergencyState } from '@prisma/client';
 import {
   TargetDomain,
   ReversibilityType,
@@ -9,10 +9,17 @@ import {
   ProposalValidationStatus,
   CanonicalImprovementSignal,
   CreateProposalInput,
+  RankedImprovementProposal,
+  RankingDecisionRecord,
+  RankingFactors,
+  OscillationDetectionResult,
+  ExecuteProposalOptions,
+  GovernedImprovementCycleResult,
 } from './continuous-improvement.types';
 import { DigitalTwinScenarioService } from '../enterprise-intelligence/digital-twin-scenario.service';
 import { GovernedAuthorityService } from '../governance/governed-authority.service';
-import { AuthorityTier, CeoDecisionRiskLevel } from '../governance/authority-context.types';
+import { AntiEntropyEngineService } from './anti-entropy-engine.service';
+import { AuthorityTier } from '../governance/authority-context.types';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -27,10 +34,17 @@ export class ContinuousImprovementService {
   private readonly MAX_PROPOSALS_PER_WINDOW = 10;
   private readonly PROPOSAL_WINDOW_MS = 60_000; // 1 minute
 
+  // V23 In-memory oscillation tracking map: key = `${companyId}:${entity}`
+  private readonly oscillationTracker = new Map<
+    string,
+    { attempts: number; failures: number; rollbacks: number; lastFailedAt: number; cooldownUntil?: number }
+  >();
+
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly digitalTwin?: DigitalTwinScenarioService,
     @Optional() private readonly authorityService?: GovernedAuthorityService,
+    @Optional() private readonly antiEntropy?: AntiEntropyEngineService,
   ) {}
 
   /**
@@ -107,13 +121,137 @@ export class ContinuousImprovementService {
   }
 
   /**
-   * Phase 7.5, 7.8, 7.20: Governed Improvement Proposal Creation.
+   * V23 Anti-Thrashing & Anti-Oscillation Protection:
+   * Detects whether an entity or process has experienced repeated failures or rollbacks (>= 2).
+   * Calculates dynamic cooldown and flags if Chairman escalation is required.
+   */
+  async detectOscillation(companyId: string, affectedEntity: string): Promise<OscillationDetectionResult> {
+    if (!companyId || !affectedEntity) {
+      return {
+        isOscillating: false,
+        affectedEntity: affectedEntity || 'UNKNOWN',
+        failureCount: 0,
+        rollbackCount: 0,
+        totalAttempts: 0,
+        requiresChairmanReview: false,
+        reason: 'Missing companyId or affectedEntity',
+      };
+    }
+
+    const key = `${companyId}:${affectedEntity}`;
+    const inMemory = this.oscillationTracker.get(key);
+    const now = Date.now();
+
+    // Query historical failures and rollbacks from database
+    const [failedProposals, rolledBackProposals] = await Promise.all([
+      this.prisma.improvementProposal.findMany({
+        where: {
+          companyId,
+          status: ImprovementStatus.FAILED,
+          OR: [
+            { problem: { contains: affectedEntity } },
+            { title: { contains: affectedEntity } },
+            { targetDomain: affectedEntity },
+          ],
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 10,
+      }),
+      this.prisma.improvementProposal.findMany({
+        where: {
+          companyId,
+          status: ImprovementStatus.ROLLED_BACK,
+          OR: [
+            { problem: { contains: affectedEntity } },
+            { title: { contains: affectedEntity } },
+            { targetDomain: affectedEntity },
+          ],
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 10,
+      }),
+    ]);
+
+    const dbFailures = failedProposals.length;
+    const dbRollbacks = rolledBackProposals.length;
+
+    const failures = Math.max(dbFailures, inMemory?.failures || 0);
+    const rollbacks = Math.max(dbRollbacks, inMemory?.rollbacks || 0);
+    const totalNegativeEvents = failures + rollbacks;
+    const totalAttempts = (inMemory?.attempts || 0) + totalNegativeEvents;
+
+    // Oscillation threshold: >= 2 failures/rollbacks triggers anti-thrashing
+    const isOscillating = totalNegativeEvents >= 2;
+    const requiresChairmanReview = totalNegativeEvents >= 3;
+
+    let cooldownUntil: Date | undefined;
+    const requiredCooldownMs = totalNegativeEvents >= 3 ? 30 * 60 * 1000 : 5 * 60 * 1000;
+    const minCooldownTime = (inMemory?.lastFailedAt || now) + requiredCooldownMs;
+
+    if (inMemory?.cooldownUntil && inMemory.cooldownUntil > now) {
+      const effectiveCooldown = totalNegativeEvents >= 3 && minCooldownTime > inMemory.cooldownUntil
+        ? minCooldownTime
+        : inMemory.cooldownUntil;
+      cooldownUntil = new Date(effectiveCooldown);
+      if (inMemory) {
+        inMemory.cooldownUntil = effectiveCooldown;
+      }
+    } else if (isOscillating) {
+      if (minCooldownTime > now) {
+        cooldownUntil = new Date(minCooldownTime);
+        if (inMemory) {
+          inMemory.cooldownUntil = minCooldownTime;
+        }
+      }
+    }
+
+    const reason = isOscillating
+      ? `Anti-thrashing triggered: Entity ${affectedEntity} has ${failures} failure(s) and ${rollbacks} rollback(s). ${
+          cooldownUntil && cooldownUntil.getTime() > now
+            ? `Active cooldown until ${cooldownUntil.toISOString()}.`
+            : 'Immediate re-execution restricted.'
+        } ${requiresChairmanReview ? 'Escalated to Chairman review.' : ''}`.trim()
+      : `Entity ${affectedEntity} has normal stability (${totalNegativeEvents} negative events).`;
+
+    return {
+      isOscillating,
+      affectedEntity,
+      failureCount: failures,
+      rollbackCount: rollbacks,
+      totalAttempts,
+      cooldownUntil,
+      requiresChairmanReview,
+      reason,
+    };
+  }
+
+  recordNegativeEvent(companyId: string, entity: string, type: 'FAILURE' | 'ROLLBACK') {
+    const key = `${companyId}:${entity}`;
+    const current = this.oscillationTracker.get(key) || {
+      attempts: 0,
+      failures: 0,
+      rollbacks: 0,
+      lastFailedAt: Date.now(),
+    };
+    current.attempts += 1;
+    if (type === 'FAILURE') current.failures += 1;
+    if (type === 'ROLLBACK') current.rollbacks += 1;
+    current.lastFailedAt = Date.now();
+    const totalNeg = current.failures + current.rollbacks;
+    const cooldownMs = totalNeg >= 3 ? 30 * 60 * 1000 : 5 * 60 * 1000;
+    current.cooldownUntil = Date.now() + cooldownMs;
+    this.oscillationTracker.set(key, current);
+  }
+
+  /**
+   * Phase 7.5, 7.8, 7.20 & V23: Governed Improvement Proposal Creation.
    * Enforces:
    * - Company isolation.
    * - Emergency stop validation.
    * - Proposal storm prevention (rate limiting & deduplication).
+   * - Anti-thrashing / oscillation detection and cooldown.
    * - Constitutional immutability protection: blocks autonomous modification of constitutional boundaries.
-   * - Classification of authority requirement based on risk, domain, reversibility, and blast radius.
+   * - Classification of authority requirement based on risk, domain, reversibility, blast radius, and oscillation.
    */
   async createProposal(input: CreateProposalInput) {
     const { companyId } = input;
@@ -161,7 +299,21 @@ export class ContinuousImprovementService {
       return recentDuplicate;
     }
 
-    // 4. Phase 7.8 Constitutional Immutability Protection
+    // 3.5. Anti-Thrashing & Anti-Oscillation Check
+    const affectedEntity = input.targetDomain || input.title;
+    const oscillation = await this.detectOscillation(companyId, affectedEntity);
+    if (oscillation.isOscillating && oscillation.cooldownUntil && oscillation.cooldownUntil.getTime() > now) {
+      if (input.risk !== 'CRITICAL' && input.actorId !== 'CHAIRMAN') {
+        this.logger.warn(
+          `[ContinuousImprovement] Proposal creation blocked by active oscillation cooldown for ${affectedEntity}`,
+        );
+        throw new BadRequestException(
+          `Anti-thrashing cooldown active for '${affectedEntity}' until ${oscillation.cooldownUntil.toISOString()}. ${oscillation.reason}`,
+        );
+      }
+    }
+
+    // 4. Phase 7.8 Constitutional Immutability Protection & Authority Classification
     // AI must NOT autonomously modify Chairman sovereignty, authority hierarchy, or safety boundaries
     const targetDomain = (input.targetDomain || TargetDomain.PROCESS_CONFIGURATION) as TargetDomain;
     const isConstitutional =
@@ -181,6 +333,11 @@ export class ContinuousImprovementService {
       );
       authorityRequirement = ProposalAuthorityRequirement.CONSTITUTIONAL_CHANGE;
       risk = 'CRITICAL';
+    } else if (oscillation.requiresChairmanReview) {
+      this.logger.warn(
+        `[ContinuousImprovement] Repeated oscillation detected for ${affectedEntity}: escalating to Chairman review`,
+      );
+      authorityRequirement = ProposalAuthorityRequirement.CHAIRMAN_REQUIRED;
     } else if (risk === 'CRITICAL' || input.blastRadius === BlastRadius.ENTERPRISE) {
       authorityRequirement = ProposalAuthorityRequirement.CHAIRMAN_REQUIRED;
     } else if (risk === 'HIGH' || input.reversibility === ReversibilityType.IRREVERSIBLE) {
@@ -281,7 +438,7 @@ export class ContinuousImprovementService {
     const simResult = await this.digitalTwin.runSimulation(companyId, scenario.id);
 
     // Update proposal with simulation link
-    const updated = await this.prisma.improvementProposal.update({
+    const _updated = await this.prisma.improvementProposal.update({
       where: { id: proposalId },
       data: {
         simulationScenarioId: scenario.id,
@@ -321,11 +478,14 @@ export class ContinuousImprovementService {
   ) {
     const proposal = await this.getProposal(proposalId);
 
-    // Verify constitutional protection
-    if (proposal.authorityRequirement === ProposalAuthorityRequirement.CONSTITUTIONAL_CHANGE) {
+    // Verify constitutional and Chairman authority protection
+    if (
+      proposal.authorityRequirement === ProposalAuthorityRequirement.CONSTITUTIONAL_CHANGE ||
+      proposal.authorityRequirement === ProposalAuthorityRequirement.CHAIRMAN_REQUIRED
+    ) {
       if (options?.approverTier !== AuthorityTier.CHAIRMAN) {
         throw new ForbiddenException(
-          'CONSTITUTIONAL PROTECTION: Only the sovereign Chairman may approve or modify constitutional changes.',
+          `SOVEREIGN CHAIRMAN PROTECTION: Only the sovereign Chairman may approve proposals requiring ${proposal.authorityRequirement}.`,
         );
       }
     }
@@ -363,16 +523,84 @@ export class ContinuousImprovementService {
   }
 
   /**
-   * Phase 7.10 & 7.14: Implements and enters validation lifecycle.
+   * Phase 7.10, 7.14 & V23 Governed Execution:
+   * Enforces:
+   * - Company isolation.
+   * - Execution-time EMERGENCY_STOP enforcement.
+   * - Anti-thrashing / oscillation cooldown re-check.
+   * - Governance authority validation and single-use proof / parameter binding.
+   * - Implements and enters validation lifecycle.
    */
-  async executeProposal(proposalId: string, companyId: string) {
+  async executeProposal(proposalId: string, companyId: string, options?: ExecuteProposalOptions) {
     const proposal = await this.getProposal(proposalId);
     if (proposal.companyId !== companyId) {
       throw new ForbiddenException(`Proposal does not belong to company ${companyId}`);
     }
 
+    // 1. Re-verify Emergency Status at execution boundary (Unconditional fail-closed)
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) {
+      throw new NotFoundException(`Company ${companyId} not found`);
+    }
+    if (company.emergencyStatus === EmergencyState.EMERGENCY_STOP) {
+      this.logger.error(
+        `[ContinuousImprovement] Execution blocked: Company ${companyId} is under EMERGENCY_STOP.`,
+      );
+      throw new ForbiddenException(
+        `Operation blocked: Company ${companyId} is under EMERGENCY_STOP. Improvement proposal execution is suspended.`,
+      );
+    }
+
+    // 2. Proposal Status Check
     if (proposal.status !== ImprovementStatus.APPROVED) {
       throw new BadRequestException(`Cannot execute unapproved proposal ${proposalId} (status: ${proposal.status})`);
+    }
+
+    // 3. Re-verify Anti-Thrashing / Oscillation Cooldown
+    const affectedEntity = proposal.targetDomain || proposal.title;
+    const oscillation = await this.detectOscillation(companyId, affectedEntity);
+    if (oscillation.isOscillating && oscillation.cooldownUntil && oscillation.cooldownUntil.getTime() > Date.now()) {
+      if (options?.actorTier !== AuthorityTier.CHAIRMAN && options?.actorTier !== 'CHAIRMAN') {
+        throw new BadRequestException(
+          `Execution blocked by anti-thrashing cooldown for '${affectedEntity}' until ${oscillation.cooldownUntil.toISOString()}.`,
+        );
+      }
+    }
+
+    // 4. Governed Authority Requirement Verification
+    const authorityReq = proposal.authorityRequirement;
+    if (authorityReq === ProposalAuthorityRequirement.CONSTITUTIONAL_CHANGE) {
+      if (options?.actorTier !== AuthorityTier.CHAIRMAN && options?.actorTier !== 'CHAIRMAN') {
+        throw new ForbiddenException(
+          'CONSTITUTIONAL PROTECTION: Only the sovereign Chairman may execute constitutional improvements.',
+        );
+      }
+    } else if (authorityReq === ProposalAuthorityRequirement.CHAIRMAN_REQUIRED) {
+      if (options?.actorTier && options.actorTier !== AuthorityTier.CHAIRMAN && options.actorTier !== 'CHAIRMAN') {
+        throw new ForbiddenException(
+          'Proposal execution requires sovereign Chairman authority.',
+        );
+      }
+    }
+
+    // 5. Parameter Hash Integrity Verification if provided
+    if (options?.expectedParametersHash) {
+      const canonicalProposalHash = crypto
+        .createHash('sha256')
+        .update(JSON.stringify({
+          title: proposal.title,
+          problem: proposal.problem,
+          proposedChange: proposal.proposedChange,
+          baseline: proposal.baseline,
+          target: proposal.target,
+        }))
+        .digest('hex');
+
+      if (options.expectedParametersHash !== canonicalProposalHash) {
+        throw new BadRequestException(
+          `Execution parameter mismatch: expected hash does not match canonical proposal parameters`,
+        );
+      }
     }
 
     const executed = await this.prisma.improvementProposal.update({
@@ -381,6 +609,7 @@ export class ContinuousImprovementService {
         status: ImprovementStatus.EXECUTING,
         executedAt: new Date(),
         validationStatus: ProposalValidationStatus.OBSERVING,
+        authorityProofId: options?.authorityProofId || proposal.authorityProofId,
       },
     });
 
@@ -413,6 +642,11 @@ export class ContinuousImprovementService {
 
     const validationStatus = isImproved ? ProposalValidationStatus.VALIDATED : ProposalValidationStatus.FAILED;
     const nextStatus = isImproved ? ImprovementStatus.COMPLETED : ImprovementStatus.FAILED;
+
+    // Track negative event for anti-oscillation
+    if (!isImproved) {
+      this.recordNegativeEvent(companyId, proposal.targetDomain || proposal.title, 'FAILURE');
+    }
 
     const updated = await this.prisma.improvementProposal.update({
       where: { id: proposalId },
@@ -468,6 +702,9 @@ export class ContinuousImprovementService {
         `IRREVERSIBLE CHANGE: Proposal ${proposalId} cannot be automatically rolled back. Incident escalated to Chairman.`,
       );
     }
+
+    // Track negative event for anti-oscillation
+    this.recordNegativeEvent(companyId, proposal.targetDomain || proposal.title, 'ROLLBACK');
 
     const rolledBack = await this.prisma.improvementProposal.update({
       where: { id: proposalId },
@@ -600,5 +837,341 @@ export class ContinuousImprovementService {
     });
 
     return outcome;
+  }
+
+  /**
+   * V23 Explainable Multi-Criteria Proposal Ranking & Decision Records:
+   * Ranks candidate proposals by:
+   * - Expected Benefit Score: relative gain (|target - baseline| / max(|baseline|, 1))
+   * - Confidence Factor: normalized confidence (0.1 - 1.0)
+   * - Risk Penalty: LOW (1.0), MEDIUM (0.8), HIGH (0.5), CRITICAL (0.2)
+   * - Blast Radius Factor: LOCAL (1.0), DEPARTMENT (0.85), ENTERPRISE (0.7), CONSTITUTIONAL (0.35)
+   * - Priority Weight: LOW (0.8), NORMAL (1.0), HIGH (1.3), URGENT (1.6)
+   * - Cost Penalty: based on reversibility (REVERSIBLE=0.1, ESCALATION=0.3, IRREVERSIBLE=0.6)
+   */
+  async rankImprovementOpportunities(
+    companyId: string,
+    options?: { maxResults?: number },
+  ): Promise<RankingDecisionRecord> {
+    if (!companyId) {
+      throw new BadRequestException('companyId is required for proposal ranking');
+    }
+
+    const max = options?.maxResults ?? 10;
+    const candidates = await this.prisma.improvementProposal.findMany({
+      where: {
+        companyId,
+        status: { in: [ImprovementStatus.DETECTED, ImprovementStatus.PROPOSED, ImprovementStatus.UNDER_REVIEW, ImprovementStatus.APPROVED] },
+      },
+      include: { outcomes: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const rankedList: RankedImprovementProposal[] = [];
+
+    for (const p of candidates) {
+      // 1. Benefit Score: relative gain from baseline to target
+      const baseline = p.baseline || 0;
+      const target = p.target || 0;
+      const denom = Math.max(Math.abs(baseline), 1);
+      const rawBenefit = Math.abs(target - baseline) / denom;
+      const benefitScore = Math.min(Math.max(rawBenefit, 0.1), 5.0); // bounded 0.1 to 5.0
+
+      // 2. Confidence Factor
+      const confidence = p.confidence ?? 50;
+      const confidenceFactor = Math.min(Math.max(confidence / 100, 0.1), 1.0);
+
+      // 3. Risk Penalty
+      let riskPenalty = 0.8;
+      switch (p.risk) {
+        case 'LOW':
+          riskPenalty = 1.0;
+          break;
+        case 'MEDIUM':
+          riskPenalty = 0.8;
+          break;
+        case 'HIGH':
+          riskPenalty = 0.5;
+          break;
+        case 'CRITICAL':
+          riskPenalty = 0.2;
+          break;
+      }
+
+      // 4. Blast Radius Factor
+      let blastRadiusFactor = 1.0;
+      switch (p.blastRadius) {
+        case BlastRadius.LOCAL:
+          blastRadiusFactor = 1.0;
+          break;
+        case BlastRadius.DEPARTMENT:
+          blastRadiusFactor = 0.85;
+          break;
+        case BlastRadius.ENTERPRISE:
+          blastRadiusFactor = 0.7;
+          break;
+        case BlastRadius.CONSTITUTIONAL:
+          blastRadiusFactor = 0.35;
+          break;
+      }
+
+      // 5. Cost Penalty based on Reversibility
+      let costPenalty = 0.1;
+      switch (p.reversibility) {
+        case ReversibilityType.REVERSIBLE:
+          costPenalty = 0.1;
+          break;
+        case ReversibilityType.ESCALATION_REQUIRED:
+          costPenalty = 0.3;
+          break;
+        case ReversibilityType.IRREVERSIBLE:
+          costPenalty = 0.6;
+          break;
+      }
+
+      // 6. Priority Weight
+      let priorityWeight = 1.0;
+      switch (p.priority) {
+        case 'LOW':
+          priorityWeight = 0.8;
+          break;
+        case 'NORMAL':
+          priorityWeight = 1.0;
+          break;
+        case 'HIGH':
+          priorityWeight = 1.3;
+          break;
+        case 'URGENT':
+          priorityWeight = 1.6;
+          break;
+      }
+
+      // Composite Score Calculation
+      const numerator = benefitScore * confidenceFactor * riskPenalty * blastRadiusFactor * priorityWeight;
+      const denominator = 1.0 + costPenalty;
+      const compositeScore = Number((numerator / denominator).toFixed(4));
+
+      const rankReasoning =
+        `Benefit (${benefitScore.toFixed(2)}) × Confidence (${confidenceFactor.toFixed(2)}) × ` +
+        `Risk (${riskPenalty.toFixed(2)}) × BlastRadius (${blastRadiusFactor.toFixed(2)}) × ` +
+        `Priority (${priorityWeight.toFixed(2)}) / Cost (${denominator.toFixed(2)}) = ${compositeScore}`;
+
+      const ranking: RankingFactors = {
+        benefitScore,
+        confidenceFactor,
+        riskPenalty,
+        blastRadiusFactor,
+        costPenalty,
+        priorityWeight,
+        compositeScore,
+      };
+
+      rankedList.push({
+        proposal: p,
+        ranking,
+        rankReasoning,
+      });
+    }
+
+    // Sort descending by compositeScore
+    rankedList.sort((a, b) => b.ranking.compositeScore - a.ranking.compositeScore);
+
+    const topRanked = rankedList.slice(0, max);
+    const summary =
+      topRanked.length > 0
+        ? `Ranked ${rankedList.length} candidate proposal(s). Top proposal: '${topRanked[0].proposal.title}' (score: ${topRanked[0].ranking.compositeScore}).`
+        : 'No candidate improvement proposals found to rank.';
+
+    this.logger.log(`[ContinuousImprovement] Company ${companyId} - ${summary}`);
+
+    return {
+      companyId,
+      evaluatedAt: new Date(),
+      candidateCount: rankedList.length,
+      rankedProposals: topRanked,
+      summary,
+    };
+  }
+
+  /**
+   * V23 Canonical Governed Self-Improvement Lifecycle:
+   * Observe → Evaluate & Rank → Propose → Simulate (when appropriate) → Authorize → Execute → Verify → Learn → Reconcile
+   */
+  async runGovernedSelfImprovementCycle(
+    companyId: string,
+    actorId: string,
+    options?: {
+      autoExecuteIfAuthorized?: boolean;
+      targetProposalId?: string;
+      simulatedMetricResult?: number;
+    },
+  ): Promise<GovernedImprovementCycleResult> {
+    const cycleId = `cycle_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const timestamp = new Date();
+
+    if (!companyId) {
+      throw new BadRequestException('companyId is required for self-improvement cycle');
+    }
+
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) {
+      throw new NotFoundException(`Company ${companyId} not found`);
+    }
+
+    if (company.emergencyStatus === EmergencyState.EMERGENCY_STOP) {
+      return {
+        cycleId,
+        companyId,
+        timestamp,
+        status: 'HALTED',
+        stages: {
+          observe: { signalsObserved: 0 },
+          evaluate: { candidateCount: 0 },
+          rank: {},
+        },
+        reason: 'Company is in EMERGENCY_STOP. All autonomous self-improvement cycles halted.',
+      };
+    }
+
+    // 1. OBSERVE: Gather signals & candidate proposals
+    const detectedOpportunities = await this.detectImprovementOpportunities(companyId);
+
+    // 2. EVALUATE & RANK
+    const rankingRecord = await this.rankImprovementOpportunities(companyId);
+    const topRanked = rankingRecord.rankedProposals[0];
+
+    if (!topRanked && !options?.targetProposalId) {
+      return {
+        cycleId,
+        companyId,
+        timestamp,
+        status: 'COMPLETED',
+        stages: {
+          observe: { signalsObserved: detectedOpportunities.length },
+          evaluate: { candidateCount: 0 },
+          rank: {},
+        },
+        reason: 'No candidate proposals requiring improvement actions.',
+      };
+    }
+
+    const targetProposal = options?.targetProposalId
+      ? await this.getProposal(options.targetProposalId)
+      : topRanked.proposal;
+
+    const result: GovernedImprovementCycleResult = {
+      cycleId,
+      companyId,
+      timestamp,
+      status: 'COMPLETED',
+      stages: {
+        observe: { signalsObserved: detectedOpportunities.length },
+        evaluate: { candidateCount: rankingRecord.candidateCount, topProposalId: targetProposal.id },
+        rank: { topRanked },
+      },
+    };
+
+    // 3. SIMULATE (when required or recommended)
+    if (targetProposal.simulationRequirement === 'MANDATORY' || targetProposal.simulationRequirement === 'RECOMMENDED') {
+      try {
+        const sim = await this.simulateProposal(companyId, targetProposal.id, actorId);
+        result.stages.simulate = {
+          simulated: sim.simulated,
+          scenarioId: sim.scenarioId,
+          confidenceScore: sim.confidenceScore,
+        };
+      } catch (err: any) {
+        this.logger.warn(`Simulation failed during cycle ${cycleId}: ${err.message}`);
+        result.stages.simulate = { simulated: false };
+      }
+    }
+
+    // 4. AUTHORIZE
+    const authorityReq = targetProposal.authorityRequirement;
+    const isChairmanRequired =
+      authorityReq === ProposalAuthorityRequirement.CHAIRMAN_REQUIRED ||
+      authorityReq === ProposalAuthorityRequirement.CONSTITUTIONAL_CHANGE;
+
+    result.stages.authorize = {
+      authorized: targetProposal.status === ImprovementStatus.APPROVED,
+      proofId: targetProposal.authorityProofId || undefined,
+      requirement: authorityReq,
+    };
+
+    if (isChairmanRequired && targetProposal.status !== ImprovementStatus.APPROVED) {
+      result.status = 'ESCALATED_TO_CHAIRMAN';
+      result.reason = `Proposal '${targetProposal.title}' requires sovereign Chairman approval before execution.`;
+      return result;
+    }
+
+    // 5. EXECUTE (if authorized and autoExecute requested)
+    if (options?.autoExecuteIfAuthorized && targetProposal.status === ImprovementStatus.APPROVED) {
+      try {
+        const executed = await this.executeProposal(targetProposal.id, companyId, { actorId });
+        result.stages.execute = { executed: true, status: executed.status };
+
+        // 6. VERIFY (if test metric provided)
+        if (options?.simulatedMetricResult !== undefined) {
+          const validation = await this.validateImprovement(targetProposal.id, companyId, {
+            observedMetricValue: options.simulatedMetricResult,
+            evidence: { cycleId, verifiedAt: new Date() },
+            notes: `Verified during self-improvement cycle ${cycleId}`,
+          });
+
+          const isVerified = validation.validationStatus === ProposalValidationStatus.VALIDATED;
+          result.stages.verify = {
+            verified: isVerified,
+            validationStatus: validation.validationStatus || undefined,
+            learnedLesson: `Metric ${options.simulatedMetricResult} vs target ${targetProposal.target}`,
+          };
+
+          if (!isVerified) {
+            result.status = 'HALTED';
+            result.reason = `Outcome verification failed: observed metric ${options.simulatedMetricResult} did not meet target ${targetProposal.target}.`;
+            return result;
+          }
+
+          // 7. LEARN
+          if (targetProposal.targetDomain === TargetDomain.WORKFORCE_ASSIGNMENT && actorId) {
+            try {
+              const learn = await this.applyWorkforceLearning({
+                companyId,
+                employeeId: actorId,
+                capability: 'SELF_IMPROVEMENT',
+                success: true,
+              });
+              result.stages.learn = {
+                workforceUpdated: true,
+                employeeId: actorId,
+                newReliability: learn.newReliability,
+              };
+            } catch (e: any) {
+              result.stages.learn = { workforceUpdated: false };
+            }
+          }
+        } else {
+          // Execution completed but observation window is ongoing; do not falsely claim COMPLETED before verification
+          result.status = 'OBSERVING';
+          result.reason = `Proposal '${targetProposal.title}' executed; outcome verification window in progress.`;
+        }
+      } catch (err: any) {
+        result.status = 'HALTED';
+        result.reason = `Execution halted: ${err.message}`;
+        result.stages.execute = { executed: false, status: 'FAILED' };
+        return result;
+      }
+    }
+
+    // 8. RECONCILE (Anti-Entropy scan)
+    if (this.antiEntropy) {
+      try {
+        const findings = await this.antiEntropy.runAudit(companyId);
+        result.stages.reconcile = { entropyFindingsCount: findings.length };
+      } catch (err: any) {
+        this.logger.warn(`Anti-entropy audit skipped during cycle ${cycleId}: ${err.message}`);
+      }
+    }
+
+    return result;
   }
 }

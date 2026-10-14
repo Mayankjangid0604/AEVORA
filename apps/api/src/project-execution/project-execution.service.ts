@@ -432,7 +432,7 @@ export class ProjectExecutionService {
   }
 
   // Deprecated: Internal approval shouldn't mean client acceptance
-  async approveDelivery(id: string) {
+  async approveDelivery(_id: string) {
     throw new BadRequestException('approveDelivery is deprecated. Clients must accept deliveries via clientAcceptDelivery');
   }
 

@@ -6,7 +6,6 @@ import { ApprovalValidationService } from '../approval/approval-validation.servi
 import {
   AuthorityTier,
   AuthorityGrantStatus,
-  AuthorityEvaluation,
 } from './authority-context.types';
 import {
   ApprovalRiskLevel,
@@ -1208,7 +1207,7 @@ describe('V17 Phase 5 — Authority Integration & Governance Specification Tests
 
   // AG. Idempotent authority reconciliation
   it('AG. Idempotent authority reconciliation: running reconciliation repeatedly yields consistent results', async () => {
-    const expiredGrant = await authorityService.createGrant({
+    await authorityService.createGrant({
       companyId: compA,
       granterId: chairmanId,
       granterRole: 'CHAIRMAN',

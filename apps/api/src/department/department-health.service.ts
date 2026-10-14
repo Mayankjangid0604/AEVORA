@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TaskStatus, ExecutionAttemptStatus, AttemptFailureType } from '@prisma/client';
+import { TaskStatus, ExecutionAttemptStatus } from '@prisma/client';
 
 export interface HealthDimension {
   score: number; // 0 - 100

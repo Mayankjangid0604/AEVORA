@@ -11,10 +11,8 @@ import { CeoConsequenceAnalysisService } from '../ceo/ceo-consequence-analysis.s
 import { EpistemicCertainty } from '@prisma/client';
 import {
   EnterpriseStreamKey,
-  EnterpriseEntityType,
   ConflictType,
   IntegrityFindingType,
-  HealthTier,
 } from './enterprise-intelligence.types';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Subject } from 'rxjs';
@@ -31,7 +29,7 @@ describe('V17 Phase 6 — Enterprise Intelligence & Digital Twin Tests (A throug
 
   const compA = 'company-alpha-twin';
   const compB = 'company-beta-twin';
-  const chairmanId = 'chairman-sovereign-twin';
+  const _chairmanId = 'chairman-sovereign-twin';
   const ceoId = 'ceo-agent-twin';
 
   // Mock stores
@@ -99,7 +97,7 @@ describe('V17 Phase 6 — Enterprise Intelligence & Digital Twin Tests (A throug
           }
           return Promise.resolve(null);
         }),
-        findMany: jest.fn().mockImplementation(({ where = {}, orderBy }) => {
+        findMany: jest.fn().mockImplementation(({ where = {}, orderBy: _orderBy }) => {
           let list = Array.from(stateRecordsStore.values());
           if (where.companyId) list = list.filter((r) => r.companyId === where.companyId);
           if (where.streamKey) list = list.filter((r) => r.streamKey === where.streamKey);
@@ -462,7 +460,7 @@ describe('V17 Phase 6 — Enterprise Intelligence & Digital Twin Tests (A throug
 
   // E. Idempotent event application
   it('E. Idempotent event application: identical observations update cleanly without data corruption', async () => {
-    const rec1 = await stateService.recordObservation({
+    await stateService.recordObservation({
       companyId: compA,
       streamKey: EnterpriseStreamKey.FINANCIAL,
       entityType: 'LEDGER',
@@ -798,7 +796,7 @@ describe('V17 Phase 6 — Enterprise Intelligence & Digital Twin Tests (A throug
       healthSnapshots: [],
     });
 
-    const firstRun = await reconciliationService.reconcileCompanyState(compA);
+    await reconciliationService.reconcileCompanyState(compA);
     const secondRun = await reconciliationService.reconcileCompanyState(compA);
 
     // Second run produces 0 newly reconciled records because values have not changed

@@ -1,8 +1,30 @@
-import { Injectable, Logger, ForbiddenException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
 import { Prisma, SalesLeadStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../devices/realtime.gateway';
-import { LeadSearchService } from './lead-search.service';
+import { createHash } from 'crypto';
+import { LeadSearchService, scoreFactors, scoreLead } from './lead-search.service';
+import { isRecipientSuppressed } from '../integration/integration.service';
+
+export interface ImportLeadRow {
+  businessName: string;
+  website?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  category?: string | null;
+  location?: string | null;
+  sourceUrl?: string | null;
+  notes?: string | null;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Deterministic identity for an imported business: website host, else email, else name+location. */
+export function importDedupKey(r: ImportLeadRow): string {
+  const host = (r.website ?? '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split(/[/?#]/)[0];
+  const raw = host ? `w:${host}` : r.email ? `e:${r.email.trim().toLowerCase()}` : `n:${r.businessName.trim().toLowerCase().replace(/\s+/g, ' ')}|${(r.location ?? '').trim().toLowerCase()}`;
+  return `import-${createHash('sha1').update(raw).digest('hex').slice(0, 24)}`;
+}
 
 const SEARCH_VARIANTS = ['', 'best', 'popular'];
 
@@ -88,7 +110,7 @@ export class LeadGenService {
                 geography: f.location,
                 source: f.googlePlaceId.startsWith('osm-') ? 'LEAD_GEN_OSM' : f.googlePlaceId.startsWith('mock-') ? 'LEAD_GEN_MOCK' : 'LEAD_GEN_GOOGLE_PLACES',
                 notes: f.description,
-                metadata: { leadGenRunId: run.id, reviewCount: f.reviewCount, ...(f.lat != null && f.lng != null ? { lat: f.lat, lng: f.lng } : {}) },
+                metadata: { leadGenRunId: run.id, reviewCount: f.reviewCount, scoreFactors: scoreFactors(f), collectedAt: new Date().toISOString(), ...(f.lat != null && f.lng != null ? { lat: f.lat, lng: f.lng } : {}) },
                 leadGenAudits: { create: { event: 'FOUND', detail: { runId: run.id, qualityScore: f.qualityScore }, actorId } },
               },
             });
@@ -167,6 +189,65 @@ export class LeadGenService {
       }
     }
     return null;
+  }
+
+  /**
+   * Operator-provided leads (CSV/JSON already parsed). Validates, normalizes, dedups (re-imports are no-ops), scores with
+   * persisted factors, and records provenance. ponytail: dedup is within imports only; an OSM lead for the same business
+   * has a different key — add cross-source matching on website host if duplicates show up.
+   */
+  async importLeads(companyId: string, rows: ImportLeadRow[], source: string, actorId?: string) {
+    if (!Array.isArray(rows) || rows.length === 0) throw new BadRequestException('rows must be a non-empty array');
+    if (rows.length > 1000) throw new BadRequestException('max 1000 rows per import');
+    const result = { created: 0, duplicates: 0, invalid: [] as { index: number; reason: string }[], leadIds: [] as string[] };
+    for (const [index, r] of rows.entries()) {
+      const name = typeof r?.businessName === 'string' ? r.businessName.trim().slice(0, 200) : '';
+      if (!name) { result.invalid.push({ index, reason: 'businessName required' }); continue; }
+      const email = r.email?.trim() || null;
+      if (email && !EMAIL_RE.test(email)) { result.invalid.push({ index, reason: 'invalid email' }); continue; }
+      if (email && (await isRecipientSuppressed(this.prisma, companyId, email))) { result.invalid.push({ index, reason: 'suppressed (opted out)' }); continue; }
+      const lead = { phone: r.phone?.trim() || null, email, website: r.website?.trim() || null, reviewCount: 0 };
+      const key = importDedupKey({ ...r, businessName: name, email });
+      try {
+        const created = await this.prisma.salesLead.create({
+          data: {
+            companyId, name, organizationName: name,
+            contactEmail: lead.email, contactPhone: lead.phone, website: lead.website,
+            googlePlaceId: key,
+            qualityScore: scoreLead(lead),
+            industry: r.category?.trim() || null,
+            geography: r.location?.trim() || null,
+            source: 'OPERATOR_IMPORT',
+            notes: r.notes?.slice(0, 2000) || null,
+            metadata: { importSource: source, sourceUrl: r.sourceUrl ?? null, collectedAt: new Date().toISOString(), scoreFactors: scoreFactors(lead) },
+            leadGenAudits: { create: { event: 'IMPORTED', detail: { source }, actorId } },
+          },
+        });
+        result.created++;
+        result.leadIds.push(created.id);
+      } catch (e) {
+        if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002')) throw e;
+        result.duplicates++;
+      }
+    }
+    return result;
+  }
+
+  /** Pipeline report straight from persisted rows — no estimates. */
+  async funnel(companyId: string) {
+    const [byStatus, drafts, responses] = await Promise.all([
+      this.prisma.salesLead.groupBy({ by: ['status'], where: { companyId }, _count: { _all: true } }),
+      this.prisma.outreachDraft.groupBy({ by: ['status'], where: { companyId }, _count: { _all: true } }),
+      this.prisma.outreachResponse.groupBy({ by: ['responseType'], where: { companyId }, _count: { _all: true } }),
+    ]);
+    const leads = Object.fromEntries(byStatus.map((r) => [r.status, r._count._all]));
+    const total = byStatus.reduce((a, r) => a + r._count._all, 0);
+    return {
+      leads: { total, ...leads },
+      drafts: Object.fromEntries(drafts.map((r) => [r.status, r._count._all])),
+      responses: Object.fromEntries(responses.map((r) => [r.responseType, r._count._all])),
+      conversionRate: total ? (leads.CONVERTED ?? 0) / total : 0,
+    };
   }
 
   listRuns(companyId: string) {

@@ -115,7 +115,7 @@ export class RetryPolicyService {
       };
     }
 
-    // External action failures must respect V16 External Action Gateway recovery semantics
+    // External action failures must respect External Action Gateway recovery semantics
     if (failureType === AttemptFailureType.EXTERNAL_ACTION_FAILURE) {
       return {
         isRetryable: false,
@@ -124,7 +124,7 @@ export class RetryPolicyService {
         requiresReassignment: false,
         requiresEscalation: true,
         escalationTarget: 'CEO',
-        reason: 'External action failed. Route through V16 External Action Gateway safeguards. Blind replay prohibited.',
+        reason: 'External action failed. Route through External Action Gateway safeguards. Blind replay prohibited.',
       };
     }
 
@@ -137,7 +137,7 @@ export class RetryPolicyService {
         requiresReassignment: false,
         requiresEscalation: true,
         escalationTarget: 'CEO',
-        reason: 'Consequential high-risk task failure. Blind retry prohibited by V16 Consequence Policy.',
+        reason: 'Consequential high-risk task failure. Blind retry prohibited by Consequence Policy.',
       };
     }
 

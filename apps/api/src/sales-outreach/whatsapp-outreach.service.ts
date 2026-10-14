@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma, SalesLead } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertOutboundAllowed } from '../common/outbound-policy';
 import { RealtimeGateway } from '../devices/realtime.gateway';
 import { DemoFactoryService } from './demo-factory.service';
 import { isKilled, renderTemplate, templateVars } from './email-outreach.service';
@@ -71,56 +72,15 @@ export class WhatsAppOutreachService {
       demoUrl,
     };
 
-    const waApiConfigured = !!process.env.WHATSAPP_API_TOKEN;
-
-    if (waApiConfigured) {
-      try {
-        await this.sendViaApi(lead.contactPhone, message);
-        this.logger.log(`WhatsApp sent to ${lead.contactPhone} via API`);
-      } catch (e) {
-        this.logger.error(`WhatsApp API failed for lead ${lead.id}: ${e.message}`);
-        // Fall back to chairman push
-        this.realtime.broadcastToUser(company.chairmanId, 'whatsapp.send', waPayload);
-        return this.prisma.outreachCampaign.update({
-          where: { id: campaign.id },
-          data: { status: 'SCHEDULED', notes: `API failed, pushed to chairman: ${e.message}` },
-        });
-      }
-    } else {
-      // No API — push to chairman's device to send manually via wa.me deep link
-      this.realtime.broadcastToUser(company.chairmanId, 'whatsapp.send', waPayload);
-      this.logger.log(`WhatsApp message pushed to chairman for lead ${lead.id}`);
-    }
+    // Pilot policy: WhatsApp is never sent automatically (the Business API sender was removed). The Chairman's device
+    // receives the message and a human sends it via wa.me — that manual send is the approval.
+    await assertOutboundAllowed(this.prisma, companyId, 'WHATSAPP'); // emergency stop / kill switch: not even a manual push
+    this.realtime.broadcastToUser(company.chairmanId, 'whatsapp.send', waPayload);
+    this.logger.log(`WhatsApp message pushed to chairman for manual approval/send (lead ${lead.id})`);
 
     return this.prisma.outreachCampaign.update({
       where: { id: campaign.id },
-      data: {
-        status: waApiConfigured ? 'SENT' : 'SCHEDULED',
-        sentAt: waApiConfigured ? new Date() : null,
-        notes: waApiConfigured ? null : 'Awaiting chairman manual send via WhatsApp',
-      },
+      data: { status: 'SCHEDULED', sentAt: null, notes: 'Awaiting chairman manual send via WhatsApp' },
     });
-  }
-
-  /** WhatsApp Business Cloud API — requires WHATSAPP_API_TOKEN and WHATSAPP_PHONE_NUMBER_ID. */
-  private async sendViaApi(toPhone: string, message: string) {
-    const token = process.env.WHATSAPP_API_TOKEN!;
-    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID!;
-    // Normalize to international format
-    const normalized = toPhone.replace(/[^0-9+]/g, '').replace(/^0+/, '').replace(/^\+?91/, '91');
-    const to = normalized.startsWith('91') ? normalized : `91${normalized}`;
-
-    const res = await fetch(`https://graph.facebook.com/v18.0/${phoneId}/messages`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to,
-        type: 'text',
-        text: { body: message },
-      }),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) throw new Error(`WhatsApp API ${res.status}: ${await res.text()}`);
   }
 }

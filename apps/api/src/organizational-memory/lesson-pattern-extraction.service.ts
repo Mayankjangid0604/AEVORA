@@ -3,7 +3,6 @@ import {
   DecisionOutcomeEvaluation,
   StructuredLesson,
   DetectedPattern,
-  MemoryCategory,
   MemoryMaturity,
 } from './organizational-memory.types';
 

@@ -3,7 +3,6 @@ import {
   DiagnosticContext,
   RankedRootCauseHypothesis,
   IncidentDiagnosticReportSummary,
-  ObservableEvidenceItem,
 } from './diagnostic.types';
 import { ProbeTargetType } from './health-probe.types';
 import { randomUUID } from 'crypto';

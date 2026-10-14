@@ -23,6 +23,19 @@
         "AEVORA_ENV_OVERRIDE": "../../scripts/safe-local.env"
       },
       "port": 13000
+    },
+    {
+      "name": "aevora-api-e2e",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "start:prod",
+        "--workspace=@aevora/api"
+      ],
+      "env": {
+        "AEVORA_ENV_OVERRIDE": "scripts/e2e-local.env"
+      },
+      "port": 4011
     }
   ]
 }

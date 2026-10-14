@@ -302,7 +302,7 @@ export interface StrategicReflectionReportItem {
   }[];
 }
 
-export interface V15SpatialContext {
+export interface SpatialContext {
   activeCampus: string;
   totalRooms: number;
   deskCapacity: number;
@@ -310,11 +310,14 @@ export interface V15SpatialContext {
   activeAvatars: number;
   lastSpatialSync: string;
 }
+export type V15SpatialContext = SpatialContext;
 
-export interface V24OfferContext {
+export interface OfferContext {
   activeCampaignsCount: number;
   offersDispatchedToday: number;
   averageDiscountPercent: number;
   maxAutonomousDiscountLimit: number; // 50% deterministic safeguard
+  offerGatewayProvider?: string;
   v24GatewayProvider: string;
 }
+export type V24OfferContext = OfferContext;

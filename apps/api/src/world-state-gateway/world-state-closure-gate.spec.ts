@@ -1,13 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { WorldStateEventService, SpatialHistoryPersistenceError } from './world-state-event.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { StructuredLoggerService } from '../logger/structured-logger.service';
 import { V12EventType, V12EntityType } from '@aevora/shared';
 import { WorldStateGatewayModule } from './world-state-gateway.module';
 import { LoggerModule } from '../logger/logger.module';
 describe('V12-E Pass 2 Evidence Closure Gate', () => {
   let service: WorldStateEventService;
-  let prisma: PrismaService;
+  let _prisma: PrismaService;
   let persistedEvents: any[] = [];
   let broadcastEvents: any[] = [];
 
@@ -33,7 +32,7 @@ describe('V12-E Pass 2 Evidence Closure Gate', () => {
     }).compile();
 
     service = module.get<WorldStateEventService>(WorldStateEventService);
-    prisma = module.get<PrismaService>(PrismaService);
+    _prisma = module.get<PrismaService>(PrismaService);
     
     service.getGlobalStream().subscribe((ev) => {
       broadcastEvents.push(ev);

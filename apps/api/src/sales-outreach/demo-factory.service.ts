@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ModelGateway } from '@aevora/model-gateway';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertOutboundAllowed, assertPublishingAllowed } from '../common/outbound-policy';
 import { parseJson } from '../common/parse-json';
 import { DEMO_CONTENT_PROMPT, demoProjectName, nextDemoFiles, normalizeDemoContent, realProfile } from './demo-site/next-template';
 
@@ -41,6 +42,13 @@ export class DemoFactoryService {
    * Reuses a live demo for the same lead. Without VERCEL_API_TOKEN nothing is built.
    */
   async createDemoForLead(lead: DemoLead): Promise<string | null> {
+    // Publishing a public site is an external action: server flag + emergency stop/kill switches, never caller input.
+    try {
+      await assertPublishingAllowed(this.prisma, lead.companyId);
+    } catch (e) {
+      this.logger.log(`Demo not published for lead ${lead.id}: ${e.message}`);
+      return null;
+    }
     if (!this.token) {
       this.logger.warn('VERCEL_API_TOKEN missing — no demo site (email goes without a demo link)');
       return null;
@@ -113,6 +121,8 @@ export class DemoFactoryService {
     const site = await this.prisma.demoSite.findUnique({ where: { id: demoSiteId } });
     if (!site || site.status === 'DELETED') return false;
     if (site.vercelProjectId && this.token) {
+      // Takedowns are allowed while new publishing is disabled, but not during an emergency stop (no external calls).
+      await assertOutboundAllowed(this.prisma, site.companyId, 'PUBLISH');
       const r = await fetch(`${VERCEL}/v9/projects/${site.vercelProjectId}${this.teamQs()}`, { method: 'DELETE', headers: this.headers() });
       if (!r.ok && r.status !== 404) throw new Error(`delete project ${r.status}: ${(await r.text()).slice(0, 200)}`);
     }

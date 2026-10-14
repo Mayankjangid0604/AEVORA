@@ -15,7 +15,6 @@ import {
 import {
   TaskStatus,
   ExecutionAttemptStatus,
-  EmployeeStatus,
   OrgMemoryType,
 } from '@prisma/client';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
@@ -409,7 +408,7 @@ describe('V17 Phase 4 — Evidence & Outcomes Verification Specification Tests (
   // -------------------------------------------------------------
   it('H. Evidence Freshness: marks evidence expired if past maxAgeMs or expiresAt', async () => {
     // Add expired evidence
-    const expiredRecord = await evidenceVerification.submitEvidence({
+    await evidenceVerification.submitEvidence({
       companyId: compA,
       taskId,
       attemptId,

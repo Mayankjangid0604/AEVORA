@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, NotFoundException, BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
 import { RunbookEngineService } from './runbook-engine.service';
 import { ITRemediationAdapter } from './it-remediation.adapter';
 import { IncidentManagerService } from './incident-manager.service';
@@ -442,7 +442,7 @@ describe('V18 Phase 4: Runbook Engine & Governed Remediation Execution', () => {
 
   const mockGateway = {
     registerAdapter: jest.fn(),
-    getAuditRecordByIdempotencyKey: jest.fn().mockImplementation((key: string, companyId?: string | null) => {
+    getAuditRecordByIdempotencyKey: jest.fn().mockImplementation((_key: string, _companyId?: string | null) => {
       return Promise.resolve(null);
     }),
     executeAction: jest.fn().mockImplementation(async (req) => {

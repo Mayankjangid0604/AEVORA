@@ -9,7 +9,7 @@ import { DigitalTwinScenarioService } from '../enterprise-intelligence/digital-t
 import { GovernedAuthorityService } from '../governance/governed-authority.service';
 import { AuthorizationService } from '../authorization/authorization.service';
 import { GatewayAuthorityValidatorService } from '../external-action-gateway/gateway-authority-validator.service';
-import { ImprovementStatus, EmergencyState, EpistemicCertainty } from '@prisma/client';
+import { ImprovementStatus, EmergencyState } from '@prisma/client';
 import {
   TargetDomain,
   ReversibilityType,
@@ -21,16 +21,16 @@ import {
   RemediationTier,
 } from './continuous-improvement.types';
 import { AuthorityTier, CeoDecisionRiskLevel } from '../governance/authority-context.types';
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
 describe('V17 Phase 7 — Continuous Evolution & Anti-Entropy Tests (A through BJ)', () => {
   let ciService: ContinuousImprovementService;
   let entropyEngine: AntiEntropyEngineService;
   let lessonExtractor: LessonPatternExtractionService;
   let memoryService: ExecutiveMemoryService;
-  let controller: ContinuousImprovementController;
-  let digitalTwin: DigitalTwinScenarioService;
-  let authorityService: GovernedAuthorityService;
+  let _controller: ContinuousImprovementController;
+  let _digitalTwin: DigitalTwinScenarioService;
+  let _authorityService: GovernedAuthorityService;
   let prisma: PrismaService;
 
   const compA = 'company-alpha-evolve';
@@ -371,9 +371,9 @@ describe('V17 Phase 7 — Continuous Evolution & Anti-Entropy Tests (A through B
     entropyEngine = module.get<AntiEntropyEngineService>(AntiEntropyEngineService);
     lessonExtractor = module.get<LessonPatternExtractionService>(LessonPatternExtractionService);
     memoryService = module.get<ExecutiveMemoryService>(ExecutiveMemoryService);
-    controller = module.get<ContinuousImprovementController>(ContinuousImprovementController);
-    digitalTwin = module.get<DigitalTwinScenarioService>(DigitalTwinScenarioService);
-    authorityService = module.get<GovernedAuthorityService>(GovernedAuthorityService);
+    _controller = module.get<ContinuousImprovementController>(ContinuousImprovementController);
+    _digitalTwin = module.get<DigitalTwinScenarioService>(DigitalTwinScenarioService);
+    _authorityService = module.get<GovernedAuthorityService>(GovernedAuthorityService);
     prisma = module.get<PrismaService>(PrismaService);
   });
 

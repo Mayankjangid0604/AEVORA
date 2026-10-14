@@ -3,11 +3,22 @@
 import React, { useState } from 'react';
 import type { CeoOperatingState, DirectiveEvaluationResult } from '@/lib/executive-types';
 
+export interface DisagreementComparisonResult {
+  directiveConsequences?: {
+    riskTier?: string;
+    netScore?: number;
+  };
+  alternativeConsequences?: {
+    riskTier?: string;
+    netScore?: number;
+  };
+}
+
 interface Props {
   state: CeoOperatingState | undefined;
   onSubmitObjective: (title: string, description: string) => Promise<void>;
   onEvaluateDirective: (directive: string) => Promise<DirectiveEvaluationResult | null>;
-  onCompareDisagreement: (directive: string, alternative: string) => Promise<any>;
+  onCompareDisagreement: (directive: string, alternative: string) => Promise<DisagreementComparisonResult | null>;
 }
 
 export function CeoCommandInterface({
@@ -25,7 +36,7 @@ export function CeoCommandInterface({
   const [directive, setDirective] = useState('');
   const [isEvaluatingDirective, setIsEvaluatingDirective] = useState(false);
   const [evaluationResult, setEvaluationResult] = useState<DirectiveEvaluationResult | null>(null);
-  const [comparisonResult, setComparisonResult] = useState<any | null>(null);
+  const [comparisonResult, setComparisonResult] = useState<DisagreementComparisonResult | null>(null);
   const [isComparing, setIsComparing] = useState(false);
 
   const handleSubmitObjective = async (e: React.FormEvent) => {

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, Request, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, Request, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../authorization/jwt-auth.guard';
 import { RolesGuard } from '../authorization/roles.guard';
 import { Roles } from '../authorization/roles.decorator';
@@ -17,7 +17,7 @@ export class OutreachController {
   }
 
   @Get('drafts')
-  getDrafts(@Request() req, @Param('status') status?: OutreachDraftStatus) {
+  getDrafts(@Request() req, @Query('status') status?: OutreachDraftStatus) {
     return this.outreachService.getDrafts(req.user.companyId, status);
   }
 

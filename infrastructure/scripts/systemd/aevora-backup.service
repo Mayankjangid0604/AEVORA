@@ -1,0 +1,26 @@
+[Unit]
+Description=AEVORA PostgreSQL Database Automated Backup Service
+Documentation=file:///opt/aevora/infrastructure/scripts/BACKUP_RESTORE_RUNBOOK.md
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/aevora
+Environment="POSTGRES_CONTAINER=aevora_postgres_staging"
+Environment="BACKUP_DIR=/var/backups/aevora"
+Environment="BACKUP_FORMAT=custom"
+Environment="RETENTION_DAYS=30"
+Environment="CLEANUP_OLD_BACKUPS=true"
+EnvironmentFile=-/etc/default/aevora-backup
+ExecStart=/opt/aevora/infrastructure/scripts/backup-db.sh ${POSTGRES_CONTAINER}
+StandardOutput=journal
+StandardError=journal
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/backups/aevora
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

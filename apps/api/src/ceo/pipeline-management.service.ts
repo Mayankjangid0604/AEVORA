@@ -144,7 +144,7 @@ Allowed placeholders: {{businessName}}, {{category}}, {{chairmanName}}, {{compan
       const claimed = await this.prisma.clientProject.updateMany({ where: { id: p.id, ceoFollowUpAt: null }, data: { ceoFollowUpAt: new Date() } });
       if (!claimed.count) continue;
       const discount = Math.round((p.quotedAmount ?? 0) * 0.1);
-      await this.integration.sendEmail(companyId, outreachEnv(), {
+      const followUp = await this.integration.sendEmail(companyId, outreachEnv(), {
         to: p.lead.contactEmail!,
         subject: `Your sample for ${p.lead.name} — happy to adjust it`,
         body: `Hello ${p.lead.name} team,
@@ -157,7 +157,7 @@ ${emailSignature()}`,
       });
       const note = `${new Date().toISOString().slice(0, 10)}: CEO offered a free revision or 10% off (${rupees(discount)}) — discount NOT applied to the invoice; needs Chairman approval.`;
       await this.prisma.clientProject.update({ where: { id: p.id }, data: { ceoNotes: p.ceoNotes ? `${p.ceoNotes}\n${note}` : note } });
-      out.push(action(`Followed up with ${p.lead.name} on their sample; offered a revision or 10% off (${rupees(discount)}, pending your approval)`, 'sample unanswered for 7+ days', 'EXECUTED', 'FOLLOW_UP'));
+      out.push(action(`${followUp.pendingApproval ? 'Drafted (awaiting your approval) a follow-up to' : 'Followed up with'} ${p.lead.name} on their sample; offered a revision or 10% off (${rupees(discount)}, pending your approval)`, 'sample unanswered for 7+ days', 'EXECUTED', 'FOLLOW_UP'));
     }
     return out;
   }
@@ -173,7 +173,7 @@ ${emailSignature()}`,
     for (const p of paid) {
       const claimed = await this.prisma.clientProject.updateMany({ where: { id: p.id, referralRequestedAt: null }, data: { referralRequestedAt: new Date() } });
       if (!claimed.count) continue;
-      await this.integration.sendEmail(companyId, outreachEnv(), {
+      const referral = await this.integration.sendEmail(companyId, outreachEnv(), {
         to: p.lead.contactEmail!,
         subject: `Thank you, ${p.lead.name} — one small request`,
         body: `Hello ${p.lead.name} team,
@@ -184,7 +184,7 @@ Do you know one other business owner who could use a website or some automation?
 
 ${emailSignature()}`,
       });
-      out.push(action(`Asked ${p.lead.name} for a referral after payment`, 'client paid', 'EXECUTED', 'FOLLOW_UP'));
+      out.push(action(`${referral.pendingApproval ? 'Drafted (awaiting your approval) a referral request to' : 'Asked'} ${p.lead.name}${referral.pendingApproval ? '' : ' for a referral'} after payment`, 'client paid', 'EXECUTED', 'FOLLOW_UP'));
     }
     return out;
   }

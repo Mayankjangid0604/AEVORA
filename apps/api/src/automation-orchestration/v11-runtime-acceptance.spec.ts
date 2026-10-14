@@ -7,8 +7,6 @@ jest.mock('puppeteer', () => ({
   executablePath: jest.fn(),
 }));
 import { AppModule } from '../app.module';
-import { IntelligenceModule } from '../intelligence/intelligence.module';
-import { ContinuousImprovementModule } from '../continuous-improvement/continuous-improvement.module';
 import { AeObjectiveStatus } from '@prisma/client';
 
 describe('V11 Enterprise Orchestrator - Real Runtime Acceptance', () => {
@@ -16,8 +14,7 @@ describe('V11 Enterprise Orchestrator - Real Runtime Acceptance', () => {
 
   let service: EnterpriseOrchestratorService;
   let prisma: PrismaService;
-  let testCompanyId = 'mock-company-id';
-  let testChairmanId = 'mock-chairman-id';
+  const testCompanyId = 'mock-company-id';
   
   let objectiveState: any = { 
     id: 'obj-1', 

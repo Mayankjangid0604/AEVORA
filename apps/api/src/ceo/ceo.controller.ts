@@ -53,7 +53,7 @@ export class CeoController {
     return this.operating.createPriority(req.user.companyId, ceo.id, { ...body, targetDate: body.targetDate ? new Date(body.targetDate) : undefined });
   }
 
-  @Post('v3-objective')
+  @Post(['objective', 'v3-objective'])
   @Roles('CHAIRMAN')
   async createV3Objective(@Request() req, @Body() body: { title: string, description: string }) {
     return this.autonomous.receiveObjective(req.user.companyId, body.title, body.description, req.user.actorId);

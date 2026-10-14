@@ -1,21 +1,24 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { ExternalActionAuditItem, V24OfferContext } from '@/lib/executive-types';
+import type { ExternalActionAuditItem, OfferContext, V24OfferContext } from '@/lib/executive-types';
 
 interface Props {
   actions: ExternalActionAuditItem[];
+  offerContext?: OfferContext;
   v24Context?: V24OfferContext;
   isLoading: boolean;
-  onRecordOutcomeFeedback?: (actionId: string, outcomeMetrics: any) => Promise<void>;
+  onRecordOutcomeFeedback?: (actionId: string, outcomeMetrics: Record<string, unknown>) => Promise<void>;
 }
 
 export function ExternalActionGatewayConsole({
   actions,
+  offerContext,
   v24Context,
   isLoading,
   onRecordOutcomeFeedback,
 }: Props) {
+  const context = offerContext ?? v24Context;
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState('');
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
@@ -63,16 +66,16 @@ export function ExternalActionGatewayConsole({
 
   return (
     <div className="space-y-4">
-      {/* V24 Offer Market Integration Banner */}
-      {v24Context && (
-        <section aria-label="V24 Offer Market Gateway" className="rounded-panel border border-border bg-surface-2/40 p-3">
+      {/* Offer Market Integration Banner */}
+      {context && (
+        <section aria-label="Offer Market Gateway" className="rounded-panel border border-border bg-surface-2/40 p-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
                 <span className="rounded-control border border-accent/40 bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent">
-                  V24 OFFER ENGINE
+                  OFFER ENGINE
                 </span>
-                <span className="text-xs text-muted">Gateway Provider: {v24Context.v24GatewayProvider}</span>
+                <span className="text-xs text-muted">Gateway Provider: {context.offerGatewayProvider || context.v24GatewayProvider}</span>
               </div>
               <p className="mt-1 text-xs text-text">
                 Autonomous offer market pipeline: campaigns, customer incentives, and bounded discount dispatch.
@@ -81,15 +84,15 @@ export function ExternalActionGatewayConsole({
             <div className="flex gap-4 text-xs">
               <div>
                 <span className="text-muted">Active Campaigns: </span>
-                <strong className="text-text">{v24Context.activeCampaignsCount}</strong>
+                <strong className="text-text">{context.activeCampaignsCount}</strong>
               </div>
               <div>
                 <span className="text-muted">Offers Today: </span>
-                <strong className="text-text">{v24Context.offersDispatchedToday}</strong>
+                <strong className="text-text">{context.offersDispatchedToday}</strong>
               </div>
               <div>
                 <span className="text-muted">Max Autonomous Discount: </span>
-                <strong className="text-accent">{v24Context.maxAutonomousDiscountLimit}% Limit</strong>
+                <strong className="text-accent">{context.maxAutonomousDiscountLimit}% Limit</strong>
               </div>
             </div>
           </div>

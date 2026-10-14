@@ -31,7 +31,7 @@ export class InboxController {
     const text = body?.replyText?.trim();
     if (!text) throw new BadRequestException('replyText is required');
     if (text.length > 5000) throw new BadRequestException('replyText too long (max 5000 characters)');
-    return this.inbound.sendReply(req.user.companyId, id, text);
+    return this.inbound.sendReply(req.user.companyId, id, text, req.user.actorId);
   }
 
   @Post('messages/:id/ignore')

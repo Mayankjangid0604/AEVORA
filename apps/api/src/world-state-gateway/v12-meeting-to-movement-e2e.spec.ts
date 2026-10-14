@@ -2,9 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorldStateEventService } from './world-state-event.service';
 import { WorldStateEventTranslationService } from './world-state-translation.service';
-import { V12SpatialService } from '../v12-spatial/v12-spatial.service';
-import { V12NavigationService } from '../v12-spatial/v12-navigation.service';
-import { HqCapacityService } from '../v12-spatial/hq-capacity.service';
+import { V12SpatialService } from '../spatial/spatial.service';
+import { V12NavigationService } from '../spatial/navigation.service';
+import { HqCapacityService } from '../spatial/hq-capacity.service';
 import { Subject } from 'rxjs';
 import { V12EventType } from '@aevora/shared';
 

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CompanyStateService, CompanyStateSnapshot } from '../management/company-state.service';
-import { SalesPipelineService, PipelineMetrics } from '../sales/sales-pipeline.service';
+import { CompanyStateService } from '../management/company-state.service';
+import { SalesPipelineService } from '../sales/sales-pipeline.service';
 
 // ── Priority classification (deterministic, no AI scoring) ──
 

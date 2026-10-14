@@ -86,7 +86,7 @@ export class WorldStateEventService implements OnModuleInit {
       }
       if (!companyId) this.health.sequencesSeeded = true;
     } catch (e: any) {
-      this.logger.error(`Could not seed V12 spatial-history sequences; history writes will fail loudly until the store is available: ${e.message}`);
+      this.logger.error(`Could not seed spatial-history sequences; history writes will fail loudly until the store is available: ${e.message}`);
     }
   }
 
@@ -116,7 +116,7 @@ export class WorldStateEventService implements OnModuleInit {
    * broadcast and a SpatialHistoryPersistenceError is thrown (and published on persistenceFailures()).
    */
   public broadcastEvent<T>(companyId: string, event: V12EventEnvelope<T>): Promise<HistoryCommitResult> {
-    this.logger.log(`[V12 Event] Enqueuing ${event.eventType} for entity ${event.entityId} (Company: ${companyId})`, '', {
+    this.logger.log(`[Spatial Event] Enqueuing ${event.eventType} for entity ${event.entityId} (Company: ${companyId})`, '', {
       eventId: event.eventId,
       eventType: event.eventType,
       entityId: event.entityId,
@@ -267,7 +267,7 @@ export class WorldStateEventService implements OnModuleInit {
     this.health.failures++;
     this.health.lastFailureAt = Date.now();
     this.health.lastFailureMessage = err.message;
-    this.logger.error(`[V12 History] NOT broadcast — ${err.message}`, (err.causeError as any)?.stack);
+    this.logger.error(`[Spatial History] NOT broadcast — ${err.message}`, (err.causeError as any)?.stack);
     this.failures$.next(err);
     return err;
   }

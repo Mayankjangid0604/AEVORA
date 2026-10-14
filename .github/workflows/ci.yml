@@ -1,0 +1,104 @@
+name: CI Validation & Container Build Gates
+
+on:
+  push:
+    branches: [ master, staging, main ]
+  pull_request:
+    branches: [ master, staging, main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Lint, Test & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate --schema=packages/database/prisma/schema.prisma
+
+      - name: Build Shared Packages
+        run: npx turbo run build --filter=@aevora/shared... --filter=@aevora/database... --filter=@aevora/model-gateway...
+
+      - name: Run Linter
+        run: npm run lint
+
+      - name: Typecheck Workspaces
+        run: |
+          npx tsc -p apps/api/tsconfig.json --noEmit
+          npm run typecheck --workspace=@aevora/web
+
+      - name: Run Test Suite
+        env:
+          CI: true
+          NODE_ENV: test
+          JWT_SECRET: ci-dummy-jwt-secret-not-for-prod
+          WEBHOOK_SECRET_PROD: ci-dummy-webhook-secret-prod
+          WEBHOOK_SECRET_SIM: ci-dummy-webhook-secret-sim
+          DATABASE_URL: postgresql://ci_user:ci_pass@127.0.0.1:5432/ci_db?schema=public
+        run: npm test
+
+  docker-build:
+    name: Build & Verify Container Images
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build API Image
+        run: |
+          docker build \
+            -f apps/api/Dockerfile \
+            -t aevora-api:${{ github.sha }} \
+            -t aevora-api:latest \
+            .
+
+      - name: Build Web Image
+        run: |
+          docker build \
+            -f apps/web/Dockerfile \
+            -t aevora-web:${{ github.sha }} \
+            -t aevora-web:latest \
+            .
+
+      - name: Audit Image Layers for Secret Hygiene
+        run: |
+          echo "Verifying images exist before secret audit..."
+          docker image inspect "aevora-api:${{ github.sha }}" > /dev/null 2>&1 || { echo "::error::API image not found"; exit 1; }
+          docker image inspect "aevora-web:${{ github.sha }}" > /dev/null 2>&1 || { echo "::error::Web image not found"; exit 1; }
+
+          echo "Scanning image layer history for forbidden secret patterns..."
+          SECRET_PATTERN="(BEGIN (RSA|EC|OPENSSH) PRIVATE KEY|DATABASE_URL=postgresql://[^ ]+:[^ ]+@|REDIS_PASSWORD=[a-zA-Z0-9]+)"
+
+          if docker history --no-trunc "aevora-api:${{ github.sha }}" | grep -qE "$SECRET_PATTERN"; then
+            echo "::error::Forbidden secret pattern detected in aevora-api image layer history! Build rejected."
+            exit 1
+          fi
+
+          if docker history --no-trunc "aevora-web:${{ github.sha }}" | grep -qE "$SECRET_PATTERN"; then
+            echo "::error::Forbidden secret pattern detected in aevora-web image layer history! Build rejected."
+            exit 1
+          fi
+
+          echo "Image layer hygiene check passed cleanly without leaking secrets."

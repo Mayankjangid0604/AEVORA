@@ -3,10 +3,10 @@ import { EmployeeService } from './employee.service';
 import { EmployeeController } from './employee.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthorizationModule } from '../authorization/authorization.module';
-import { V12SpatialModule } from '../v12-spatial/v12-spatial.module';
+import { SpatialModule } from '../spatial/spatial.module';
 
 @Module({
-  imports: [AuthorizationModule, forwardRef(() => V12SpatialModule)],
+  imports: [AuthorizationModule, forwardRef(() => SpatialModule)],
   controllers: [EmployeeController],
   providers: [EmployeeService, PrismaService],
   exports: [EmployeeService],

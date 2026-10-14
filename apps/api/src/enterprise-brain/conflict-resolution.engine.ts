@@ -111,8 +111,8 @@ export class ConflictResolutionEngine {
         const incompleteTasks = goal.tasks.filter((t) => t.status !== 'COMPLETED');
         if (incompleteTasks.length > 0) {
           // Hierarchy rule: Core Task records (Level 2) trump Goal self-reported status (Level 4)
-          const primarySourceRank = SOURCE_OF_TRUTH_HIERARCHY.CORE_TASK_RECORD; // 2
-          const secondarySourceRank = SOURCE_OF_TRUTH_HIERARCHY.GOAL_SELF_REPORTED_PROGRESS; // 4
+          const _primarySourceRank = SOURCE_OF_TRUTH_HIERARCHY.CORE_TASK_RECORD; // 2
+          const _secondarySourceRank = SOURCE_OF_TRUTH_HIERARCHY.GOAL_SELF_REPORTED_PROGRESS; // 4
 
           out.push({
             id: `conflict-goal-${goal.id}`,

@@ -58,7 +58,7 @@ export class ProactiveAlertService {
     const company = await this.prisma.company.findUnique({ where: { id: companyId }, select: { chairmanId: true } });
     if (!company) return sent;
 
-    const [criticalAlerts, pendingHighRisk, failedPayments] = await Promise.all([
+    const [criticalAlerts, pendingHighRisk, _failedPayments] = await Promise.all([
       this.prisma.operationalAlert.findMany({
         where: { companyId, severity: 'CRITICAL', status: 'ACTIVE' },
         select: { id: true, title: true, description: true },

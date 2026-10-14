@@ -322,6 +322,10 @@ model Company {
   entropyFindings                EntropyFinding[]
   entropyHealthSnapshots         EntropyHealthSnapshot[]
   entropyRemediationRecords      EntropyRemediationRecord[]
+
+  // V24 Offer Market relations
+  offers                         Offer[]
+  offerRedemptions               OfferRedemptionRecord[]
 }
 
 enum RoleAccessLevel {
@@ -964,6 +968,19 @@ model ClientInquiry {
   opportunities Opportunity[]
   receivedAt    DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+  // Gate 4A public intake (all optional so existing rows and the receptionist flow are unaffected)
+  publicRef        String?  @unique // customer-facing reference, e.g. REQ-7KQ2M9XW4P (unguessable; never the row id)
+  businessName     String?
+  contactName      String?
+  contactEmail     String? // normalized lower-case
+  contactPhone     String?
+  serviceRequested String?
+  source           String? // PUBLIC_FORM | RECEPTIONIST | ...
+  submissionHash   String? // sha256(company|email|service|description) — duplicate submissions return the same reference
+  internalNotes    String? // operator-only, never returned by public endpoints
+
+  @@index([companyId, status, receivedAt])
+  @@index([companyId, submissionHash])
 }
 
 // ------------------------------------------------------
@@ -3083,6 +3100,7 @@ model IntegrationAuditLog {
 
 enum JobStatus {
   QUEUED
+  PAUSED // Gate 4A: operator-paused; the worker only claims QUEUED
   PROCESSING
   COMPLETED
   FAILED
@@ -8233,6 +8251,19 @@ enum OutreachResponseType {
   UNSUBSCRIBED
 }
 
+/// Persistent opt-out list, per tenant. Checked by the outbound email gate before every send and by lead import.
+/// Rows are never deleted by the application (they are the audit trail of who opted out, when, and how).
+model EmailSuppression {
+  id        String   @id @default(uuid())
+  companyId String
+  email     String // normalized: trimmed, lower-case
+  reason    String // UNSUBSCRIBE_LINK | ONE_CLICK | INBOUND_REPLY | OPERATOR
+  source    String?
+  createdAt DateTime @default(now())
+
+  @@unique([companyId, email])
+}
+
 model OutreachResponse {
   id              String               @id @default(uuid())
   companyId       String
@@ -10661,4 +10692,135 @@ model RunbookExecution {
 
   @@index([incidentId, createdAt])
   @@index([companyId, status])
+}
+
+// ============================================================================
+// V24 — Offer Market & Autonomous Offer Engine Persistent Models
+// ============================================================================
+
+model Offer {
+  id                         String                    @id @default(uuid())
+  companyId                  String
+  company                    Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                       String
+  description                String
+  targetAudience             String
+  productService             String
+  creatorId                  String
+  creatorRole                String                    // CHAIRMAN, CEO, SYSTEM
+  status                     String                    @default("DRAFT") // DRAFT, UNDER_REVIEW, EVALUATED, APPROVED, ACTIVE, SUSPENDED, EXPIRED, CANCELLED, REJECTED, REVISION_REQUIRED
+  isChairmanGated            Boolean                   @default(false)
+  requiresChairmanApproval   Boolean                   @default(false)
+  currentRedemptions         Int                       @default(0)
+  version                    Int                       @default(1)
+  termsVersion               Int                       @default(1)
+  idempotencyKey             String?
+  rejectionReason            String?
+  suspensionReason           String?
+  dispatchedActionId         String?
+  externalReferenceId        String?
+  metadata                   Json                      @default("{}")
+  financialAnalysis          Json?
+  ceoEvaluation              Json?
+  activatedAt                DateTime?
+  suspendedAt                DateTime?
+  expiredAt                  DateTime?
+  cancelledAt                DateTime?
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+
+  materialTerms              OfferMaterialTermsRecord?
+  termsHistory               OfferTermsVersion[]
+  approvalBinding            OfferApprovalRecord?
+  redemptions                OfferRedemptionRecord[]
+
+  @@unique([companyId, idempotencyKey])
+  @@index([companyId, status])
+  @@index([companyId, createdAt])
+}
+
+model OfferMaterialTermsRecord {
+  id                         String                    @id @default(uuid())
+  offerId                    String                    @unique
+  offer                      Offer                     @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  originalPrice              Float
+  discountType               String                    // PERCENTAGE, FIXED_AMOUNT, CUSTOM
+  discountValue              Float
+  finalPrice                 Float
+  currency                   String                    @default("USD")
+  validFrom                  DateTime
+  validUntil                 DateTime
+  maxRedemptions             Int?
+  productServiceIds          Json                      @default("[]")
+  targetAudience             String
+  termsAndConditions         String
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+
+  @@index([offerId])
+}
+
+model OfferTermsVersion {
+  id                         String                    @id @default(uuid())
+  offerId                    String
+  offer                      Offer                     @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  version                    Int
+  terms                      String
+  changedBy                  String
+  changeReason               String?
+  changedAt                  DateTime                  @default(now())
+
+  @@unique([offerId, version])
+  @@index([offerId, version])
+}
+
+model OfferApprovalRecord {
+  id                         String                    @id @default(uuid())
+  approvalId                 String                    @unique
+  offerId                    String                    @unique
+  offer                      Offer                     @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  approvedBy                 String
+  approverRole               String
+  approverTier               String
+  approvedVersion            Int
+  approvedTermsVersion       Int
+  parametersHash             String
+  conditions                 Json                      @default("[]")
+  validUntil                 DateTime?
+  isConsumed                 Boolean                   @default(false)
+  consumedAt                 DateTime?
+  approvedAt                 DateTime                  @default(now())
+
+  @@index([offerId, parametersHash])
+}
+
+model OfferConsumedApproval {
+  id                         String                    @id @default(uuid())
+  approvalId                 String                    @unique
+  offerId                    String
+  consumedBy                 String
+  consumedAt                 DateTime                  @default(now())
+
+  @@index([approvalId])
+}
+
+model OfferRedemptionRecord {
+  id                         String                    @id @default(uuid())
+  offerId                    String
+  offer                      Offer                     @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  companyId                  String
+  company                    Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId                 String
+  redemptionCode             String
+  transactionValue           Float
+  discountApplied            Float
+  netPaid                    Float
+  channel                    String                    @default("DIRECT_WEB")
+  evidenceHash               String
+  idempotencyKey             String?
+  redeemedAt                 DateTime                  @default(now())
+
+  @@unique([companyId, idempotencyKey])
+  @@index([offerId, customerId])
+  @@index([companyId, redeemedAt])
 }

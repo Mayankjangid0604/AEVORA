@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
 import { DiagnosticContextAssemblerService } from './diagnostic-context-assembler.service';
 import { RootCauseAnalysisService } from './root-cause-analysis.service';
 import { IncidentManagerService } from './incident-manager.service';

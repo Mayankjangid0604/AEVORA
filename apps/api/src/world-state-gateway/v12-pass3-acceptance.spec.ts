@@ -2,11 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorldStateEventService } from '../world-state-gateway/world-state-event.service';
 import { WorldStateEventTranslationService } from '../world-state-gateway/world-state-translation.service';
-import { V12SpatialService } from '../v12-spatial/v12-spatial.service';
-import { V12NavigationService } from '../v12-spatial/v12-navigation.service';
-import { HqCapacityService } from '../v12-spatial/hq-capacity.service';
-import { V12SpatialModule } from '../v12-spatial/v12-spatial.module';
-import { WorldStateGatewayModule } from '../world-state-gateway/world-state-gateway.module';
+import { V12SpatialService } from '../spatial/spatial.service';
+import { V12NavigationService } from '../spatial/navigation.service';
+import { HqCapacityService } from '../spatial/hq-capacity.service';
 class MockPrismaService {
   databaseEvents = { subscribe: jest.fn() };
   v12SpatialWorkspace = {
@@ -49,7 +47,7 @@ class MockWorldStateEventService {
            causationId
         };
     }
-    async publishEvent(envelope: any, state: any) {
+    async publishEvent(envelope: any, _state: any) {
         this.stream.next({ companyId: envelope.companyId || 'comp-1', event: envelope });
     }
     async broadcastEvent(companyId: string, envelope: any) {
@@ -63,7 +61,7 @@ describe('V12 Enterprise Pass 3 - Autonomous Spatial Behavior', () => {
   let prisma: PrismaService;
   let translationService: WorldStateEventTranslationService;
   let navigationService: V12NavigationService;
-  let spatialService: V12SpatialService;
+  let _spatialService: V12SpatialService;
 
   beforeAll(async () => {
     app = await Test.createTestingModule({
@@ -85,7 +83,7 @@ describe('V12 Enterprise Pass 3 - Autonomous Spatial Behavior', () => {
     prisma = app.get(PrismaService);
     translationService = app.get(WorldStateEventTranslationService);
     navigationService = app.get(V12NavigationService);
-    spatialService = app.get(V12SpatialService);
+    _spatialService = app.get(V12SpatialService);
   });
 
   afterAll(async () => {

@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateCompanyBudgetDto, AllocateDepartmentBudgetDto, AdjustDepartmentAllocationDto, BudgetReservationDto, BudgetStatusUpdateDto } from './dto/ceo-budget.dto';
+import { CreateCompanyBudgetDto, AllocateDepartmentBudgetDto, AdjustDepartmentAllocationDto, BudgetReservationDto } from './dto/ceo-budget.dto';
 import { BudgetStatus, Prisma } from '@prisma/client';
 import { NotificationService, NotificationPriority } from '../communication/notification.service';
 

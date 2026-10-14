@@ -1,14 +1,11 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { CompanyService, CreateSubsidiaryDto, AutoProvisionCompanyDto } from './company.service';
-import { HqCapacityService, DEFAULT_HQ_CAPACITY_POLICY } from '../v12-spatial/hq-capacity.service';
-import { V12VehicleService } from '../v12-spatial/v12-vehicle.service';
-import { V12AssetRegistryService } from '../v12-spatial/v12-asset-registry.service';
+import { CompanyService } from './company.service';
+import { HqCapacityService } from '../spatial/hq-capacity.service';
+import { V12VehicleService } from '../spatial/vehicle.service';
+import { V12AssetRegistryService } from '../spatial/asset-registry.service';
 import { WorldStateGatewayService } from '../world-state-gateway/world-state-gateway.service';
-import { WorldStateEventService } from '../world-state-gateway/world-state-event.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { V12EntityType, WorldSnapshot } from '@aevora/shared';
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { V12EntityType } from '@aevora/shared';
 import { CompanyStatus } from '@prisma/client';
+import { ForbiddenException } from '@nestjs/common';
 
 describe('V15-E: Automatic Company & Subsidiary Provisioning', () => {
   let companyService: CompanyService;
@@ -59,7 +56,7 @@ describe('V15-E: Automatic Company & Subsidiary Provisioning', () => {
       return callback(txPrisma);
     }),
     company: {
-      findUnique: jest.fn(async ({ where, include }) => {
+      findUnique: jest.fn(async ({ where, include: _include }) => {
         const c = store.companies.find((x) => x.id === where.id);
         if (!c) return null;
         return {
@@ -76,7 +73,7 @@ describe('V15-E: Automatic Company & Subsidiary Provisioning', () => {
           officeLocations: [],
         };
       }),
-      findFirst: jest.fn(async ({ where, include }) => {
+      findFirst: jest.fn(async ({ where, include: _include }) => {
         let matches = store.companies.slice();
         if (where.id) matches = matches.filter((x) => x.id === where.id);
         if (where.name) matches = matches.filter((x) => x.name.toLowerCase() === where.name.toLowerCase());
@@ -120,7 +117,7 @@ describe('V15-E: Automatic Company & Subsidiary Provisioning', () => {
           employees: store.employees.filter((e) => e.companyId === c.id),
         }));
       }),
-      create: jest.fn(async ({ data, include }) => {
+      create: jest.fn(async ({ data, include: _include }) => {
         const id = `comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const newComp = {
           id,
@@ -161,7 +158,7 @@ describe('V15-E: Automatic Company & Subsidiary Provisioning', () => {
       }),
     },
     employee: {
-      findUnique: jest.fn(async ({ where, include }) => {
+      findUnique: jest.fn(async ({ where, include: _include }) => {
         const e = store.employees.find((x) => x.id === where.id);
         if (!e) return null;
         return {

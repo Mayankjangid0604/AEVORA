@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, Request, UnauthorizedException } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { Public } from './jwt-auth.guard';
 
@@ -9,6 +10,7 @@ export class AuthController {
   ) {}
 
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   async login(@Body() body: { actorId: string, credential?: string }) {
     if (!body.actorId) {

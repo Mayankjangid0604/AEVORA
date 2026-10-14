@@ -30,7 +30,7 @@ describe('V17 Phase 1 — Execution Foundation Specification Tests', () => {
   let jobService: JobService;
 
   const compA = 'company-alpha-100';
-  const compB = 'company-beta-200';
+  const _compB = 'company-beta-200';
   const workerAId = 'ai-worker-alpha-1';
   const workerBId = 'ai-worker-beta-1';
   const taskId = 'task-v17-001';

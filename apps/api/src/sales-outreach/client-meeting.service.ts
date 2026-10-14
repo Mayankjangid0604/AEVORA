@@ -1,6 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ClientMeetingStatus } from '@prisma/client';
 import { ModelGateway, ModelTier } from '@aevora/model-gateway';
 
 @Injectable()
@@ -109,7 +108,7 @@ export class ClientMeetingService {
   }
 
   // 6. External Meet Integration
-  private async scheduleExternalMeet(companyId: string, meetingId: string, time: string): Promise<string> {
+  private async scheduleExternalMeet(_companyId: string, _meetingId: string, _time: string): Promise<string> {
     // Audit Requirement: IF credentials unavailable, DO NOT fake it.
     // Return EXTERNAL_INTEGRATION_REQUIRED / NOT_CONFIGURED
     this.logger.warn(`[Google Meet Integration] Google Calendar API not configured. Falling back to explicit failure state.`);
@@ -127,7 +126,7 @@ export class ClientMeetingService {
   // 8. Submit Notes/Transcript
   async submitNotesOrTranscript(meetingId: string, companyId: string, content: string, isTranscript: boolean) {
     // If it's a transcript, we extract notes via AI. If it's just raw notes, we can also extract structure.
-    const meeting = await this.prisma.clientMeeting.findUniqueOrThrow({ where: { id: meetingId, companyId } });
+    await this.prisma.clientMeeting.findUniqueOrThrow({ where: { id: meetingId, companyId } });
     
     // Simulate real transcript recording/transcription capability not existing natively
     if (isTranscript) {

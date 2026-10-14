@@ -6,6 +6,7 @@
     "build": "node ../../node_modules/@nestjs/cli/bin/nest.js build",
     "dev": "nest start --watch",
     "start": "nest start",
+    "start:prod": "node dist/main.js",
     "lint": "eslint src",
     "test": "jest --runInBand --logHeapUsage"
   },
@@ -19,6 +20,7 @@
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/platform-socket.io": "^10.4.22",
     "@nestjs/schedule": "^4.1.2",
+    "@nestjs/throttler": "^5.2.0",
     "@nestjs/websockets": "^10.4.22",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
@@ -55,7 +57,7 @@
     ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
-    "maxWorkers": "50%",
+    "maxWorkers": 2,
     "transform": {
       "^.+\\.(t|j)s$": [
         "ts-jest",
@@ -74,6 +76,7 @@
     ],
     "setupFiles": [
       "<rootDir>/test-setup.ts"
-    ]
+    ],
+    "workerIdleMemoryLimit": "1GB"
   }
 }

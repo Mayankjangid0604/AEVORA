@@ -80,7 +80,7 @@ describe('BFF task routes', () => {
   });
   it.each([
     'tasks', 'tasks/t1/start', 'tasks/t1/complete', 'tasks/t1/assign', 'tasks/t1/priority', 'tasks/t1/block', 'tasks/t1/cancel',
-    'agents/ag1', 'agents/ag1/executions', 'agents/ag1/run', 'compute/jobs', 'job', 'assistant/pc-tasks', 'employees/e1/goals', 'goals/g1',
+    'agents/ag1', 'agents/ag1/executions', 'agents/ag1/run', 'compute/jobs', 'job/j1/payload', 'assistant/pc-tasks', 'employees/e1/goals', 'goals/g1',
     'chairman/projects/p1/tasks', 'operating-loop/A/cycle', // cycles list opened read-only in slice 9
   ])('%s stays blocked (404, no backend call)', async (p) => {
     expect((await call(p, { 'x-aevora-company': 'A' })).status).toBe(404);

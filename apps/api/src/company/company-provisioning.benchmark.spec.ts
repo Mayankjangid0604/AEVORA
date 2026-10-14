@@ -1,8 +1,7 @@
 import { CompanyService } from './company.service';
-import { HqCapacityService } from '../v12-spatial/hq-capacity.service';
-import { V12VehicleService } from '../v12-spatial/v12-vehicle.service';
-import { V12AssetRegistryService } from '../v12-spatial/v12-asset-registry.service';
-import { WorldStateGatewayService } from '../world-state-gateway/world-state-gateway.service';
+import { HqCapacityService } from '../spatial/hq-capacity.service';
+import { V12VehicleService } from '../spatial/vehicle.service';
+import { V12AssetRegistryService } from '../spatial/asset-registry.service';
 import { CompanyStatus } from '@prisma/client';
 
 describe('V15-E: Company Provisioning Performance Benchmark', () => {

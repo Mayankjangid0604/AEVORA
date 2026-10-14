@@ -190,7 +190,7 @@ export class DepartmentLeaderAutonomousService {
     failedTaskId: string,
     parentTaskId: string,
     companyId: string,
-    reason: string = 'Upstream dependency failed',
+    _reason: string = 'Upstream dependency failed',
   ): Promise<{ affectedTaskIds: string[]; independentTaskIds: string[] }> {
     this.logger.warn(`[Department Leader] Executing failure isolation for failed task ${failedTaskId}`);
 
@@ -488,7 +488,7 @@ Return a JSON object with a "tasks" array. Each task needs a "refId" string for 
 
     let accepted = result.success;
     let reason = 'Automated evaluation';
-    let decision = 'RETRY';
+    const decision = 'RETRY';
 
     try {
       const out: any = typeof result.output === 'string' ? JSON.parse(result.output) : result.output;

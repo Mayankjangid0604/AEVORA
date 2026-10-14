@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { companyProfile } from '../config/company';
+import { emergencyStopActive } from '../common/outbound-policy';
 
 /**
  * Emails the Chairman about important company events (for now; WhatsApp/call later).
@@ -45,12 +46,14 @@ export class ChairmanMailer {
   }
 
   get configured() {
+    if (emergencyStopActive()) return false;
     const u = process.env.SMTP_USER ?? '';
     return process.env.CHAIRMAN_EMAIL_NOTIFICATIONS !== 'false' && !!process.env.SMTP_HOST && !!u && !u.startsWith('your_') && !!process.env.SMTP_PASS && !!this.recipient;
   }
 
   /** Send and report exactly what happened (for the test endpoint). */
   async sendTo(to: string, m: MailContent): Promise<{ ok: boolean; to: string; messageId?: string; error?: string }> {
+    if (emergencyStopActive()) return { ok: false, to, error: 'Outbound blocked: emergency stop is active' };
     const u = process.env.SMTP_USER ?? '';
     if (!process.env.SMTP_HOST || !u || u.startsWith('your_') || !process.env.SMTP_PASS) return { ok: false, to, error: 'SMTP_HOST / SMTP_USER / SMTP_PASS not set in .env' };
     try {
@@ -97,6 +100,7 @@ export class ChairmanMailer {
 
   /** Raw send for Chairman Mail threads: exact subject/body, optional threading headers, returns the Message-ID. */
   async sendRaw(to: string, subject: string, text: string, inReplyTo?: string | null): Promise<{ ok: boolean; messageId?: string; error?: string }> {
+    if (emergencyStopActive()) return { ok: false, error: 'Outbound blocked: emergency stop is active' };
     const u = process.env.SMTP_USER ?? '';
     if (process.env.CHAIRMAN_EMAIL_NOTIFICATIONS === 'false') return { ok: false, error: 'CHAIRMAN_EMAIL_NOTIFICATIONS=false' };
     if (!process.env.SMTP_HOST || !u || u.startsWith('your_') || !process.env.SMTP_PASS || !to) return { ok: false, error: 'SMTP not configured' };

@@ -23,14 +23,21 @@ export interface FoundLead {
   qualityScore: number;
 }
 
-/** 0–100. No website is the strongest signal: that is what we sell. */
-export function scoreLead(l: { phone: string | null; email: string | null; website: string | null; reviewCount: number }): number {
-  let score = 0;
-  if (l.phone) score += 25;
-  if (l.email) score += 25;
-  if (!l.website) score += 30;
-  score += Math.min(20, Math.floor(l.reviewCount / 10)); // reviews ≈ business size
-  return Math.min(100, score);
+type ScoreInput = { phone: string | null; email: string | null; website: string | null; reviewCount: number };
+
+/** Per-factor points, persisted with the lead so operators can see why it ranked. Missing evidence scores 0. */
+export function scoreFactors(l: ScoreInput): Record<string, number> {
+  return {
+    hasPhone: l.phone ? 25 : 0,
+    hasEmail: l.email ? 25 : 0,
+    noWebsite: l.website ? 0 : 30, // no website is the strongest signal: that is what we sell
+    reviews: Math.min(20, Math.floor((l.reviewCount || 0) / 10)), // reviews ≈ business size
+  };
+}
+
+/** 0–100. */
+export function scoreLead(l: ScoreInput): number {
+  return Math.min(100, Object.values(scoreFactors(l)).reduce((a, b) => a + b, 0));
 }
 
 /** Category (LEAD_GEN_CATEGORIES) → OpenStreetMap tags that count as that kind of business. */
@@ -94,7 +101,7 @@ const FIELD_MASK = [
   'places.nationalPhoneNumber', 'places.userRatingCount', 'places.editorialSummary', 'places.location',
 ].join(',');
 
-const SEARCH_OFFSETS: Record<string, number> = { best: 0, popular: 0 };
+const _SEARCH_OFFSETS: Record<string, number> = { best: 0, popular: 0 };
 
 @Injectable()
 export class LeadSearchService {

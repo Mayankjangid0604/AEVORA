@@ -31,7 +31,15 @@ describe('IntegrationService — V13.5 Email Safety & Recipient Parity', () => {
       providerIntegration: {
         findFirst: jest.fn().mockResolvedValue(null),
       },
+      // Outbound gate dependencies: no kill switch, nothing suppressed, and an approved draft for whatever is sent.
+      killSwitchConfig: { findFirst: jest.fn().mockResolvedValue(null) },
+      outreachResponse: { findFirst: jest.fn().mockResolvedValue(null) },
+      salesLead: { findFirst: jest.fn().mockResolvedValue(null) },
+      outreachDraft: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), count: jest.fn().mockResolvedValue(0) },
+      emailSuppression: { findUnique: jest.fn().mockResolvedValue(null) },
     };
+    // Production mode is a server setting (OUTREACH_ENVIRONMENT); providers are mocks, so nothing leaves the process.
+    process.env.OUTREACH_ENVIRONMENT = 'PRODUCTION';
 
     productionEmail = {
       send: jest.fn().mockResolvedValue({
@@ -69,6 +77,15 @@ describe('IntegrationService — V13.5 Email Safety & Recipient Parity', () => {
     process.env = originalEnv;
   });
 
+  /** Makes the mocked DB hold an approved, SENDING draft for exactly this payload. */
+  const approve = (payload: EmailPayload) => {
+    prisma.outreachDraft.findFirst.mockResolvedValue({
+      id: 'draft-1', companyId: 'company-1', status: 'SENDING', approvedBy: 'chairman-1', approvedAt: new Date(),
+      recipientEmail: payload.to, subject: payload.subject, messageBody: payload.body,
+    });
+    return payload;
+  };
+
   const samplePayload: EmailPayload = {
     to: 'real-business-owner@client-domain.com',
     subject: 'Proposal for Business',
@@ -87,7 +104,9 @@ describe('IntegrationService — V13.5 Email Safety & Recipient Parity', () => {
     const res = await service.sendEmail(
       'company-1',
       ExecutionEnvironment.PRODUCTION,
-      { ...samplePayload },
+      approve({ ...samplePayload }),
+      undefined,
+      { draftId: 'draft-1' },
     );
 
     expect(res.success).toBe(true);
@@ -118,7 +137,9 @@ describe('IntegrationService — V13.5 Email Safety & Recipient Parity', () => {
     const res = await service.sendEmail(
       'company-1',
       ExecutionEnvironment.PRODUCTION,
-      bypassAttempt,
+      approve(bypassAttempt),
+      undefined,
+      { draftId: 'draft-1' },
     );
 
     expect(res.actualRecipient).toBe('mayankjangid598@gmail.com');
@@ -142,7 +163,9 @@ describe('IntegrationService — V13.5 Email Safety & Recipient Parity', () => {
     await service.sendEmail(
       'company-1',
       ExecutionEnvironment.PRODUCTION,
-      { ...samplePayload },
+      approve({ ...samplePayload }),
+      undefined,
+      { draftId: 'draft-1' },
     );
 
     // Verify requestPayload audit
@@ -182,7 +205,9 @@ describe('IntegrationService — V13.5 Email Safety & Recipient Parity', () => {
     await service.sendEmail(
       'company-1',
       ExecutionEnvironment.PRODUCTION,
-      { ...samplePayload },
+      approve({ ...samplePayload }),
+      undefined,
+      { draftId: 'draft-1' },
     );
 
     const createCall = prisma.integrationAuditLog.create.mock.calls[0][0];

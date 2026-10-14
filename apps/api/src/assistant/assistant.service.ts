@@ -16,7 +16,7 @@ import { NotificationService, NotificationPriority } from '../communication/noti
 import { hiringLimits } from '../ceo/ceo-hiring.service';
 import { ProjectStaffingService } from '../ceo/project-staffing.service';
 import { companyProfile } from '../config/company';
-import { CompanyStateService, CompanyStateSnapshot } from '../management/company-state.service';
+import { CompanyStateService } from '../management/company-state.service';
 import { SalesPipelineService } from '../sales/sales-pipeline.service';
 import { BriefingService } from './briefing.service';
 import { ProactiveAlertService } from './proactive-alert.service';
@@ -413,7 +413,7 @@ export function resolveReferences(message: string, ctx: ConversationContext): { 
   const lastEmployee = ctx.lastEntities.find(e => e.type === 'employee');
   const lastTask = ctx.lastEntities.find(e => e.type === 'task');
   const lastProject = ctx.lastEntities.find(e => e.type === 'project');
-  const lastDept = ctx.lastEntities.find(e => e.type === 'department');
+  const _lastDept = ctx.lastEntities.find(e => e.type === 'department');
   if (isFollowUp && lastEmployee) {
     entity = lastEmployee;
     resolved = text.replace(/\b(?:they|them|he|she|him|her)\b/gi, lastEmployee.name);
@@ -554,7 +554,7 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
       if (matchCount === 1) {
          companyId = matchedCompanyId!;
       } else {
-         const incoming = await this.prisma.assistantMessage.create({
+         await this.prisma.assistantMessage.create({
            data: { from: 'CHAIRMAN', to: 'ASSISTANT', content: message, status: 'DONE', intent: { intent: "UNKNOWN" } as any, result: { actions: ['clarification_needed'] } },
          });
          await this.prisma.assistantMessage.create({ 
@@ -1463,7 +1463,7 @@ Department Allocations:\n`;
     };
   }
 
-  private async handleCreateEmployeeTask(companyId: string, intent: ParsedIntent, message: string, assistantMessageId: string) {
+  private async handleCreateEmployeeTask(companyId: string, intent: ParsedIntent, message: string, _assistantMessageId: string) {
     const actions: string[] = [];
     const targetQuery = String(intent.parameters.targetQuery || '').trim();
     const instruction = String(intent.parameters.instruction || message).trim();

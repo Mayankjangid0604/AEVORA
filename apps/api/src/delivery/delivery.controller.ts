@@ -74,14 +74,14 @@ export class DeliveryController {
   @Post('formal/deliveries/:id/accept')
   @Roles('CHAIRMAN', 'MANAGEMENT', 'CLIENT')
   async acceptDelivery(@Request() req, @Param('id') id: string) {
-    await this.authz.assertProjectChildAccess(req.user, 'projectDelivery', id);
+    await this.authz.assertDeliveryClientAccess(req.user, id);
     return this.formalDelivery.acceptDelivery(id, req.user.actorId);
   }
 
   @Post('formal/deliveries/:id/revise')
   @Roles('CHAIRMAN', 'MANAGEMENT', 'CLIENT')
   async requestFormalRevision(@Request() req, @Param('id') id: string, @Body() body: { changesRequested: string }) {
-    await this.authz.assertProjectChildAccess(req.user, 'projectDelivery', id);
+    await this.authz.assertDeliveryClientAccess(req.user, id);
     return this.formalDelivery.requestRevision(id, req.user.actorId, body.changesRequested);
   }
 
@@ -103,6 +103,12 @@ export class DeliveryController {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
     if (!secret) throw new BadRequestException('Razorpay webhook not configured');
     if (!req.rawBody || !verifyRazorpaySignature(req.rawBody, sig, secret)) throw new UnauthorizedException('Bad signature');
-    return this.payments.handleRazorpayEvent(JSON.parse(req.rawBody.toString('utf8')));
+    let payload: any;
+    try {
+      payload = JSON.parse(req.rawBody.toString('utf8'));
+    } catch {
+      throw new BadRequestException('Malformed JSON payload');
+    }
+    return this.payments.handleRazorpayEvent(payload);
   }
 }

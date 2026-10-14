@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmployeeStatus } from '@prisma/client';
 import { AuthorizationService } from '../authorization/authorization.service';
 import { bandSalaryAC } from '../config/salary-bands';
-import { HqCapacityService } from '../v12-spatial/hq-capacity.service';
+import { HqCapacityService } from '../spatial/hq-capacity.service';
 
 @Injectable()
 export class EmployeeService {

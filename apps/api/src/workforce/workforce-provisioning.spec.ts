@@ -1,13 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HiringService } from './hiring.service';
-import { HqCapacityService, DEFAULT_HQ_CAPACITY_POLICY } from '../v12-spatial/hq-capacity.service';
+import { HqCapacityService } from '../spatial/hq-capacity.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkforceAuditService } from './workforce-audit.service';
 import { WorkerProfileService } from './worker-profile.service';
 import { ApprovalValidationService } from '../approval/approval-validation.service';
 import { WorldStateEventService } from '../world-state-gateway/world-state-event.service';
 import { WorkerType, EmployeeStatus, HiringRequestStatus } from '@prisma/client';
-import { V12EntityType, V12EventType } from '@aevora/shared';
+import { V12EntityType } from '@aevora/shared';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 
 describe('Workforce Auto-Provisioning & Spatial Employees (Stage V15-C)', () => {

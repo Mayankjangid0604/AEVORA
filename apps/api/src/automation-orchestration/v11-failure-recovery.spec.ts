@@ -2,14 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EnterpriseOrchestratorService } from './enterprise-orchestrator.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CeoStrategicPlanningService } from '../ceo/ceo-strategic-planning.service';
-import { AeObjectiveStatus, EscalationStatus } from '@prisma/client';
+import { AeObjectiveStatus } from '@prisma/client';
 import { ContinuousImprovementService } from '../continuous-improvement/continuous-improvement.service';
 import { OutcomeService } from '../intelligence/services/outcome.service';
 
 describe('V11 Enterprise Orchestrator - Failure Recovery (e2e)', () => {
   let service: EnterpriseOrchestratorService;
   let prisma: PrismaService;
-  let ceoPlanning: CeoStrategicPlanningService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -44,7 +43,6 @@ describe('V11 Enterprise Orchestrator - Failure Recovery (e2e)', () => {
 
     service = module.get<EnterpriseOrchestratorService>(EnterpriseOrchestratorService);
     prisma = module.get<PrismaService>(PrismaService);
-    ceoPlanning = module.get<CeoStrategicPlanningService>(CeoStrategicPlanningService);
 
     jest.spyOn(service as any, 'getCeo').mockResolvedValue({ id: 'ceo-1', companyId: 'comp-1' } as any);
   });

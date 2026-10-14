@@ -2,11 +2,11 @@ import { Module } from '@nestjs/common';
 import { CompanyService } from './company.service';
 import { CompanyController } from './company.controller';
 import { PrismaModule } from '../prisma/prisma.module';
-import { V12SpatialModule } from '../v12-spatial/v12-spatial.module';
+import { SpatialModule } from '../spatial/spatial.module';
 import { WorldStateGatewayModule } from '../world-state-gateway/world-state-gateway.module';
 
 @Module({
-  imports: [PrismaModule, V12SpatialModule, WorldStateGatewayModule],
+  imports: [PrismaModule, SpatialModule, WorldStateGatewayModule],
   controllers: [CompanyController],
   providers: [CompanyService],
   exports: [CompanyService],

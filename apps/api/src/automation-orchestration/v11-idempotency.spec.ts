@@ -68,4 +68,13 @@ describe('V11 Enterprise Orchestrator - Idempotency (e2e)', () => {
     expect(callCount).toBe(1);
     expect(prisma.aeEnterpriseObjective.findMany).toHaveBeenCalledTimes(1);
   });
+
+  it('should emit single-replica operational warning on module initialization', () => {
+    const warnSpy = jest.spyOn((service as any).logger, 'warn');
+    service.onModuleInit();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('SINGLE-REPLICA mode'),
+    );
+  });
 });
+

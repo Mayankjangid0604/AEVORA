@@ -1,0 +1,15 @@
+[Unit]
+Description=Daily Recurring Backup Timer for AEVORA Database
+Documentation=file:///opt/aevora/infrastructure/scripts/BACKUP_RESTORE_RUNBOOK.md
+Requires=aevora-backup.service
+
+[Timer]
+# Run every day at 02:00:00 UTC
+OnCalendar=*-*-* 02:00:00 UTC
+# Catch up on missed runs if host was powered off
+Persistent=true
+# Random jitter of up to 5 minutes to prevent exact-second contention
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

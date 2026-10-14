@@ -29,6 +29,9 @@ export const COMPANY_DOMAINS: Domain[] = [
   { slug: 'workers', label: 'AI workers', status: 'ready', endpoints: ['GET /agents', 'GET /organization/employees'], note: 'Read-only. Agent records bound to employees; model, provider and instructions are never sent to the browser.' },
   { slug: 'administration', label: 'Administration', status: 'ready', endpoints: ['GET /organization/departments', 'GET /organization/employees'], note: 'Read-only overview from existing records and the workspace registry. No settings or configuration.' },
   { slug: 'operations', label: 'Operations', status: 'ready', endpoints: ['GET /operating-loop/:companyId/cycles', 'GET /operating-loop/cycle/:id'], note: 'Read-only. Operating-loop cycles recorded by the scheduled, rule-based loop; nothing can be run or approved from here.' },
+  { slug: 'requests', label: 'Customer requests', status: 'ready', endpoints: ['GET /inquiries', 'GET /inquiries/:id', 'POST /inquiries/:id/transition', 'POST /inquiries/:id/notes'], note: 'Public-form requests for this company. Staff can view; Chairman/management can change status and add internal notes. Nothing is sent to the customer from here.' },
+  { slug: 'jobs', label: 'Background jobs', status: 'ready', endpoints: ['GET /job', 'GET /job/:id', 'POST /job/:id/pause', 'POST /job/:id/resume', 'POST /job/:id/replay'], note: 'Chairman/management only. Pause, resume, or replay failed internal jobs; every action is audited.' },
+  { slug: 'offers', label: 'Offer Market', status: 'ready', endpoints: ['GET /offers', 'GET /offers/:id', 'GET /offers/:id/measurement'], note: 'Governed Offer Market, CEO recommendation engine, and commercial intelligence.' },
 ];
 
 export const OS_DOMAINS: Domain[] = [

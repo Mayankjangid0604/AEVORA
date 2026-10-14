@@ -3,7 +3,6 @@ import {
   GatewayRiskTier,
   ExternalActionRequest,
 } from './external-action-gateway.types';
-import { ConsequenceSeverity, ReversibilityLevel } from '../ceo/ceo-consequence.types';
 
 @Injectable()
 export class RiskClassifierService {

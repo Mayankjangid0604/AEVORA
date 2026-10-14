@@ -9,7 +9,6 @@ import { EvidenceVerificationService } from './evidence-verification.service';
 import {
   OutcomeVerificationStatus,
   EpistemicCertainty,
-  EvidenceVerificationStatus,
   OutcomeEvaluationResult,
   EvidenceContract,
 } from './evidence-contract.types';

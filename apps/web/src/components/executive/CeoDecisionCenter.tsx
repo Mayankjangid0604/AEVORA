@@ -12,6 +12,8 @@ interface Props {
   isExecutingDecision: boolean;
 }
 
+type DecisionFilter = 'ALL' | 'PENDING_APPROVAL' | 'PROPOSED' | 'APPROVED' | 'EXECUTED';
+
 export function CeoDecisionCenter({
   decisions,
   isLoading,
@@ -20,7 +22,7 @@ export function CeoDecisionCenter({
   onExecuteDecision,
   isExecutingDecision,
 }: Props) {
-  const [filter, setFilter] = useState<'ALL' | 'PENDING_APPROVAL' | 'PROPOSED' | 'APPROVED' | 'EXECUTED'>('ALL');
+  const [filter, setFilter] = useState<DecisionFilter>('ALL');
 
   const filtered = decisions.filter((d) => {
     if (filter === 'PENDING_APPROVAL') return d.needsChairmanApproval && d.status === 'PROPOSED';
@@ -71,17 +73,17 @@ export function CeoDecisionCenter({
         </div>
 
         <div className="flex items-center gap-1 text-xs">
-          {[
+          {([
             { key: 'ALL', label: 'All' },
             { key: 'PENDING_APPROVAL', label: 'Needs Approval' },
             { key: 'PROPOSED', label: 'Proposed' },
             { key: 'APPROVED', label: 'Approved' },
             { key: 'EXECUTED', label: 'Executed' },
-          ].map((item) => (
+          ] as const).map((item) => (
             <button
               key={item.key}
               type="button"
-              onClick={() => setFilter(item.key as any)}
+              onClick={() => setFilter(item.key)}
               className={`rounded-control px-2.5 py-1 transition-colors ${
                 filter === item.key
                   ? 'bg-accent font-semibold text-on-accent'

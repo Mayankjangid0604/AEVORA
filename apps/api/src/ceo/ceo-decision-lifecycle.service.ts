@@ -1,4 +1,4 @@
-import { Injectable, Logger, ForbiddenException, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CeoFinancialAuthorityService } from './ceo-financial-authority.service';
 import { SignificanceFilterService } from '../enterprise-brain/significance-filter.service';
@@ -14,7 +14,6 @@ import {
   CeoDecisionConfidence,
   CeoDecisionApprovalStatus,
   CeoDecisionExecutionStatus,
-  CeoFinancialOperation,
   OrgMemoryType,
 } from '@prisma/client';
 
@@ -280,7 +279,7 @@ export class CeoDecisionLifecycleService {
     const sanitized = this.significanceFilter.sanitizeUntrustedText(directiveText, 'CHAIRMAN_DIRECTIVE');
 
     // Fetch current financial and operational state to check feasibility
-    const [wallet, budget, riskCount] = await Promise.all([
+    const [wallet, _budget, riskCount] = await Promise.all([
       this.prisma.aCWallet.findFirst({ where: { companyId } }),
       this.prisma.companyBudget.findFirst({ where: { companyId, status: 'ACTIVE' } }),
       this.prisma.companyRisk.count({ where: { companyId, status: 'IDENTIFIED', impact: 'CRITICAL' } }),

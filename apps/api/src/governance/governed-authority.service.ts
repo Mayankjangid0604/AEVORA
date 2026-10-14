@@ -6,10 +6,9 @@ import {
   ForbiddenException,
   Optional,
 } from '@nestjs/common';
-import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApprovalValidationService } from '../approval/approval-validation.service';
-import { canonicalizeJson, computeContentHash } from '../task/evidence-verification.service';
+import { computeContentHash } from '../task/evidence-verification.service';
 import {
   AuthorityTier,
   AuthorityGrantStatus,
@@ -322,7 +321,7 @@ export class GovernedAuthorityService {
   /**
    * Reinstates a suspended authority grant.
    */
-  async reinstateGrant(grantId: string, companyId: string, actorId: string) {
+  async reinstateGrant(grantId: string, companyId: string, _actorId: string) {
     if (!companyId) {
       throw new BadRequestException('Company ID is required');
     }
@@ -675,7 +674,7 @@ export class GovernedAuthorityService {
     }
 
     const auditNotes: string[] = [];
-    let isHistoricallyValid = proof.isAuthorized;
+    const isHistoricallyValid = proof.isAuthorized;
 
     if (!proof.isAuthorized) {
       auditNotes.push(`Proof was recorded as UNAUTHORIZED. Rejection reason: ${proof.rejectionReason}`);

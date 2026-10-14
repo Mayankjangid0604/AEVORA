@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { AeObjectiveStatus, EscalationStatus, ObjectivePriority } from '@prisma/client';
@@ -7,7 +7,7 @@ import { CeoStrategicPlanningService } from '../ceo/ceo-strategic-planning.servi
 import { OutcomeService } from '../intelligence/services/outcome.service';
 
 @Injectable()
-export class EnterpriseOrchestratorService {
+export class EnterpriseOrchestratorService implements OnModuleInit {
   private readonly logger = new Logger(EnterpriseOrchestratorService.name);
 
   constructor(
@@ -16,6 +16,12 @@ export class EnterpriseOrchestratorService {
     private readonly ceoStrategicPlanning: CeoStrategicPlanningService,
     private readonly outcomeService: OutcomeService
   ) {}
+
+  onModuleInit() {
+    this.logger.warn(
+      'EnterpriseOrchestrator operating in SINGLE-REPLICA mode. In-process mutex is not shared across instances. Distributed locking (Redis Redlock) and distributed rate limiting are required for horizontal multi-replica scaling.',
+    );
+  }
 
   private isRunning = false;
 

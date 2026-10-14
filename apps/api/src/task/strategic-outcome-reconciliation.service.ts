@@ -7,7 +7,6 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import {
   OutcomeVerificationStatus,
-  EpistemicCertainty,
   StrategicReconciliationResult,
 } from './evidence-contract.types';
 import { OrgMemoryType } from '@prisma/client';
@@ -88,9 +87,9 @@ export class StrategicOutcomeReconciliationService {
     const outcomeConfidence = task.result?.outcomeConfidence ?? 1.0;
 
     let strategicImpact: 'ON_TRACK' | 'DEVIATION_TOLERABLE' | 'DEVIATION_CRITICAL' | 'INVALIDATING' = 'ON_TRACK';
-    let assumptionsValid = true;
-    let replanningRequired = false;
-    let escalationRequired = false;
+    const assumptionsValid = true;
+    const replanningRequired = false;
+    const escalationRequired = false;
     let variance = 'ZERO_VARIANCE: Verified outcome matches strategic goal requirements';
 
     // Check if task had any failures, errors, or partial evidence

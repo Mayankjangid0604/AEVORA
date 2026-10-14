@@ -1,11 +1,10 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EnterpriseBrainService } from '../enterprise-brain/enterprise-brain.service';
 import { SignificanceFilterService } from '../enterprise-brain/significance-filter.service';
 import { CeoObjectiveDecompositionService } from './ceo-objective-decomposition.service';
 import {
   ConsequenceDimension,
-  ALL_14_CONSEQUENCE_DIMENSIONS,
   ReversibilityLevel,
   ConsequenceSeverity,
   DirectConsequence,
@@ -15,7 +14,6 @@ import {
   ScenarioSimulationResult,
   AffectedEntitySummary,
   DependencyAnalysisItem,
-  ConsequenceRiskItem,
   ConsequenceUncertaintyItem,
   StructuredConsequenceReport,
   ConsequenceAnalysisInput,
@@ -45,7 +43,7 @@ export class CeoConsequenceAnalysisService {
 
     // 1. Sanitize untrusted input strings (prevent prompt injection or executable elevation)
     const sanitizedAction = this.significanceFilter.sanitizeUntrustedText(input.proposedAction, 'PROPOSED_ACTION');
-    const sanitizedSituation = input.situation
+    const _sanitizedSituation = input.situation
       ? this.significanceFilter.sanitizeUntrustedText(input.situation, 'DECISION_SITUATION')
       : { raw: '' };
 
@@ -59,7 +57,7 @@ export class CeoConsequenceAnalysisService {
       openInvoices,
       activeTasks,
       authority,
-      targetEntity,
+      _targetEntity,
     ] = await Promise.all([
       this.prisma.aCWallet.findFirst({ where: { companyId } }),
       this.prisma.companyBudget.findFirst({ where: { companyId, status: 'ACTIVE' } }),
@@ -82,7 +80,7 @@ export class CeoConsequenceAnalysisService {
     const liquidBalance = wallet?.balance ?? brainState.financial.acBalance ?? 0;
     const estimatedCost = Math.max(0, input.estimatedCost ?? 0);
     const singleLimit = authority?.singleTransactionLimit ?? 0;
-    const monthlyLimit = authority?.monthlyLimit ?? 0;
+    const _monthlyLimit = authority?.monthlyLimit ?? 0;
     const pendingReceivablesTotal = (openInvoices as any)._sum?.total ?? 0;
     const totalEmployees = brainState.workforce.totalEmployees || departments.reduce((acc, d) => acc + d.employees.length, 0);
 

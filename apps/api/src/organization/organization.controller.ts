@@ -1,5 +1,5 @@
 import { AuthorizationService } from '../authorization/authorization.service';
-import { Controller, Get, Post, Put, Patch, Body, Param, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Request, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../authorization/jwt-auth.guard';
 import { OrganizationService } from './organization.service';
 import { EmployeeService } from '../employee/employee.service';
@@ -98,47 +98,47 @@ export class OrganizationController {
   }
 
   @Get('employee/:id/permissions')
-  getEmployeePermissions(@Param('id') id: string) {
+  getEmployeePermissions(@Param('id') _id: string) {
     return [];
   }
 
   @Patch('employee/:id/permissions')
-  patchEmployeePermissions(@Param('id') id: string, @Body() body: any) {
+  patchEmployeePermissions(@Param('id') _id: string, @Body() _body: any) {
     return [];
   }
 
   @Get('employee/:id/responsibilities')
-  getEmployeeResponsibilities(@Param('id') id: string) {
+  getEmployeeResponsibilities(@Param('id') _id: string) {
     return [];
   }
 
   @Patch('employee/:id/responsibilities')
-  patchEmployeeResponsibilities(@Param('id') id: string, @Body() body: any) {
+  patchEmployeeResponsibilities(@Param('id') _id: string, @Body() _body: any) {
     return [];
   }
 
   @Get('employee/:id/kpis')
-  getEmployeeKpis(@Param('id') id: string) {
+  getEmployeeKpis(@Param('id') _id: string) {
     return [];
   }
 
   @Post('employee/:id/kpis')
-  postEmployeeKpis(@Param('id') id: string, @Body() body: any) {
+  postEmployeeKpis(@Param('id') _id: string, @Body() _body: any) {
     return [];
   }
 
   @Get('employee/:id/budget')
-  getEmployeeBudget(@Param('id') id: string) {
+  getEmployeeBudget(@Param('id') _id: string) {
     return { allocatedAmount: 0, spentAmount: 0 };
   }
 
   @Get('employee/:id/performance')
-  getEmployeePerformance(@Param('id') id: string) {
+  getEmployeePerformance(@Param('id') _id: string) {
     return [];
   }
 
   @Post('employee/:id/performance/evaluate')
-  evaluateEmployeePerformance(@Param('id') id: string, @Body() body: any) {
+  evaluateEmployeePerformance(@Param('id') _id: string, @Body() _body: any) {
     return { status: 'Evaluated' };
   }
 
@@ -153,7 +153,7 @@ export class OrganizationController {
   }
 
   @Get('employee/:id/succession')
-  getEmployeeSuccession(@Param('id') id: string) {
+  getEmployeeSuccession(@Param('id') _id: string) {
     return [];
   }
 }

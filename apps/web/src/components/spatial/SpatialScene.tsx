@@ -3,8 +3,12 @@
 import React, { useRef, useMemo, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Text, Html } from '@react-three/drei';
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import type { WorldEntity, V12EntityId } from '@aevora/shared';
+import { CinematicEnvironment } from './CinematicEnvironment';
+import { RealisticAvatar } from './RealisticAvatar';
+import { PerformanceMonitor, useAdaptivePerformance } from './AdaptivePerformanceController';
 
 export interface CameraPreset {
   id: string;
@@ -18,6 +22,8 @@ export const CAMERA_PRESETS: CameraPreset[] = [
   { id: 'executive', name: 'Executive Level', position: [0, 24, 20], target: [0, 10, 0] },
   { id: 'main', name: 'Main Floor & Lobby', position: [0, 12, 16], target: [0, 1.5, 0] },
   { id: 'parking', name: 'Campus Parking', position: [30, 14, 30], target: [20, 0, 20] },
+  { id: 'engineering', name: 'Engineering Wing', position: [18, 10, 14], target: [10, 2, 4] },
+  { id: 'fleet', name: 'Executive Fleet', position: [26, 8, 24], target: [22, 0.5, 20] },
 ];
 
 export interface SpatialSceneProps {
@@ -28,18 +34,37 @@ export interface SpatialSceneProps {
 }
 
 /**
- * Camera controller reacting to preset changes with smooth interpolation.
+ * Camera controller reacting to preset changes or entity selection with smooth interpolation.
  */
-function CameraController({ activePresetId }: { activePresetId?: string }) {
+function CameraController({
+  activePresetId,
+  selectedEntity,
+}: {
+  activePresetId?: string;
+  selectedEntity: WorldEntity | null;
+}) {
   const { camera } = useThree();
-  const controlsRef = useRef<any>(null);
+  const controlsRef = useRef<OrbitControlsImpl>(null);
+
   const targetPreset = useMemo(() => {
     return CAMERA_PRESETS.find((p) => p.id === activePresetId) ?? CAMERA_PRESETS[0]!;
   }, [activePresetId]);
 
   useFrame(() => {
-    if (controlsRef.current) {
-      // Smoothly nudge camera position and target toward active preset
+    if (!controlsRef.current) return;
+
+    if (selectedEntity?.transform?.position) {
+      // Focus smoothly on selected entity
+      const { x, y, z } = selectedEntity.transform.position;
+      const targetPos = new THREE.Vector3(x ?? 0, (y ?? 1) + 1.2, z ?? 0);
+      controlsRef.current.target.lerp(targetPos, 0.06);
+
+      // Keep camera offset at an ergonomic angle while focusing
+      const idealCamPos = new THREE.Vector3(targetPos.x + 8, targetPos.y + 6, targetPos.z + 10);
+      camera.position.lerp(idealCamPos, 0.04);
+      controlsRef.current.update();
+    } else {
+      // Interpolate towards active camera preset
       camera.position.lerp(new THREE.Vector3(...targetPreset.position), 0.05);
       controlsRef.current.target.lerp(new THREE.Vector3(...targetPreset.target), 0.05);
       controlsRef.current.update();
@@ -51,45 +76,17 @@ function CameraController({ activePresetId }: { activePresetId?: string }) {
       ref={controlsRef}
       enableDamping
       dampingFactor={0.08}
-      minDistance={6}
-      maxDistance={120}
+      minDistance={4}
+      maxDistance={140}
       maxPolarAngle={Math.PI / 2.05} // Prevent camera going below ground plane
     />
   );
 }
 
 /**
- * Campus ground plane with enterprise architectural accents.
- */
-function CampusGround() {
-  return (
-    <group position={[0, -0.05, 0]}>
-      {/* Primary landscaped plaza */}
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[120, 120]} />
-        <meshStandardMaterial color="#0f172a" roughness={0.9} metalness={0.1} />
-      </mesh>
-      {/* Perimeter roads & courtyard */}
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
-        <ringGeometry args={[26, 42, 48]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.8} />
-      </mesh>
-      {/* Central plaza pavers */}
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-        <circleGeometry args={[22, 48]} />
-        <meshStandardMaterial color="#172554" roughness={0.7} metalness={0.2} />
-      </mesh>
-      {/* Subtle grid pattern */}
-      <gridHelper args={[100, 50, '#334155', '#1e293b']} position={[0, 0.03, 0]} />
-    </group>
-  );
-}
-
-/**
- * Procedural stylized building shell representing Aevora Tower.
+ * Procedural stylized building shell representing Aevora Tower with cinematic glass.
  */
 function BuildingShell({
-  name,
   position = [0, 8.5, 0],
   height = 17,
 }: {
@@ -97,45 +94,63 @@ function BuildingShell({
   position?: [number, number, number];
   height?: number;
 }) {
+  const { settings } = useAdaptivePerformance();
+
   return (
     <group position={position}>
-      {/* Translucent glass tower volume */}
+      {/* Translucent Architectural Glass Curtain Wall */}
       <mesh>
         <boxGeometry args={[26, height, 26]} />
         <meshPhysicalMaterial
           color="#38bdf8"
-          transmission={0.85}
-          opacity={0.3}
+          transmission={0.88}
+          opacity={0.32}
           transparent
-          roughness={0.1}
-          metalness={0.1}
-          ior={1.5}
+          roughness={0.08}
+          metalness={0.15}
+          ior={1.52}
+          reflectivity={0.6}
         />
       </mesh>
-      {/* Structural corner columns */}
+
+      {/* Structural Corner Columns */}
       {[-12.8, 12.8].map((x) =>
         [-12.8, 12.8].map((z) => (
-          <mesh key={`${x}-${z}`} position={[x, 0, z]}>
-            <boxGeometry args={[0.8, height, 0.8]} />
-            <meshStandardMaterial color="#475569" metalness={0.8} roughness={0.3} />
+          <mesh key={`${x}-${z}`} position={[x, 0, z]} castShadow={settings.shadows}>
+            <boxGeometry args={[0.85, height, 0.85]} />
+            <meshStandardMaterial color="#334155" metalness={0.85} roughness={0.25} />
           </mesh>
         ))
       )}
-      {/* Roof crown / penthouse beacon */}
-      <mesh position={[0, height / 2 + 0.3, 0]}>
-        <boxGeometry args={[22, 0.6, 22]} />
+
+      {/* Floor Dividing Mullion Bands */}
+      {[0.25, 0.5, 0.75].map((ratio) => (
+        <mesh key={ratio} position={[0, -height / 2 + height * ratio, 0]}>
+          <boxGeometry args={[26.08, 0.18, 26.08]} />
+          <meshStandardMaterial color="#475569" metalness={0.8} roughness={0.3} />
+        </mesh>
+      ))}
+
+      {/* Roof Crown / Penthouse Beacon */}
+      <mesh position={[0, height / 2 + 0.35, 0]} castShadow={settings.shadows}>
+        <boxGeometry args={[22, 0.7, 22]} />
         <meshStandardMaterial color="#0284c7" metalness={0.7} roughness={0.2} />
       </mesh>
-      <mesh position={[0, height / 2 + 0.9, 0]}>
-        <boxGeometry args={[8, 0.6, 8]} />
-        <meshStandardMaterial color="#38bdf8" emissive="#0284c7" emissiveIntensity={0.6} />
+      <mesh position={[0, height / 2 + 0.95, 0]}>
+        <boxGeometry args={[8, 0.65, 8]} />
+        <meshStandardMaterial
+          color="#38bdf8"
+          emissive="#0284c7"
+          emissiveIntensity={0.8}
+          roughness={0.2}
+        />
       </mesh>
     </group>
   );
 }
 
 /**
- * Floor slab renderer.
+ * Floor slab renderer with refined edge lighting.
  */
 function FloorSlab({
   name,
@@ -154,26 +169,34 @@ function FloorSlab({
   const slabY = position[1];
 
   return (
-    <group position={[position[0], slabY, position[2]]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
-      {/* Main floor slab */}
+    <group
+      position={[position[0], slabY, position[2]]}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      {/* Main Floor Slab */}
       <mesh receiveShadow position={[0, 0, 0]}>
-        <boxGeometry args={[24, 0.4, 24]} />
+        <boxGeometry args={[24, 0.45, 24]} />
         <meshStandardMaterial
           color={isSelected ? '#38bdf8' : isExec ? '#1e1b4b' : '#1e293b'}
-          roughness={0.4}
-          metalness={isExec ? 0.4 : 0.2}
+          roughness={0.38}
+          metalness={isExec ? 0.45 : 0.25}
         />
       </mesh>
-      {/* Floor edge accent light strip */}
-      <mesh position={[0, 0.22, 12.05]}>
-        <boxGeometry args={[24, 0.05, 0.05]} />
-        <meshBasicMaterial color={isExec ? '#a855f7' : '#0284c7'} />
+
+      {/* Floor Edge Architectural Neon Strip */}
+      <mesh position={[0, 0.23, 12.06]}>
+        <boxGeometry args={[24, 0.06, 0.06]} />
+        <meshBasicMaterial color={isExec ? '#c084fc' : '#38bdf8'} />
       </mesh>
-      {/* Floor sign / level tag */}
+
+      {/* Level Tag Sign */}
       <Text
-        position={[-11.5, 0.8, 12.1]}
-        fontSize={0.45}
-        color={isExec ? '#c084fc' : '#93c5fd'}
+        position={[-11.4, 0.85, 12.12]}
+        fontSize={0.46}
+        color={isExec ? '#e9d5ff' : '#bae6fd'}
         anchorX="left"
         anchorY="middle"
       >
@@ -191,7 +214,7 @@ function RoomNode({
   isSelected,
   onClick,
 }: {
-  entity: any;
+  entity: WorldEntity & { roomType?: string };
   isSelected: boolean;
   onClick: () => void;
 }) {
@@ -277,18 +300,28 @@ function RoomNode({
     }
   }, [rType, name]);
 
-  // Adjust Y coordinate: use transform.position.y if present, otherwise default by type
-  const isExec = entity.parentId?.includes('exec') || rType.includes('CHAIRMAN') || rType.includes('CEO') || rType.includes('HEAD') || rType.includes('CONFERENCE');
-  const posY = t.y ? t.y + 1.5 : (isExec ? 12.5 : 1.6);
-  const posX = t.x !== undefined ? t.x : (rType.includes('CEO') ? 5 : rType.includes('CHAIRMAN') ? -5 : 0);
-  const posZ = t.z !== undefined ? t.z : (rType.includes('CORRIDOR') ? 0 : rType.includes('OFFICE') ? -4 : 4);
+  const isExec =
+    entity.parentId?.includes('exec') ||
+    rType.includes('CHAIRMAN') ||
+    rType.includes('CEO') ||
+    rType.includes('HEAD') ||
+    rType.includes('CONFERENCE');
+  const posY = t.y ? t.y + 1.5 : isExec ? 12.5 : 1.6;
+  const posX = t.x !== undefined ? t.x : rType.includes('CEO') ? 5 : rType.includes('CHAIRMAN') ? -5 : 0;
+  const posZ = t.z !== undefined ? t.z : rType.includes('CORRIDOR') ? 0 : rType.includes('OFFICE') ? -4 : 4;
 
   return (
     <group
       position={[posX, posY, posZ]}
-      onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+      }}
       onPointerOut={() => setHovered(false)}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
     >
       {/* Room boundary walls (semi-translucent for visibility) */}
       <mesh position={[0, styling.height / 2, 0]}>
@@ -317,17 +350,14 @@ function RoomNode({
       {/* Office furniture placeholders */}
       {rType.includes('OFFICE') && (
         <group position={[0, 0.4, -styling.depth / 4]}>
-          {/* Executive desk */}
           <mesh position={[0, 0, 0]}>
             <boxGeometry args={[2.4, 0.8, 1.2]} />
             <meshStandardMaterial color="#78350f" roughness={0.3} metalness={0.2} />
           </mesh>
-          {/* Executive chair */}
           <mesh position={[0, 0.4, -0.9]}>
             <boxGeometry args={[0.7, 1.1, 0.7]} />
             <meshStandardMaterial color="#0f172a" roughness={0.5} />
           </mesh>
-          {/* Holographic desktop display */}
           <mesh position={[0, 0.65, 0]}>
             <boxGeometry args={[1.2, 0.5, 0.05]} />
             <meshBasicMaterial color="#38bdf8" />
@@ -363,7 +393,7 @@ function RoomNode({
       {/* Selected / Hovered tooltip overlay */}
       {(hovered || isSelected) && (
         <Html position={[0, styling.height + 0.8, 0]} center distanceFactor={15}>
-          <div className="pointer-events-none whitespace-nowrap rounded bg-slate-900/90 px-2 py-1 text-xs font-medium text-slate-100 shadow-lg ring-1 ring-white/20 backdrop-blur">
+          <div className="pointer-events-none whitespace-nowrap rounded bg-slate-900/90 px-2.5 py-1 text-xs font-medium text-slate-100 shadow-lg ring-1 ring-white/20 backdrop-blur">
             <span className="mr-1">{styling.badge}</span>
             <span className="font-semibold text-sky-400">{name}</span>
           </div>
@@ -381,7 +411,7 @@ function WorkspaceNode({
   isSelected,
   onClick,
 }: {
-  entity: any;
+  entity: WorldEntity & { isOccupied?: boolean };
   isSelected: boolean;
   onClick: () => void;
 }) {
@@ -394,120 +424,36 @@ function WorkspaceNode({
   return (
     <group
       position={[pos.x || 0, y, pos.z || 0]}
-      onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+      }}
       onPointerOut={() => setHovered(false)}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
     >
-      {/* Desk surface */}
+      {/* Desk Surface */}
       <mesh position={[0, 0.38, 0]}>
         <boxGeometry args={[1.4, 0.05, 0.8]} />
-        <meshStandardMaterial color={isSelected ? '#38bdf8' : '#334155'} roughness={0.4} />
+        <meshStandardMaterial color={isSelected ? '#38bdf8' : hovered ? '#475569' : '#334155'} roughness={0.4} />
       </mesh>
-      {/* Monitor */}
+      {/* Monitor Display */}
       <mesh position={[0, 0.6, -0.2]}>
         <boxGeometry args={[0.6, 0.35, 0.04]} />
         <meshBasicMaterial color={isOccupied ? '#38bdf8' : '#64748b'} />
       </mesh>
-      {/* Chair */}
+      {/* Ergonomic Chair */}
       <mesh position={[0, 0.3, 0.4]}>
         <boxGeometry args={[0.5, 0.6, 0.5]} />
         <meshStandardMaterial color="#1e293b" />
       </mesh>
-      {/* Status indicator LED */}
+      {/* Status LED Indicator */}
       <mesh position={[0.6, 0.42, -0.3]}>
         <sphereGeometry args={[0.04, 16, 16]} />
         <meshBasicMaterial color={isOccupied ? '#22c55e' : '#eab308'} />
       </mesh>
-    </group>
-  );
-}
-
-/**
- * Stylized procedural human placeholder representing an employee / avatar.
- */
-function PersonNode({
-  entity,
-  isSelected,
-  onClick,
-}: {
-  entity: any;
-  isSelected: boolean;
-  onClick: () => void;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const pos = entity.transform?.position || { x: 0, y: 0, z: 0 };
-  const name = entity.name || 'Employee';
-  const isChairman = name.toLowerCase().includes('chairman') || (entity.roleTitle || '').toLowerCase().includes('chairman');
-  const isCeo = name.toLowerCase().includes('ceo') || (entity.roleTitle || '').toLowerCase().includes('ceo');
-
-  // Ground elevation: if exact 3D desk Y is provided, use it; otherwise fallback to floor heights
-  const y = pos.y && pos.y > 0 ? pos.y : (isChairman || isCeo ? 16.4 : 1.4);
-
-  // Department / Role aesthetic palette
-  const deptName = (entity.departmentName || '').toLowerCase();
-  const roleTitle = (entity.roleTitle || '').toLowerCase();
-  let color = '#38bdf8'; // sky default
-  if (isChairman) color = '#f59e0b'; // amber
-  else if (isCeo) color = '#818cf8'; // indigo
-  else if (deptName.includes('engineer') || roleTitle.includes('engineer') || roleTitle.includes('dev')) color = '#06b6d4'; // cyan
-  else if (deptName.includes('product')) color = '#8b5cf6'; // purple
-  else if (deptName.includes('design')) color = '#ec4899'; // pink
-  else if (deptName.includes('marketing') || deptName.includes('growth')) color = '#f97316'; // orange
-  else if (deptName.includes('operation')) color = '#10b981'; // emerald
-
-  const currentActivity = entity.currentActivity || 'WORKING';
-  const activityColor = currentActivity === 'WORKING' ? '#10b981' : currentActivity === 'IN_MEETING' ? '#f59e0b' : '#64748b';
-
-  return (
-    <group
-      position={[pos.x || 0, y, pos.z || 0]}
-      onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
-      onPointerOut={() => setHovered(false)}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-    >
-      {/* Head */}
-      <mesh position={[0, 1.4, 0]}>
-        <sphereGeometry args={[0.2, 16, 16]} />
-        <meshStandardMaterial color={color} roughness={0.3} metalness={0.2} />
-      </mesh>
-      {/* Torso */}
-      <mesh position={[0, 0.85, 0]}>
-        <cylinderGeometry args={[0.18, 0.22, 0.8, 16]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.5} />
-      </mesh>
-      {/* Department accent band */}
-      <mesh position={[0, 0.88, 0]}>
-        <cylinderGeometry args={[0.185, 0.195, 0.2, 16]} />
-        <meshStandardMaterial color={color} roughness={0.3} metalness={0.4} />
-      </mesh>
-      {/* Base activity halo ring */}
-      <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.3, 0.42, 32]} />
-        <meshBasicMaterial color={isSelected ? '#38bdf8' : activityColor} />
-      </mesh>
-
-      {/* Floating name badge */}
-      <Text
-        position={[0, 1.85, 0]}
-        fontSize={0.25}
-        color={isSelected ? '#38bdf8' : '#ffffff'}
-        anchorX="center"
-        anchorY="bottom"
-      >
-        {name}
-      </Text>
-
-      {(hovered || isSelected) && (
-        <Html position={[0, 2.2, 0]} center distanceFactor={15}>
-          <div className="pointer-events-none whitespace-nowrap rounded bg-slate-900/95 px-2.5 py-1 text-xs text-slate-100 shadow-xl ring-1 ring-sky-400/50">
-            <div className="font-semibold text-sky-300">{name}</div>
-            <div className="text-[10px] text-slate-400">
-              {entity.roleTitle || (isChairman ? 'Executive Chairman' : isCeo ? 'Chief Executive' : 'Staff')}
-              {entity.departmentName ? ` • ${entity.departmentName}` : ''}
-            </div>
-          </div>
-        </Html>
-      )}
     </group>
   );
 }
@@ -520,7 +466,7 @@ function ParkingArea({
   isSelected,
   onClick,
 }: {
-  entity: any;
+  entity: WorldEntity;
   isSelected: boolean;
   onClick: () => void;
 }) {
@@ -530,21 +476,27 @@ function ParkingArea({
   return (
     <group
       position={[pos.x, 0.02, pos.z]}
-      onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+      }}
       onPointerOut={() => setHovered(false)}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
     >
-      {/* Paved parking asphalt */}
+      {/* Paved Parking Asphalt */}
       <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[18, 14]} />
         <meshStandardMaterial color="#0f172a" roughness={0.9} />
       </mesh>
-      {/* Parking boundary curb */}
+      {/* Parking Boundary Curb */}
       <mesh position={[0, 0.1, 0]}>
         <boxGeometry args={[18.2, 0.15, 14.2]} />
-        <meshStandardMaterial color="#334155" />
+        <meshStandardMaterial color={isSelected ? '#38bdf8' : hovered ? '#475569' : '#334155'} />
       </mesh>
-      {/* Parking bay stripes */}
+      {/* Bay Stripes */}
       {[-6, -2, 2, 6].map((x) => (
         <mesh key={x} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.03, 0]}>
           <planeGeometry args={[0.1, 10]} />
@@ -566,7 +518,7 @@ function VehicleNode({
   isSelected,
   onClick,
 }: {
-  entity: any;
+  entity: WorldEntity & { vehicleClass?: string; isParked?: boolean };
   isSelected: boolean;
   onClick: () => void;
 }) {
@@ -574,13 +526,12 @@ function VehicleNode({
   const pos = entity.transform?.position || { x: 0, y: 0.35, z: 0 };
   const vClass = (entity.vehicleClass || 'STANDARD').toUpperCase();
 
-  // Class-specific styling & dimensions
   const style = useMemo(() => {
     switch (vClass) {
       case 'CHAIRMAN':
         return {
-          bodyColor: '#18181b', // Obsidian black
-          trimColor: '#f59e0b', // Gold trim
+          bodyColor: '#18181b',
+          trimColor: '#f59e0b',
           glassColor: '#451a03',
           metalness: 0.85,
           roughness: 0.15,
@@ -592,8 +543,8 @@ function VehicleNode({
         };
       case 'CEO':
         return {
-          bodyColor: '#09090b', // Deep carbon
-          trimColor: '#6366f1', // Indigo executive trim
+          bodyColor: '#09090b',
+          trimColor: '#6366f1',
           glassColor: '#1e1b4b',
           metalness: 0.8,
           roughness: 0.2,
@@ -605,7 +556,7 @@ function VehicleNode({
         };
       case 'MD':
         return {
-          bodyColor: '#064e3b', // Deep emerald
+          bodyColor: '#064e3b',
           trimColor: '#10b981',
           glassColor: '#022c22',
           metalness: 0.75,
@@ -618,7 +569,7 @@ function VehicleNode({
         };
       case 'EXECUTIVE':
         return {
-          bodyColor: '#1e1b4b', // Executive navy
+          bodyColor: '#1e1b4b',
           trimColor: '#818cf8',
           glassColor: '#0f172a',
           metalness: 0.75,
@@ -633,7 +584,7 @@ function VehicleNode({
       case 'STANDARD':
       default:
         return {
-          bodyColor: '#0284c7', // Enterprise sky blue
+          bodyColor: '#0284c7',
           trimColor: '#38bdf8',
           glassColor: '#0f172a',
           metalness: 0.7,
@@ -650,11 +601,16 @@ function VehicleNode({
   return (
     <group
       position={[pos.x, pos.y, pos.z]}
-      onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+      }}
       onPointerOut={() => setHovered(false)}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
     >
-      {/* Selection halo */}
       {isSelected && (
         <mesh position={[0, -0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[style.width * 0.7, style.width * 0.9, 32]} />
@@ -662,7 +618,7 @@ function VehicleNode({
         </mesh>
       )}
 
-      {/* Main chassis */}
+      {/* Main Chassis */}
       <mesh position={[0, 0.35, 0]} castShadow>
         <boxGeometry args={[style.width, style.height, style.length]} />
         <meshStandardMaterial
@@ -672,7 +628,7 @@ function VehicleNode({
         />
       </mesh>
 
-      {/* Cabin glass */}
+      {/* Cabin Glass */}
       <mesh position={[0, 0.8, -0.2]} castShadow>
         <boxGeometry args={[style.width * 0.82, style.height * 0.75, style.length * 0.55]} />
         <meshPhysicalMaterial
@@ -684,13 +640,13 @@ function VehicleNode({
         />
       </mesh>
 
-      {/* Chrome / Accent Trim Line */}
+      {/* Accent Trim */}
       <mesh position={[0, 0.5, 0]}>
         <boxGeometry args={[style.width + 0.04, 0.06, style.length + 0.04]} />
         <meshStandardMaterial color={style.trimColor} metalness={0.9} roughness={0.1} />
       </mesh>
 
-      {/* Headlights (Front is +Z) */}
+      {/* Headlights */}
       <mesh position={[-style.width * 0.38, 0.32, style.length * 0.5]}>
         <sphereGeometry args={[0.12, 12, 12]} />
         <meshBasicMaterial color="#38bdf8" />
@@ -700,7 +656,7 @@ function VehicleNode({
         <meshBasicMaterial color="#38bdf8" />
       </mesh>
 
-      {/* Taillights (Rear is -Z) */}
+      {/* Taillights */}
       <mesh position={[-style.width * 0.38, 0.35, -style.length * 0.5]}>
         <boxGeometry args={[0.3, 0.12, 0.04]} />
         <meshBasicMaterial color="#ef4444" />
@@ -710,7 +666,7 @@ function VehicleNode({
         <meshBasicMaterial color="#ef4444" />
       </mesh>
 
-      {/* Procedural Wheels */}
+      {/* Wheels */}
       {([
         [-style.width * 0.48, -style.length * 0.3],
         [style.width * 0.48, -style.length * 0.3],
@@ -757,28 +713,28 @@ export function SpatialScene({
   onSelectEntity,
   activePresetId,
 }: SpatialSceneProps) {
-  // Categorize authoritative entities by type
-  const { campuses, buildings, floors, rooms, workspaces, persons, parkings, vehicles } = useMemo(() => {
-    const c: any[] = [];
-    const b: any[] = [];
-    const f: any[] = [];
-    const r: any[] = [];
-    const w: any[] = [];
-    const p: any[] = [];
-    const pk: any[] = [];
-    const vh: any[] = [];
+  // Partition authoritative entities
+  const { buildings, floors, rooms, workspaces, persons, parkings, vehicles } = useMemo(() => {
+    const c: WorldEntity[] = [];
+    const b: WorldEntity[] = [];
+    const f: (WorldEntity & { level?: number })[] = [];
+    const r: WorldEntity[] = [];
+    const w: WorldEntity[] = [];
+    const p: WorldEntity[] = [];
+    const pk: WorldEntity[] = [];
+    const vh: (WorldEntity & { vehicleClass?: string; isParked?: boolean })[] = [];
 
     entities.forEach((entity) => {
       const type = entity.type?.toUpperCase();
       if (type === 'CAMPUS' || type === 'SITE') c.push(entity);
       else if (type === 'BUILDING') b.push(entity);
-      else if (type === 'FLOOR') f.push(entity);
+      else if (type === 'FLOOR') f.push(entity as WorldEntity & { level?: number });
       else if (type === 'ROOM' || type === 'OFFICE' || type === 'DEPARTMENT_SPACE' || type === 'MEETING_ROOM') r.push(entity);
       else if (type === 'WORKSPACE') w.push(entity);
       else if (type === 'PERSON' || type === 'EMPLOYEE') p.push(entity);
       else if (type === 'PARKING' || type === 'PARKING_AREA') pk.push(entity);
-      else if (type === 'VEHICLE') vh.push(entity);
-      else r.push(entity); // fallback to room representation
+      else if (type === 'VEHICLE') vh.push(entity as WorldEntity & { vehicleClass?: string; isParked?: boolean });
+      else r.push(entity);
     });
 
     return {
@@ -795,30 +751,18 @@ export function SpatialScene({
 
   return (
     <>
-      <CameraController activePresetId={activePresetId} />
+      <PerformanceMonitor />
+      <CameraController activePresetId={activePresetId} selectedEntity={selectedEntity} />
 
-      {/* Lighting setup */}
-      <ambientLight intensity={0.7} color="#cbd5e1" />
-      <directionalLight
-        position={[40, 60, 30]}
-        intensity={1.2}
-        color="#ffffff"
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-      />
-      <directionalLight position={[-30, 20, -20]} intensity={0.4} color="#60a5fa" />
-      <hemisphereLight args={['#38bdf8', '#0f172a', 0.5]} />
+      {/* Cinematic Lighting & Landscape Plaza */}
+      <CinematicEnvironment />
 
-      {/* Campus Ground & Environment */}
-      <CampusGround />
-
-      {/* Primary & Expansion Building Architecture */}
+      {/* Headquarters Buildings */}
       {buildings.length > 0 ? (
         buildings.map((b, idx) => {
           const bFloors = floors.filter((f) => f.parentId === b.id || f.parentId?.includes(b.id));
-          const maxLevel = Math.max(1, ...bFloors.map((f) => (f.level < 100 ? f.level : 1)));
-          const hasExec = bFloors.some((f) => f.level >= 100);
+          const maxLevel = Math.max(1, ...bFloors.map((fl) => ((fl.level ?? 1) < 100 ? (fl.level ?? 1) : 1)));
+          const hasExec = bFloors.some((fl) => (fl.level ?? 0) >= 100);
           const height = Math.max(16, (maxLevel + (hasExec ? 1 : 0)) * 4.2 + 2);
           const posX = b.transform?.position?.x ?? (idx === 0 ? 0 : 36 * idx);
           const posZ = b.transform?.position?.z ?? 0;
@@ -838,9 +782,12 @@ export function SpatialScene({
       {/* Authoritative Floors */}
       {floors.map((floor) => {
         const isExec = (floor.level ?? 0) >= 100 || floor.name?.includes('Executive');
-        const posY = floor.transform?.position?.y !== undefined
-          ? floor.transform.position.y
-          : isExec ? 16 : ((floor.level ?? 1) - 1) * 4;
+        const posY =
+          floor.transform?.position?.y !== undefined
+            ? floor.transform.position.y
+            : isExec
+            ? 16
+            : ((floor.level ?? 1) - 1) * 4;
         const posX = floor.transform?.position?.x ?? 0;
         const posZ = floor.transform?.position?.z ?? 0;
         return (
@@ -855,7 +802,6 @@ export function SpatialScene({
         );
       })}
 
-      {/* If no floors in snapshot yet, render authoritative baseline floors */}
       {floors.length === 0 && (
         <>
           <FloorSlab
@@ -895,9 +841,9 @@ export function SpatialScene({
         />
       ))}
 
-      {/* Authoritative Persons / Avatars */}
+      {/* V22 Realistic Digital Employee Avatars */}
       {persons.map((person) => (
-        <PersonNode
+        <RealisticAvatar
           key={person.id}
           entity={person}
           isSelected={selectedEntity?.id === person.id}
@@ -917,9 +863,9 @@ export function SpatialScene({
         ))
       ) : (
         <ParkingArea
-          entity={{ id: 'parking-default', name: 'HQ Parking', transform: { position: { x: 26, y: 0, z: 26 } } }}
+          entity={{ id: 'parking-default', name: 'HQ Parking', transform: { position: { x: 26, y: 0, z: 26 } } } as unknown as WorldEntity}
           isSelected={selectedEntity?.id === 'parking-default'}
-          onClick={() => onSelectEntity({ id: 'parking-default', type: 'PARKING', name: 'HQ Parking' } as any)}
+          onClick={() => onSelectEntity({ id: 'parking-default', type: 'PARKING', name: 'HQ Parking' } as unknown as WorldEntity)}
         />
       )}
 

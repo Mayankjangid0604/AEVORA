@@ -14,14 +14,14 @@ import { WorkerRegistryService } from './worker-registry.service';
 import { SoftwareWorker } from './software.worker';
 import { WorkerAssignmentService } from './worker-assignment.service';
 import { ProjectExecutionModule } from '../project-execution/project-execution.module';
-import { V12SpatialModule } from '../v12-spatial/v12-spatial.module';
+import { SpatialModule } from '../spatial/spatial.module';
 
 @Module({
   imports: [
     PrismaModule,
     ApprovalModule,
     ProjectExecutionModule,
-    forwardRef(() => V12SpatialModule),
+    forwardRef(() => SpatialModule),
   ],
   controllers: [WorkforceController],
   providers: [

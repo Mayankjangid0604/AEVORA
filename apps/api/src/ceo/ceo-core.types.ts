@@ -2,8 +2,6 @@ import {
   CeoDecisionCategory,
   CeoDecisionRiskLevel,
   CeoDecisionConfidence,
-  CeoDecisionApprovalStatus,
-  CeoDecisionExecutionStatus,
   ObjectiveStatus,
   ObjectivePriority,
   RiskLevel,

@@ -7,7 +7,6 @@ import { CeoConsequenceAnalysisService } from './ceo-consequence-analysis.servic
 import { CeoDecisionLifecycleService } from './ceo-decision-lifecycle.service';
 import { CeoFinancialAuthorityService } from './ceo-financial-authority.service';
 import { ALL_14_CONSEQUENCE_DIMENSIONS } from './ceo-consequence.types';
-import { CeoDecisionCategory, CeoDecisionRiskLevel } from '@prisma/client';
 
 describe('AEVORA V16 Slice 3 — Consequence-Analysis Engine & Simulation', () => {
   let consequenceService: CeoConsequenceAnalysisService;

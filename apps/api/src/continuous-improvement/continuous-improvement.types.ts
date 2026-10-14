@@ -1,4 +1,3 @@
-import { ImprovementStatus } from '@prisma/client';
 
 export enum TargetDomain {
   WORKFORCE_ASSIGNMENT = 'WORKFORCE_ASSIGNMENT',
@@ -133,4 +132,67 @@ export interface EntropyFindingDto {
   authorityRequirement?: RemediationTier | string;
   correlationId?: string;
   causationId?: string;
+}
+
+export interface RankingFactors {
+  benefitScore: number;
+  confidenceFactor: number;
+  riskPenalty: number;
+  blastRadiusFactor: number;
+  costPenalty: number;
+  priorityWeight: number;
+  compositeScore: number;
+}
+
+export interface RankedImprovementProposal {
+  proposal: any;
+  ranking: RankingFactors;
+  rankReasoning: string;
+}
+
+export interface RankingDecisionRecord {
+  companyId: string;
+  evaluatedAt: Date;
+  candidateCount: number;
+  rankedProposals: RankedImprovementProposal[];
+  summary: string;
+}
+
+export interface OscillationDetectionResult {
+  isOscillating: boolean;
+  affectedEntity: string;
+  failureCount: number;
+  rollbackCount: number;
+  totalAttempts: number;
+  cooldownUntil?: Date;
+  requiresChairmanReview: boolean;
+  reason: string;
+}
+
+export interface ExecuteProposalOptions {
+  actorId?: string;
+  actorRole?: string;
+  actorTier?: string;
+  authorityProofId?: string;
+  expectedParametersHash?: string;
+}
+
+export interface GovernedImprovementCycleResult {
+  cycleId: string;
+  companyId: string;
+  timestamp: Date;
+  status: 'COMPLETED' | 'HALTED' | 'BLOCKED_BY_POLICY' | 'ESCALATED_TO_CHAIRMAN' | 'OBSERVING' | 'FAILED';
+  stages: {
+    observe: { signalsObserved: number; details?: any };
+    evaluate: { candidateCount: number; topProposalId?: string };
+    rank: { topRanked?: RankedImprovementProposal };
+    propose?: { proposalId?: string; status?: string };
+    simulate?: { simulated: boolean; scenarioId?: string; confidenceScore?: number };
+    authorize?: { authorized: boolean; proofId?: string; requirement?: string };
+    execute?: { executed: boolean; status?: string };
+    verify?: { verified: boolean; validationStatus?: string; learnedLesson?: string };
+    learn?: { workforceUpdated: boolean; employeeId?: string; newReliability?: number };
+    reconcile?: { entropyFindingsCount: number; score?: any };
+  };
+  reason?: string;
 }

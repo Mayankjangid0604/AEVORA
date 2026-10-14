@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
 import { CanonicalEnterpriseStateService } from './canonical-enterprise-state.service';
 import { EnterpriseConflictIntegrityService } from './enterprise-conflict-integrity.service';
 import { DigitalTwinScenarioService } from './digital-twin-scenario.service';
@@ -102,6 +102,42 @@ export class EnterpriseIntelligenceController {
     @Param('scenarioId') scenarioId: string,
   ) {
     return this.scenarioService.compareScenarioWithBaseline(companyId, scenarioId);
+  }
+
+  @Post('scenarios/:scenarioId/cancel')
+  async cancelScenario(
+    @Param('companyId') companyId: string,
+    @Param('scenarioId') scenarioId: string,
+    @Body() body: { cancelledBy: string; reason: string },
+  ) {
+    return this.scenarioService.cancelScenario({
+      companyId,
+      scenarioId,
+      cancelledBy: body.cancelledBy,
+      reason: body.reason,
+    });
+  }
+
+  @Get('scenarios/:scenarioId/executive-brief')
+  async getExecutiveBrief(
+    @Param('companyId') companyId: string,
+    @Param('scenarioId') scenarioId: string,
+  ) {
+    return this.scenarioService.generateExecutiveDecisionBrief(companyId, scenarioId);
+  }
+
+  @Post('scenarios/:scenarioId/reconcile-outcomes')
+  async reconcileOutcomes(
+    @Param('companyId') companyId: string,
+    @Param('scenarioId') scenarioId: string,
+    @Body() body: { reconciledBy: string; actualMetrics: any },
+  ) {
+    return this.scenarioService.reconcileScenarioOutcomes({
+      companyId,
+      scenarioId,
+      reconciledBy: body.reconciledBy,
+      actualMetrics: body.actualMetrics,
+    });
   }
 
   @Get('plan-changes')

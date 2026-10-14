@@ -151,7 +151,7 @@ export class WorldStateGatewayController {
 
   @StreamTokenAuth()
   @Sse('stream/:companyId')
-  stream(@Request() req, @Param('companyId') companyId: string, @Query('viewportEntityId') viewportEntityId?: string): Observable<MessageEvent> {
+  stream(@Request() req, @Param('companyId') companyId: string, @Query('viewportEntityId') _viewportEntityId?: string): Observable<MessageEvent> {
     this.scope(req, companyId);
     // In a full implementation, the stream can be filtered by gatewayService.isInViewport(companyId, event.entityId, viewportEntityId).
     // For now, we emit delta events. The snapshot provides the initial culled state.

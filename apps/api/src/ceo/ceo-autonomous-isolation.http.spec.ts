@@ -75,7 +75,7 @@ describe('Autonomous CEO HTTP & Tenant Isolation (V16 Slice 2)', () => {
       companyId,
       briefTitle: `Executive Brief: ${decisionId}`,
     })),
-    compareDisagreementConsequences: jest.fn(async (companyId: string, ceoId: string, directive: string, alternative: string) => ({
+    compareDisagreementConsequences: jest.fn(async (companyId: string, ceoId: string, directive: string, _alternative: string) => ({
       companyId,
       directive,
       decisionAuthority: 'CHAIRMAN',

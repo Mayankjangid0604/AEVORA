@@ -20,7 +20,7 @@ import { ChairmanApprovalModal } from '@/components/executive/ChairmanApprovalMo
 import { ExternalActionGatewayConsole } from '@/components/executive/ExternalActionGatewayConsole';
 import { EnterpriseBrainViewer } from '@/components/executive/EnterpriseBrainViewer';
 import { OrganizationalMemoryConsole } from '@/components/executive/OrganizationalMemoryConsole';
-import { V15SpatialContextBadge } from '@/components/executive/V15SpatialContextBadge';
+import { SpatialContextBadge } from '@/components/executive/SpatialContextBadge';
 import { ExecutiveConsole } from '@/components/executive/ExecutiveConsole';
 import { companyKeys } from '@/lib/query-keys';
 import { SESSION_COOKIE } from '@/lib/session-cookie';
@@ -412,7 +412,7 @@ describe('AEVORA V16 Slice 6 — Executive Console Components', () => {
     expect(html).toContain('Authorize &amp; Sign Decision');
   });
 
-  it('6. ExternalActionGatewayConsole renders audit trail and V24 Offer Engine integration', () => {
+  it('6. ExternalActionGatewayConsole renders audit trail and Offer Engine integration', () => {
     const html = renderToStaticMarkup(
       <ExternalActionGatewayConsole
         actions={MOCK_ACTIONS}
@@ -421,7 +421,7 @@ describe('AEVORA V16 Slice 6 — Executive Console Components', () => {
       />
     );
 
-    expect(html).toContain('V24 OFFER ENGINE');
+    expect(html).toContain('OFFER ENGINE');
     expect(html).toContain('AEVORA_V24_OFFER_MARKET_ADAPTER');
     expect(html).toContain('Max Autonomous Discount:');
     expect(html).toContain('50% Limit');
@@ -470,12 +470,12 @@ describe('AEVORA V16 Slice 6 — Executive Console Components', () => {
     expect(html).toContain('Pre-allocate secondary email domain for cold outreach');
   });
 
-  it('9. V15SpatialContextBadge renders live 3D campus twin metrics and link to 3D world', () => {
+  it('9. SpatialContextBadge renders live 3D campus twin metrics and link to 3D world', () => {
     const html = renderToStaticMarkup(
-      <V15SpatialContextBadge companyId="comp-1" spatial={MOCK_SPATIAL} />
+      <SpatialContextBadge companyId="comp-1" spatial={MOCK_SPATIAL} />
     );
 
-    expect(html).toContain('V15 3D DIGITAL-TWIN');
+    expect(html).toContain('3D DIGITAL TWIN');
     expect(html).toContain('Mumbai Innovation Center');
     expect(html).toContain('Occupancy:');
     expect(html).toContain('>22<');
@@ -489,6 +489,8 @@ describe('AEVORA V16 Slice 6 — Executive Console Components', () => {
     });
     client.setQueryData(companyKeys.ceo('comp-1', 'console', 'state'), MOCK_STATE);
     client.setQueryData(companyKeys.ceo('comp-1', 'console', 'decisions'), MOCK_DECISIONS);
+    client.setQueryData(companyKeys.ceo('comp-1', 'console', 'spatial'), MOCK_SPATIAL);
+    client.setQueryData(companyKeys.ceo('comp-1', 'console', 'offer'), MOCK_V24);
     client.setQueryData(companyKeys.ceo('comp-1', 'console', 'v15'), MOCK_SPATIAL);
     client.setQueryData(companyKeys.ceo('comp-1', 'console', 'v24'), MOCK_V24);
 

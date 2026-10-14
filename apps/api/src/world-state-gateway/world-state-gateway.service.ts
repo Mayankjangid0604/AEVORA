@@ -6,7 +6,6 @@ import {
   WorldEntity, 
   V12EntityType, 
   CompanyEntity, 
-  Person,
   Transform,
   VisibilityMetadata,
   Region,
@@ -19,14 +18,12 @@ import {
   Office,
   DepartmentSpace,
   MeetingRoom,
-  TopologyEdge,
   NavigationNode,
-  MovementState,
   Vehicle,
 } from '@aevora/shared';
 import { WorldStateEventService } from './world-state-event.service';
 import { HierarchicalStreamingManager, RegionNode, StreamingState } from '@aevora/shared';
-import { calculateSlotCoordinate } from '../v12-spatial/vehicle-policy';
+import { calculateSlotCoordinate } from '../spatial/vehicle-policy';
 
 const REGION_HIERARCHY_TYPES = new Set([
   V12EntityType.REGION, V12EntityType.CITY, V12EntityType.CAMPUS,
@@ -161,7 +158,7 @@ export class WorldStateGatewayService {
     const rooms = await this.prisma.v12SpatialRoom.findMany({ where: { floorId: { in: floorIds } } });
     for (const dbRoom of rooms) {
       let type = V12EntityType.ROOM;
-      let roomObj: Room | Office | DepartmentSpace | MeetingRoom | any = {
+      const roomObj: Room | Office | DepartmentSpace | MeetingRoom | any = {
         id: `v12_room_${dbRoom.id}`,
         name: dbRoom.name,
         parentId: `v12_floor_${dbRoom.floorId}`,
@@ -279,7 +276,7 @@ export class WorldStateGatewayService {
    * Maps Company -> CompanyEntity, Employee -> Person.
    */
   public async generateSnapshot(companyId: string, viewportEntityId?: string): Promise<WorldSnapshot> {
-    this.logger.log(`Generating V12 World Snapshot`, '', { companyId, viewportEntityId });
+    this.logger.log(`Generating Spatial World Snapshot`, '', { companyId, viewportEntityId });
     const entities: Record<string, WorldEntity> = {};
 
     // 1. Fetch Authoritative State

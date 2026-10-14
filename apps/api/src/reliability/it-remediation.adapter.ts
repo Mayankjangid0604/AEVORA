@@ -241,7 +241,7 @@ export class ITRemediationAdapter implements ExternalActionAdapter {
   async executeRollback(
     actionType: RunbookActionType,
     targetName: string,
-    preExecutionSnapshot: Record<string, any>,
+    _preExecutionSnapshot: Record<string, any>,
   ): Promise<RollbackActionResult> {
     try {
       switch (actionType) {

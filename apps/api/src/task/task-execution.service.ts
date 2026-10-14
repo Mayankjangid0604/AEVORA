@@ -408,7 +408,7 @@ export class TaskExecutionService {
       );
     } else {
       // Terminal failure or escalated: move to REVIEW with failure result
-      const taskResult = await this.prisma.taskResult.upsert({
+      await this.prisma.taskResult.upsert({
         where: { taskId: task.id },
         create: {
           taskId: task.id,

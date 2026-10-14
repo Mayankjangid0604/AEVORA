@@ -2,9 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorldStateEventService } from './world-state-event.service';
 import { WorldStateEventTranslationService } from './world-state-translation.service';
-import { V12SpatialService } from '../v12-spatial/v12-spatial.service';
-import { V12NavigationService } from '../v12-spatial/v12-navigation.service';
-import { HqCapacityService } from '../v12-spatial/hq-capacity.service';
+import { V12SpatialService } from '../spatial/spatial.service';
+import { V12NavigationService } from '../spatial/navigation.service';
+import { HqCapacityService } from '../spatial/hq-capacity.service';
 import { Subject } from 'rxjs';
 import { V12EventType } from '@aevora/shared';
 
@@ -78,7 +78,7 @@ class FakeMovementPrisma {
 
 describe('V12 end-to-end: authoritative task -> real navigation -> movement progress -> arrival -> digital-human embodiment', () => {
   let prisma: FakeMovementPrisma;
-  let eventService: WorldStateEventService;
+  let _eventService: WorldStateEventService;
   let translationService: WorldStateEventTranslationService;
   let navigationService: V12NavigationService;
   let spatialService: V12SpatialService;
@@ -125,7 +125,7 @@ describe('V12 end-to-end: authoritative task -> real navigation -> movement prog
       ],
     }).compile();
 
-    eventService = app.get(WorldStateEventService);
+    _eventService = app.get(WorldStateEventService);
     translationService = app.get(WorldStateEventTranslationService);
     navigationService = app.get(V12NavigationService);
     spatialService = app.get(V12SpatialService);

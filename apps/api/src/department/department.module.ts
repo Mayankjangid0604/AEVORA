@@ -9,14 +9,14 @@ import { DepartmentHealthService } from './department-health.service';
 import { DepartmentWorkstreamService } from './department-workstream.service';
 import { DepartmentTeamService } from './department-team.service';
 import { DepartmentResourceProposalService } from './department-resource-proposal.service';
-import { V12SpatialModule } from '../v12-spatial/v12-spatial.module';
+import { SpatialModule } from '../spatial/spatial.module';
 import { AuthorizationModule } from '../authorization/authorization.module';
 
 @Module({
   imports: [
     forwardRef(() => WorkforceModule),
     forwardRef(() => CeoModule),
-    forwardRef(() => V12SpatialModule),
+    forwardRef(() => SpatialModule),
     AuthorizationModule,
   ],
   controllers: [DepartmentController],

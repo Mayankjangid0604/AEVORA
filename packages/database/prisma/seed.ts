@@ -1,9 +1,90 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { PrismaClient, CompanyStatus, DepartmentStatus, RoleStatus, EmployeeStatus } from '@prisma/client';
 
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'postgres']);
+const ROOT_DIR = path.resolve(__dirname, '..', '..', '..');
+
+/**
+ * Safely loads environment variables from root .env without overriding active process.env.
+ */
+function loadEnvSafe(envPath: string): void {
+  if (typeof (process as any).loadEnvFile === 'function') {
+    try {
+      (process as any).loadEnvFile(envPath);
+      return;
+    } catch (e: any) {
+      if (e && e.code === 'ENOENT') return;
+    }
+  }
+  if (fs.existsSync(envPath)) {
+    try {
+      const content = fs.readFileSync(envPath, 'utf8');
+      for (const rawLine of content.split('\n')) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('#')) continue;
+        const eq = line.indexOf('=');
+        if (eq === -1) continue;
+        const key = line.slice(0, eq).trim();
+        let val = line.slice(eq + 1).trim();
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1);
+        }
+        if (!(key in process.env)) {
+          process.env[key] = val;
+        }
+      }
+    } catch {
+      // Fallback silently if read fails
+    }
+  }
+}
+
+/**
+ * Validates that the target database is explicitly local before opening any connection.
+ */
+function assertLocalDatabase(scriptName: string): void {
+  if (!process.env.DATABASE_URL) {
+    const rootEnv = path.join(ROOT_DIR, '.env');
+    loadEnvSafe(rootEnv);
+  }
+
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl || typeof dbUrl !== 'string') {
+    console.error(`[${scriptName}] Security Refusal: DATABASE_URL is not configured.`);
+    console.error(`[${scriptName}] Refusing execution: Cannot verify target database host.`);
+    process.exit(1);
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(dbUrl);
+  } catch {
+    console.error(`[${scriptName}] Security Refusal: Malformed DATABASE_URL connection string.`);
+    console.error(`[${scriptName}] Refusing execution: Failed to parse database URL.`);
+    process.exit(1);
+  }
+
+  const scheme = parsed.protocol.replace(/:$/, '').toLowerCase();
+  if (scheme !== 'postgresql' && scheme !== 'postgres') {
+    console.error(`[${scriptName}] Security Refusal: Unsupported database scheme "${parsed.protocol}". Expected "postgresql:" or "postgres:".`);
+    process.exit(1);
+  }
+
+  const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!host || !LOCAL_HOSTS.has(host)) {
+    console.error(`[${scriptName}] Security Refusal: Target database host "${host || 'unknown'}" is not an authorized local development host.`);
+    console.error(`[${scriptName}] Refusing execution: Seeding demo data is prohibited on remote databases.`);
+    console.error(`[${scriptName}] Authorized local hosts: ${Array.from(LOCAL_HOSTS).join(', ')}`);
+    process.exit(1);
+  }
+}
+
+assertLocalDatabase('db:seed');
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Seeding Phase 2B database...');
+  console.log('Seeding database...');
   // Only seed an empty database: never add demo data next to a real company.
   if (await prisma.chairman.count()) {
     console.log('Database already has a Chairman, skipping seed.');
@@ -257,9 +338,12 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error(e);
-    process.exit(1);
+    console.error(`[db:seed] Error: ${e.message || e}`);
+    process.exitCode = 1;
   })
   .finally(async () => {
     await prisma.$disconnect();
+    if (process.exitCode) {
+      process.exit(process.exitCode);
+    }
   });

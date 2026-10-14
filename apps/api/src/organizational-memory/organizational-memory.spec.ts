@@ -6,7 +6,7 @@ import { OutcomeEvaluationService } from './outcome-evaluation.service';
 import { LessonPatternExtractionService } from './lesson-pattern-extraction.service';
 import { ExecutiveMemoryService } from './executive-memory.service';
 import { StrategicReflectionService } from './strategic-reflection.service';
-import { DecisionOutcomeEvaluation, MemoryMaturity } from './organizational-memory.types';
+import { DecisionOutcomeEvaluation } from './organizational-memory.types';
 import { NotFoundException } from '@nestjs/common';
 
 describe('AEVORA V16 Slice 5 — Organizational Memory & Strategic Reflection', () => {

@@ -18,7 +18,7 @@ export class WorldStateEventTranslationService implements OnModuleInit, OnModule
     this.subscription = this.prisma.databaseEvents.subscribe((event) => {
       this.handleDatabaseEvent(event);
     });
-    this.logger.log('Started listening to authoritative database events for V12 translation');
+    this.logger.log('Started listening to authoritative database events for Spatial translation');
   }
 
   onModuleDestroy() {
@@ -43,7 +43,7 @@ export class WorldStateEventTranslationService implements OnModuleInit, OnModule
   /** Persist-then-broadcast. Failures are already logged/published by WorldStateEventService; never swallowed silently. */
   private emit(companyId: string, envelope: any) {
     Promise.resolve(this.eventService.broadcastEvent(companyId, envelope)).catch((err) => {
-      this.logger.error(`V12 event ${envelope.eventId} (${envelope.eventType}) was not persisted and was not broadcast: ${err?.message}`);
+      this.logger.error(`Spatial event ${envelope.eventId} (${envelope.eventType}) was not persisted and was not broadcast: ${err?.message}`);
     });
   }
 

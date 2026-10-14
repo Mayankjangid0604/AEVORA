@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { OutreachModule } from './outreach/outreach.module';
 import { LeadGenModule } from './lead-gen/lead-gen.module';
 import { SalesOutreachModule } from './sales-outreach/sales-outreach.module';
@@ -34,6 +36,7 @@ import { CrmModule } from './crm/crm.module';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { ProjectExecutionModule } from './project-execution/project-execution.module';
+import { ProjectDeliveryModule } from './project-delivery/project-delivery.module';
 import { CompanyOperationsModule } from './company-operations/company-operations.module';
 import { ChairmanModule } from './chairman/chairman.module';
 import { CommunicationModule } from './communication/communication.module';
@@ -78,16 +81,18 @@ import { AutomationOrchestrationModule } from './automation-orchestration/automa
 import { ContinuousImprovementModule } from './continuous-improvement/continuous-improvement.module';
 import { ReliabilityModule } from './reliability/reliability.module';
 import { WorldStateGatewayModule } from './world-state-gateway/world-state-gateway.module';
-import { V12SpatialModule } from './v12-spatial/v12-spatial.module';
+import { SpatialModule } from './spatial/spatial.module';
 import { EnterpriseBrainModule } from './enterprise-brain/enterprise-brain.module';
 import { ExternalActionGatewayModule } from './external-action-gateway/external-action-gateway.module';
 import { OrganizationalMemoryModule } from './organizational-memory/organizational-memory.module';
 
 import { GovernanceModule } from './governance/governance.module';
 import { EnterpriseIntelligenceModule } from './enterprise-intelligence/enterprise-intelligence.module';
+import { OfferMarketModule } from './offer-market/offer-market.module';
 
 @Module({
   imports: [
+    OfferMarketModule,
     GovernanceModule,
     EnterpriseIntelligenceModule,
     EnterpriseBrainModule,
@@ -117,6 +122,7 @@ import { EnterpriseIntelligenceModule } from './enterprise-intelligence/enterpri
     ProjectModule,
     ReceptionistModule,
     ProjectExecutionModule,
+    ProjectDeliveryModule,
     CompanyOperationsModule,
     ChairmanModule,
     DevicesModule,
@@ -170,9 +176,21 @@ import { EnterpriseIntelligenceModule } from './enterprise-intelligence/enterpri
     BrowserAiModule,
     AutomationOrchestrationModule,
     WorldStateGatewayModule,
-    V12SpatialModule,
+    SpatialModule,
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60000,
+        limit: 60,
+      },
+    ]),
   ],
   controllers: [HealthController],
-  providers: [],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

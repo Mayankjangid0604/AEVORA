@@ -30,6 +30,16 @@ async function bootstrap() {
   if (safeMode()) installSafeModeNetworkGuard(); // #49: before any module can make a call
 
   const app = await NestFactory.create(AppModule, { rawBody: true });
+
+  // Configure trusted proxy behavior: by default, express does not trust arbitrary X-Forwarded-* headers,
+  // preventing client-IP spoofing. When running behind reverse proxies (Traefik/Nginx), TRUST_PROXY can be set.
+  const trustProxy = process.env.TRUST_PROXY;
+  if (trustProxy) {
+    const adapter = app.getHttpAdapter();
+    if (adapter && typeof (adapter as any).getInstance === 'function') {
+      (adapter as any).getInstance().set('trust proxy', trustProxy === 'true' ? 1 : trustProxy);
+    }
+  }
   
   app.use(helmet());
   app.useGlobalFilters(new AppExceptionFilter(app.get(HttpAdapterHost).httpAdapter));
@@ -49,8 +59,8 @@ async function bootstrap() {
     credentials: true,
   });
   
-  const port = process.env.PORT || process.env.PORT_API || 13000;
-  await app.listen(port);
+  const port = process.env.PORT || process.env.PORT_API || 3001;
+  await app.listen(port, '0.0.0.0');
   console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();

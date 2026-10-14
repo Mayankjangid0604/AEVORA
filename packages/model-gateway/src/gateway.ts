@@ -199,10 +199,11 @@ export class ModelGateway {
 
     // Ollama path. Streamed: with stream:false Ollama sends no headers until the whole reply is done,
     // and Node's fetch gives up after 300 s without headers — long CPU generations always failed.
-    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+    // Same resolution as LocalProvider (OLLAMA_BASE_URL, then OLLAMA_URL); bounded so a hung model can't block callers forever.
     try {
-      const response = await fetch(`${ollamaUrl}/api/generate`, {
+      const response = await fetch(`${Config.OLLAMA_BASE_URL}/api/generate`, {
         method: 'POST',
+        signal: AbortSignal.timeout(Config.OLLAMA_TIMEOUT_MS),
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: config.model,

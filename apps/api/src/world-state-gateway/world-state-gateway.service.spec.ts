@@ -7,7 +7,7 @@ import { StructuredLoggerService } from '../logger/structured-logger.service';
 describe('WorldStateGatewayService', () => {
   let service: WorldStateGatewayService;
   let prisma: PrismaService;
-  let eventService: WorldStateEventService;
+  let _eventService: WorldStateEventService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -48,7 +48,7 @@ describe('WorldStateGatewayService', () => {
 
     service = module.get<WorldStateGatewayService>(WorldStateGatewayService);
     prisma = module.get<PrismaService>(PrismaService);
-    eventService = module.get<WorldStateEventService>(WorldStateEventService);
+    _eventService = module.get<WorldStateEventService>(WorldStateEventService);
   });
 
   it('should be defined', () => {
