@@ -39,6 +39,12 @@ export function LoginForm({ next }: { next: string }) {
       <button type="submit" disabled={busy} className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent disabled:opacity-60">
         {busy ? 'Signing in...' : 'Sign in'}
       </button>
+      <div className="pt-2 text-center text-xs text-muted">
+        New business?{' '}
+        <a href="/onboard" className="text-accent hover:underline">
+          Register fresh company
+        </a>
+      </div>
     </form>
   );
 }

@@ -229,3 +229,25 @@ describe('validateEnv — Production Secret Validation & Configuration Hardening
     });
   });
 });
+
+describe('validateEnv - SMTP misconfiguration warnings (values are never echoed)', () => {
+  const base: NodeJS.ProcessEnv = { DATABASE_URL: 'x', JWT_SECRET: 'x', WEBHOOK_SECRET_PROD: 'x', WEBHOOK_SECRET_SIM: 'x' };
+
+  it('warns when SMTP_HOST holds an email address', () => {
+    const w = validateEnv({ ...base, SMTP_HOST: 'owner@example.test', SMTP_USER: 'owner@example.test', SMTP_PASS: 'abcd efgh ijkl mnop' });
+    expect(w.some((m) => /SMTP_HOST looks like an email address/.test(m))).toBe(true);
+    expect(w.join('\n')).not.toContain('owner@example.test');
+    expect(w.join('\n')).not.toContain('abcd');
+  });
+
+  it('warns when a Gmail host is paired with a non-email SMTP_USER', () => {
+    const w = validateEnv({ ...base, SMTP_HOST: 'smtp.gmail.com', SMTP_USER: 'just_a_label', SMTP_PASS: 'x' });
+    expect(w.some((m) => /SMTP_USER must be the full Gmail address/.test(m))).toBe(true);
+    expect(w.join('\n')).not.toContain('just_a_label');
+  });
+
+  it('is silent for a correct Gmail setup', () => {
+    const w = validateEnv({ ...base, SMTP_HOST: 'smtp.gmail.com', SMTP_PORT: '587', SMTP_USER: 'owner@gmail.com', SMTP_PASS: 'x' });
+    expect(w.some((m) => /SMTP_(HOST|USER)/.test(m) && /looks like|must be the full/.test(m))).toBe(false);
+  });
+});

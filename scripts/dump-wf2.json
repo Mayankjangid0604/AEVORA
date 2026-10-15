@@ -1,0 +1,537 @@
+{
+  "id": "ald9mQlsl4vfvSts",
+  "name": "Enrich Company Data and Dual-Path Qualification - Aevora",
+  "description": null,
+  "active": true,
+  "activeVersionId": "efe03991-c942-45db-84d1-50aa29eb3507",
+  "createdAt": "2026-10-15T02:41:47.510Z",
+  "updatedAt": "2026-10-15T02:43:23.660Z",
+  "isArchived": false,
+  "versionId": "efe03991-c942-45db-84d1-50aa29eb3507",
+  "versionCounter": 3,
+  "sourceWorkflowId": null,
+  "triggerCount": 1,
+  "nodes": [
+    {
+      "id": "f53b19c5-dcb9-4239-8be8-122a9e479a55",
+      "name": "Webhook Trigger",
+      "webhookId": "aevora-enrichment-trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aevora-enrichment-trigger",
+        "responseMode": "onReceived",
+        "responseData": "firstEntryJson",
+        "options": {}
+      }
+    },
+    {
+      "id": "1a2b3c4d-5e6f-4a0b-9c1d-2e3f4a5b6c7d",
+      "name": "When clicking \"Execute Workflow\"",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        260,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "62d84f70-43a2-43aa-815e-56842230c9b1",
+      "name": "Prepare Enrichment Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        100
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first()?.json || {};\nconst companyId = item.companyId || item.body?.companyId || '9d98b53b-3b79-45b8-9bb9-6cbac171bc3c';\nconst limit = item.limit || item.body?.limit || 20;\nconst leadIds = item.leadIds || item.body?.leadIds || [];\nconst forceRefresh = !!(item.forceRefresh || item.body?.forceRefresh);\nconst apiUrl = item.apiUrl || item.body?.apiUrl || 'http://127.0.0.1:13000';\nconst integrationKey = item.integrationKey || item.body?.integrationKey || 'ca8f298aa67930c302c6a711a0172e90';\n\nreturn [{\n  json: {\n    companyId,\n    limit,\n    leadIds,\n    forceRefresh,\n    apiUrl,\n    integrationKey,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      }
+    },
+    {
+      "id": "e451cc56-0cef-4bd8-b13e-210d5ddf3001",
+      "name": "Execute AEVORA Dual-Path Lead Enrichment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        820,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.apiUrl }}/automation/webhook/enrichment",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-integration-key",
+              "value": "={{ $json.integrationKey }}"
+            },
+            {
+              "name": "x-company-id",
+              "value": "={{ $json.companyId }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"leadIds\": {{ JSON.stringify($json.leadIds) }},\n  \"limit\": {{ $json.limit }},\n  \"forceRefresh\": {{ $json.forceRefresh }}\n}",
+        "options": {
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "90c02c5e-228e-478b-b06d-424dc0c4f9b9",
+      "name": "Structured Output Parser",
+      "disabled": true,
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1500,
+        440
+      ],
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"Business Area\": {\n    \"type\": \"string\",\n    \"description\": \"Summary of the company's core activities or industry focus.\"\n  },\n  \"Offers or Product\": {\n    \"type\": \"string\",\n    \"description\": \"Summary of the company's main products or services.\"\n  },\n  \"Value Proposition\": {\n    \"type\": \"string\",\n    \"description\": \"Catchphrase or tagline that represents the company's value proposition.\"\n  },\n  \"Business Model\": {\n    \"type\": \"string\",\n    \"description\": \"Description of the company's business model, including revenue generation, key partnerships, or unique aspects.\"\n  },\n  \"Ideal Customer Profile\": {\n    \"type\": \"string\",\n    \"description\": \"Description of the ideal customer profile, based on available information.\"\n  }\n}\n"
+      }
+    },
+    {
+      "id": "81392d70-3b36-4014-8239-97ea1d69e522",
+      "name": "OpenAI Chat Model",
+      "disabled": true,
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        440
+      ],
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {}
+      }
+    },
+    {
+      "id": "3b1050a8-5992-4a5b-a6a4-b91472a12dd4",
+      "name": "Call n8n workflow : Scrape companies homepage content",
+      "disabled": true,
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1380,
+        460
+      ],
+      "parameters": {
+        "name": "scraper",
+        "fields": {
+          "values": [
+            {
+              "name": "website",
+              "stringValue": "={{ $json.website || $json.websiteUrl }}"
+            }
+          ]
+        },
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "TfwQRZkTBtykx1rM"
+        },
+        "description": "Call this tool to get scraped data about a website."
+      }
+    },
+    {
+      "id": "78ae2393-3744-445a-bf28-6dab1f4a8aec",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -180
+      ],
+      "parameters": {
+        "width": 420,
+        "height": 480,
+        "content": "# AEVORA Automation #2: Lead Enrichment & Qualification\n\nThis workflow receives lead enrichment requests from AEVORA, connects to the AEVORA dual-path lead enrichment engine, evaluates website health (Path A) and software/automation needs (Path B), and updates existing sales leads in AEVORA CRM.\n\n- Trigger: Webhook / Manual Trigger\n- Path A: Missing, broken, or outdated websites\n- Path B: High-need service businesses missing booking & CRM\n- Output: Saved to SalesLead.metadata.enrichment and LeadGenAudit"
+      }
+    },
+    {
+      "id": "bf1987fb-ce72-47c1-a020-6ec41e8731e3",
+      "name": "Set company url",
+      "disabled": true,
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        760,
+        500
+      ],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7ea9933b-5972-4623-9c97-eecf1ce0479d",
+              "name": "url",
+              "type": "string",
+              "value": "={{ $json.website || $json.websiteUrl }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f0a86878-8db1-4761-a135-9d7a3caac288",
+      "name": "HTML to Markdown",
+      "disabled": true,
+      "type": "n8n-nodes-base.markdown",
+      "typeVersion": 1,
+      "position": [
+        1020,
+        500
+      ],
+      "parameters": {
+        "html": "={{ $json.data || $json.body }}",
+        "options": {},
+        "destinationKey": "response"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Enrichment Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking \"Execute Workflow\"": {
+      "main": [
+        [
+          {
+            "node": "Prepare Enrichment Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Enrichment Request": {
+      "main": [
+        [
+          {
+            "node": "Execute AEVORA Dual-Path Lead Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": null,
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "ald9mQlsl4vfvSts",
+      "projectId": "560ut2nZy3ipqSDF",
+      "project": {
+        "id": "560ut2nZy3ipqSDF",
+        "name": "Mayank Jangid <jangidmayank768@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "2f9ee451-a116-49cb-8a97-f183e7d4beba",
+        "createdAt": "2026-10-03T00:09:03.499Z",
+        "updatedAt": "2026-10-03T00:11:45.870Z"
+      },
+      "createdAt": "2026-10-15T02:41:47.511Z",
+      "updatedAt": "2026-10-15T02:41:47.511Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "efe03991-c942-45db-84d1-50aa29eb3507",
+    "workflowId": "ald9mQlsl4vfvSts",
+    "nodes": [
+      {
+        "id": "f53b19c5-dcb9-4239-8be8-122a9e479a55",
+        "name": "Webhook Trigger",
+        "webhookId": "aevora-enrichment-trigger",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          260,
+          0
+        ],
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "aevora-enrichment-trigger",
+          "responseMode": "onReceived",
+          "responseData": "firstEntryJson",
+          "options": {}
+        }
+      },
+      {
+        "id": "1a2b3c4d-5e6f-4a0b-9c1d-2e3f4a5b6c7d",
+        "name": "When clicking \"Execute Workflow\"",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          260,
+          200
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "62d84f70-43a2-43aa-815e-56842230c9b1",
+        "name": "Prepare Enrichment Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          100
+        ],
+        "parameters": {
+          "jsCode": "const item = $input.first()?.json || {};\nconst companyId = item.companyId || item.body?.companyId || '9d98b53b-3b79-45b8-9bb9-6cbac171bc3c';\nconst limit = item.limit || item.body?.limit || 20;\nconst leadIds = item.leadIds || item.body?.leadIds || [];\nconst forceRefresh = !!(item.forceRefresh || item.body?.forceRefresh);\nconst apiUrl = item.apiUrl || item.body?.apiUrl || 'http://127.0.0.1:13000';\nconst integrationKey = item.integrationKey || item.body?.integrationKey || 'ca8f298aa67930c302c6a711a0172e90';\n\nreturn [{\n  json: {\n    companyId,\n    limit,\n    leadIds,\n    forceRefresh,\n    apiUrl,\n    integrationKey,\n    timestamp: new Date().toISOString()\n  }\n}];"
+        }
+      },
+      {
+        "id": "e451cc56-0cef-4bd8-b13e-210d5ddf3001",
+        "name": "Execute AEVORA Dual-Path Lead Enrichment",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          820,
+          100
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.apiUrl }}/automation/webhook/enrichment",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-integration-key",
+                "value": "={{ $json.integrationKey }}"
+              },
+              {
+                "name": "x-company-id",
+                "value": "={{ $json.companyId }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"leadIds\": {{ JSON.stringify($json.leadIds) }},\n  \"limit\": {{ $json.limit }},\n  \"forceRefresh\": {{ $json.forceRefresh }}\n}",
+          "options": {
+            "timeout": 60000
+          }
+        }
+      },
+      {
+        "id": "90c02c5e-228e-478b-b06d-424dc0c4f9b9",
+        "name": "Structured Output Parser",
+        "disabled": true,
+        "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+        "typeVersion": 1.2,
+        "position": [
+          1500,
+          440
+        ],
+        "parameters": {
+          "schemaType": "manual",
+          "inputSchema": "{\n  \"Business Area\": {\n    \"type\": \"string\",\n    \"description\": \"Summary of the company's core activities or industry focus.\"\n  },\n  \"Offers or Product\": {\n    \"type\": \"string\",\n    \"description\": \"Summary of the company's main products or services.\"\n  },\n  \"Value Proposition\": {\n    \"type\": \"string\",\n    \"description\": \"Catchphrase or tagline that represents the company's value proposition.\"\n  },\n  \"Business Model\": {\n    \"type\": \"string\",\n    \"description\": \"Description of the company's business model, including revenue generation, key partnerships, or unique aspects.\"\n  },\n  \"Ideal Customer Profile\": {\n    \"type\": \"string\",\n    \"description\": \"Description of the ideal customer profile, based on available information.\"\n  }\n}\n"
+        }
+      },
+      {
+        "id": "81392d70-3b36-4014-8239-97ea1d69e522",
+        "name": "OpenAI Chat Model",
+        "disabled": true,
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1,
+        "position": [
+          1240,
+          440
+        ],
+        "parameters": {
+          "model": "gpt-4o-mini",
+          "options": {}
+        }
+      },
+      {
+        "id": "3b1050a8-5992-4a5b-a6a4-b91472a12dd4",
+        "name": "Call n8n workflow : Scrape companies homepage content",
+        "disabled": true,
+        "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+        "typeVersion": 1.2,
+        "position": [
+          1380,
+          460
+        ],
+        "parameters": {
+          "name": "scraper",
+          "fields": {
+            "values": [
+              {
+                "name": "website",
+                "stringValue": "={{ $json.website || $json.websiteUrl }}"
+              }
+            ]
+          },
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "TfwQRZkTBtykx1rM"
+          },
+          "description": "Call this tool to get scraped data about a website."
+        }
+      },
+      {
+        "id": "78ae2393-3744-445a-bf28-6dab1f4a8aec",
+        "name": "Sticky Note",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -200,
+          -180
+        ],
+        "parameters": {
+          "width": 420,
+          "height": 480,
+          "content": "# AEVORA Automation #2: Lead Enrichment & Qualification\n\nThis workflow receives lead enrichment requests from AEVORA, connects to the AEVORA dual-path lead enrichment engine, evaluates website health (Path A) and software/automation needs (Path B), and updates existing sales leads in AEVORA CRM.\n\n- Trigger: Webhook / Manual Trigger\n- Path A: Missing, broken, or outdated websites\n- Path B: High-need service businesses missing booking & CRM\n- Output: Saved to SalesLead.metadata.enrichment and LeadGenAudit"
+        }
+      },
+      {
+        "id": "bf1987fb-ce72-47c1-a020-6ec41e8731e3",
+        "name": "Set company url",
+        "disabled": true,
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          760,
+          500
+        ],
+        "parameters": {
+          "options": {},
+          "assignments": {
+            "assignments": [
+              {
+                "id": "7ea9933b-5972-4623-9c97-eecf1ce0479d",
+                "name": "url",
+                "type": "string",
+                "value": "={{ $json.website || $json.websiteUrl }}"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "f0a86878-8db1-4761-a135-9d7a3caac288",
+        "name": "HTML to Markdown",
+        "disabled": true,
+        "type": "n8n-nodes-base.markdown",
+        "typeVersion": 1,
+        "position": [
+          1020,
+          500
+        ],
+        "parameters": {
+          "html": "={{ $json.data || $json.body }}",
+          "options": {},
+          "destinationKey": "response"
+        }
+      }
+    ],
+    "connections": {
+      "Webhook Trigger": {
+        "main": [
+          [
+            {
+              "node": "Prepare Enrichment Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "When clicking \"Execute Workflow\"": {
+        "main": [
+          [
+            {
+              "node": "Prepare Enrichment Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Enrichment Request": {
+        "main": [
+          [
+            {
+              "node": "Execute AEVORA Dual-Path Lead Enrichment",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Mayank Jangid",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-10-15T02:43:23.661Z",
+    "updatedAt": "2026-10-15T02:43:23.661Z",
+    "workflowPublishHistory": [
+      {
+        "id": 10,
+        "workflowId": "ald9mQlsl4vfvSts",
+        "versionId": "efe03991-c942-45db-84d1-50aa29eb3507",
+        "event": "activated",
+        "userId": "2f9ee451-a116-49cb-8a97-f183e7d4beba",
+        "createdAt": "2026-10-15T02:43:23.683Z"
+      },
+      {
+        "id": 12,
+        "workflowId": "ald9mQlsl4vfvSts",
+        "versionId": "efe03991-c942-45db-84d1-50aa29eb3507",
+        "event": "activated",
+        "userId": "2f9ee451-a116-49cb-8a97-f183e7d4beba",
+        "createdAt": "2026-10-15T02:43:23.819Z"
+      },
+      {
+        "id": 11,
+        "workflowId": "ald9mQlsl4vfvSts",
+        "versionId": "efe03991-c942-45db-84d1-50aa29eb3507",
+        "event": "deactivated",
+        "userId": "2f9ee451-a116-49cb-8a97-f183e7d4beba",
+        "createdAt": "2026-10-15T02:43:23.818Z"
+      }
+    ]
+  }
+}

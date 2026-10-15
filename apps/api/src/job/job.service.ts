@@ -137,7 +137,8 @@ const JOB_ACTIONS: Record<JobAction, { from: JobStatus[]; to: JobStatus }> = {
   replay: { from: [JobStatus.FAILED, JobStatus.CANCELLED], to: JobStatus.QUEUED },
 };
 /** Types whose handler only has internal effects (any outbound it triggers still goes through the approval gate). */
-export const REPLAYABLE_TYPES = new Set(['TASK_EXECUTION']);
+/** INQUIRY_TRIAGE only touches internal inquiry rows through compare-and-set, so a replay can never duplicate or send anything. */
+export const REPLAYABLE_TYPES = new Set(['TASK_EXECUTION', 'INQUIRY_TRIAGE']);
 export const MAX_REPLAYS = 3;
 /** No payload: it can carry task data the queue view does not need. */
 const JOB_OPERATOR_SELECT = {

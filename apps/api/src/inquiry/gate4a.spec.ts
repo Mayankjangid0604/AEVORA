@@ -66,6 +66,9 @@ function prismaMock() {
     managementAuditEvent: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
     backgroundJob: { findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     $executeRaw: jest.fn().mockResolvedValue(1),
+    client: { create: jest.fn().mockResolvedValue({ id: 'client-1' }) },
+    clientContact: { findFirst: jest.fn().mockResolvedValue(null) },
+    opportunity: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'opp-1' }) },
   } as any;
 }
 
@@ -167,6 +170,65 @@ describe('operator queue (InquiryService)', () => {
     prisma.clientInquiry.updateMany.mockResolvedValue({ count: 0 });
     await expect(new InquiryService(prisma).transition('c1', actor, 'i1', 'NEW', 'UNDER_REVIEW')).rejects.toBeInstanceOf(ConflictException);
     expect(prisma.customerAuditEvent.create).not.toHaveBeenCalled();
+  });
+
+  describe('QUALIFIED → CONVERTED creates the pipeline records atomically', () => {
+    const inquiry = { id: 'i1', companyId: 'c1', title: 'website request from Cafe', description: 'need a site', businessName: 'Cafe', contactName: 'Asha', contactEmail: 'asha@cafe.test', contactPhone: null, publicRef: 'REQ-ABCDEFGHJK', source: 'PUBLIC_FORM', clientId: null };
+    const wired = () => {
+      const prisma = prismaMock();
+      prisma.$transaction = jest.fn(async (fn: any) => fn(prisma));
+      prisma.clientInquiry.findFirst.mockResolvedValue(inquiry);
+      return prisma;
+    };
+
+    it('creates one Client (with contact) and one linked Opportunity, then audits once', async () => {
+      const prisma = wired();
+      const res: any = await new InquiryService(prisma).transition('c1', actor, 'i1', 'QUALIFIED', 'CONVERTED');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.clientInquiry.updateMany).toHaveBeenCalledWith({ where: { id: 'i1', companyId: 'c1', status: 'QUALIFIED' }, data: { status: 'CONVERTED' } });
+      expect(prisma.client.create.mock.calls[0][0].data).toMatchObject({ companyId: 'c1', name: 'Cafe', contacts: { create: [{ name: 'Asha', email: 'asha@cafe.test' }] } });
+      expect(prisma.opportunity.create.mock.calls[0][0].data).toMatchObject({ companyId: 'c1', clientId: 'client-1', inquiryId: 'i1', source: 'PUBLIC_FORM' });
+      expect(prisma.customerAuditEvent.create).toHaveBeenCalledTimes(1);
+      expect(prisma.customerAuditEvent.create.mock.calls[0][0].data.newValue).toMatchObject({ status: 'CONVERTED', clientId: 'client-1', opportunityId: 'opp-1' });
+      expect(res).toMatchObject({ clientId: 'client-1', opportunityId: 'opp-1' });
+    });
+
+    it('reuses an existing same-tenant client matched by contact email AND business name, and does not duplicate an opportunity', async () => {
+      const prisma = wired();
+      prisma.clientContact.findFirst.mockResolvedValue({ clientId: 'client-9' });
+      prisma.opportunity.findFirst.mockResolvedValue({ id: 'opp-9' });
+      await new InquiryService(prisma).transition('c1', actor, 'i1', 'QUALIFIED', 'CONVERTED');
+      const sameBusiness = { equals: 'Cafe', mode: 'insensitive' };
+      expect(prisma.clientContact.findFirst.mock.calls[0][0].where).toEqual({
+        email: 'asha@cafe.test',
+        client: { companyId: 'c1', OR: [{ name: sameBusiness }, { organizationName: sameBusiness }] },
+      });
+      expect(prisma.client.create).not.toHaveBeenCalled();
+      expect(prisma.opportunity.create).not.toHaveBeenCalled();
+    });
+
+    it('creates a separate client when the same email belongs to a different business (no match found)', async () => {
+      const prisma = wired();
+      prisma.clientContact.findFirst.mockResolvedValue(null);
+      await new InquiryService(prisma).transition('c1', actor, 'i1', 'QUALIFIED', 'CONVERTED');
+      expect(prisma.client.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('a lost compare-and-set creates nothing and audits nothing (409)', async () => {
+      const prisma = wired();
+      prisma.clientInquiry.updateMany.mockResolvedValue({ count: 0 });
+      await expect(new InquiryService(prisma).transition('c1', actor, 'i1', 'QUALIFIED', 'CONVERTED')).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.client.create).not.toHaveBeenCalled();
+      expect(prisma.opportunity.create).not.toHaveBeenCalled();
+      expect(prisma.customerAuditEvent.create).not.toHaveBeenCalled();
+    });
+
+    it('a foreign or missing request is a 404 before any write', async () => {
+      const prisma = wired();
+      prisma.clientInquiry.findFirst.mockResolvedValue(null);
+      await expect(new InquiryService(prisma).transition('c1', actor, 'nope', 'QUALIFIED', 'CONVERTED')).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.clientInquiry.updateMany).not.toHaveBeenCalled();
+    });
   });
 
   it('notes: validated length, tenant-bound atomic append, audited without the note text', async () => {

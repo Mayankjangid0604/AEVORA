@@ -5,8 +5,10 @@ import { LeadGenService } from './lead-gen.service';
 import { LeadGenController } from './lead-gen.controller';
 import { IntegrationApiKeyGuard } from '../authorization/integration-api-key.guard';
 
+import { AutomationModule } from '../automation/automation.module';
+
 @Module({
-  imports: [DevicesModule],
+  imports: [DevicesModule, AutomationModule],
   providers: [LeadSearchService, LeadGenService, IntegrationApiKeyGuard],
   controllers: [LeadGenController],
   exports: [LeadGenService, LeadSearchService],

@@ -60,7 +60,9 @@ async function bootstrap() {
   });
   
   const port = process.env.PORT || process.env.PORT_API || 3001;
-  await app.listen(port, '0.0.0.0');
+  // Local development is loopback-only so the API is not reachable from the LAN; containers (staging/production) keep 0.0.0.0.
+  const host = process.env.API_HOST || (process.env.NODE_ENV === 'development' ? '127.0.0.1' : '0.0.0.0');
+  await app.listen(port, host);
   console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();

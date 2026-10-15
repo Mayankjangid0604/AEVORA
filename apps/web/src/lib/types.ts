@@ -356,3 +356,29 @@ export interface JobView {
   id: string; type: string; status: string; attempts: number; maxAttempts: number;
   lastError: string | null; createdAt: string; updatedAt: string; completedAt: string | null;
 }
+
+/** Opportunity -> proposal -> project pipeline (tenant-scoped backend; only these fields reach the browser). */
+export interface PipelineOpportunity {
+  id: string; title: string; status: string; salesStage: string; estimatedValue: number | null; currency: string; createdAt: string;
+  clientName: string | null; reference: string | null;
+  proposals: { id: string; status: string; version: number; total: number; currency: string }[];
+  projects: { id: string; name: string; status: string }[];
+}
+export interface PipelineProposal {
+  id: string; opportunityId: string; customerName: string | null; title: string; version: number; status: string;
+  scope: string; deliverables: string; assumptions: string | null; exclusions: string | null; paymentTerms: string | null;
+  currency: string; quantity: number; unitPrice: number; discount: number; tax: number; total: number;
+  estimatedTimeline: number | null; validityPeriod: number; internalEstimatedCost: number | null;
+  approvals: { decision: string; reason: string | null; at: string }[]; approved: boolean; missing: string[]; projectId: string | null;
+}
+export interface DeliveryProjectRow { id: string; name: string; status: string; quotedPrice: number | null; clientName: string | null; taskCount: number; createdAt: string }
+export interface DeliveryTask { id: string; title: string; description: string | null; status: string; priority: string; assignedEmployeeId: string | null; dueAt: string | null }
+export interface DeliveryProject extends Omit<DeliveryProjectRow, 'taskCount'> {
+  opportunityTitle: string | null; proposalTitle: string | null; proposalId: string | null; tasks: DeliveryTask[];
+}
+export interface DeliveryHistoryEvent { id: string; action: string; actorType: string; at: string }
+export interface EmailStatusView {
+  provider: string; configValid: boolean; problems: string[]; safeMode: boolean; outreachEnvironment: string; generalOutreachEnabled: boolean;
+  lastTest: { at: string; recipient: string; smtpAccepted: boolean; smtpResponse: string | null; error: string | null; inboxDelivery: string } | null;
+}
+export interface AutomationStatusView { enabled: boolean; state: string; attempts: number; maxAttempts: number; lastError: string | null }

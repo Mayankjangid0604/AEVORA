@@ -1,7 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { LeadSearchService, LeadSearchQuery } from './lead-search.service';
+import {
+  LeadSearchService,
+  LeadSearchQuery,
+  scoreLead,
+  scoreFactors,
+} from './lead-search.service';
 
-describe('LeadSearchService — V13.5 Fail-Closed Critical Path', () => {
+describe('LeadSearchService — Primary Lead Source Migration', () => {
   let service: LeadSearchService;
   const originalEnv = process.env;
   let fetchMock: jest.Mock;
@@ -29,123 +34,78 @@ describe('LeadSearchService — V13.5 Fail-Closed Critical Path', () => {
     maxResults: 5,
   };
 
-  it('1. Google provider succeeds → real provider data flows through', async () => {
-    process.env.LEAD_GEN_PROVIDER_ENABLED = 'true';
-    process.env.GOOGLE_PLACES_API_KEY = 'test-google-key';
-    delete process.env.LEAD_GEN_SOURCE;
-
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        places: [
-          {
-            id: 'places/ChIJRealBusiness123',
-            displayName: { text: 'Real Delhi Bistro' },
-            formattedAddress: '12 Connaught Place, New Delhi',
-            websiteUri: 'https://realdelhibistro.com',
-            nationalPhoneNumber: '+91 11 2345 6789',
-            editorialSummary: { text: 'Authentic North Indian cuisine' },
-            userRatingCount: 150,
-            location: { latitude: 28.6315, longitude: 77.2167 },
-          },
-        ],
-      }),
-    });
-
-    // Mock website scrape
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      text: async () => '<html><body>Contact us at info@realdelhibistro.com</body></html>',
-    });
-
-    const results = await service.search(query);
-
-    expect(results).toHaveLength(1);
-    expect(results[0].businessName).toBe('Real Delhi Bistro');
-    expect(results[0].googlePlaceId).toBe('places/ChIJRealBusiness123');
-    expect(results[0].website).toBe('https://realdelhibistro.com');
-    expect(results[0].reviewCount).toBe(150);
-  });
-
-  it('2. Google provider fails → no synthetic business is generated (fails closed)', async () => {
-    process.env.LEAD_GEN_PROVIDER_ENABLED = 'true';
-    process.env.GOOGLE_PLACES_API_KEY = 'test-google-key';
-    delete process.env.LEAD_GEN_SOURCE;
-
-    fetchMock.mockResolvedValueOnce({
-      ok: false,
-      status: 403,
-      text: async () => 'Request had insufficient authentication scopes.',
-    });
-
-    await expect(service.search(query)).rejects.toThrow(
-      /Google Places API request failed with status 403/,
-    );
-
-    // Verify it NEVER called mock generator or returned fake leads
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('3. Missing provider configuration → fails safely without generating synthetic leads', async () => {
-    process.env.LEAD_GEN_PROVIDER_ENABLED = 'true';
-    delete process.env.GOOGLE_PLACES_API_KEY;
+  it('1. Legacy direct Google Places search in LeadSearchService is retired in favor of Automation #1 (n8n)', async () => {
     delete process.env.LEAD_GEN_SOURCE;
 
     await expect(service.search(query)).rejects.toThrow(
-      /Google Places API key is missing/,
-    );
-
-    // Also test provider disabled
-    process.env.LEAD_GEN_PROVIDER_ENABLED = 'false';
-    process.env.GOOGLE_PLACES_API_KEY = 'test-key';
-
-    await expect(service.search(query)).rejects.toThrow(
-      /Google Places provider is disabled/,
+      /Direct Google Places search in LeadSearchService is retired\. Google Maps lead finding routes via Automation #1 \(n8n\)/
     );
   });
 
-  it('4. Invalid provider response → fails safely without fallback to fake leads', async () => {
-    process.env.LEAD_GEN_PROVIDER_ENABLED = 'true';
-    process.env.GOOGLE_PLACES_API_KEY = 'test-google-key';
-    delete process.env.LEAD_GEN_SOURCE;
+  it('2. OpenStreetMap provider searches continue to work', async () => {
+    process.env.LEAD_GEN_SOURCE = 'osm';
 
     fetchMock.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({
-        error: { code: 400, message: 'Invalid field mask' },
-      }),
-    });
-
-    await expect(service.search(query)).rejects.toThrow(
-      /Google Places API returned error/,
-    );
-  });
-
-  it('5. Provider provenance remains intact (preserves googlePlaceId)', async () => {
-    process.env.LEAD_GEN_PROVIDER_ENABLED = 'true';
-    process.env.GOOGLE_PLACES_API_KEY = 'test-google-key';
-    delete process.env.LEAD_GEN_SOURCE;
-
-    const testPlaceId = 'places/ChIJVerifiedProviderId999';
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        places: [
-          {
-            id: testPlaceId,
-            displayName: { text: 'Provenance Test Business' },
-            formattedAddress: 'Sector 18, Noida',
-            websiteUri: null,
-            nationalPhoneNumber: '+91 120 4567890',
-            userRatingCount: 42,
-          },
-        ],
-      }),
+      json: async () => [
+        {
+          place_id: 12345,
+          name: 'Delhi Cafe',
+          display_name: 'Connaught Place, New Delhi, India',
+          class: 'amenity',
+          type: 'cafe',
+          lat: '28.6315',
+          lon: '77.2167',
+        },
+      ],
     });
 
     const results = await service.search(query);
     expect(results).toHaveLength(1);
-    expect(results[0].googlePlaceId).toBe(testPlaceId);
-    expect(results[0].googlePlaceId.startsWith('mock-')).toBe(false);
+    expect(results[0].businessName).toBe('Delhi Cafe');
+    expect(results[0].googlePlaceId).toBe('osm-nom-12345');
+    expect(results[0].qualityScore).toBeGreaterThanOrEqual(20);
+  });
+
+  it('3. Mock provider works explicitly in test environment', async () => {
+    process.env.LEAD_GEN_SOURCE = 'mock';
+    process.env.NODE_ENV = 'development';
+
+    const results = await service.search(query);
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].googlePlaceId).toMatch(/^mock-/);
+  });
+
+  it('4. Mock provider is strictly blocked in production', async () => {
+    process.env.LEAD_GEN_SOURCE = 'mock';
+    process.env.NODE_ENV = 'production';
+
+    await expect(service.search(query)).rejects.toThrow(
+      /Mock lead discovery provider is strictly prohibited in production/,
+    );
+  });
+
+  it('5. Score algorithm evaluates lead signals correctly', () => {
+    const fullLead = {
+      phone: '+1 214 555 1234',
+      email: 'owner@dentist.com',
+      website: null,
+      reviewCount: 150,
+    };
+    expect(scoreFactors(fullLead)).toEqual({
+      hasPhone: 25,
+      hasEmail: 25,
+      noWebsite: 30,
+      reviews: 15,
+    });
+    expect(scoreLead(fullLead)).toBe(95);
+
+    const minimalLead = {
+      phone: null,
+      email: null,
+      website: 'https://existing.com',
+      reviewCount: 0,
+    };
+    expect(scoreLead(minimalLead)).toBe(0);
   });
 });
