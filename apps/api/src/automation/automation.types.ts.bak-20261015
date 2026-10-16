@@ -1,0 +1,363 @@
+export type AutomationCategory = 'LEAD_GENERATION' | 'MARKETING' | 'SALES' | 'OPERATIONS' | 'FINANCE';
+
+export type AutomationStatus =
+  | 'REGISTERED'     // Definition validated, stored in repository
+  | 'CONFIGURED'     // Required credentials and env variables present
+  | 'DEPLOYED'       // Successfully uploaded to target n8n instance
+  | 'ACTIVE'         // Verified and available for scheduled/manual runs
+  | 'DISABLED'       // Explicitly disabled or missing credentials
+  | 'ERROR';          // Workflow definition or connection error
+
+export interface CredentialRequirement {
+  name: string;
+  envVar?: string;
+  description: string;
+  configured: boolean;
+}
+
+export interface ParameterDefinition {
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+  required: boolean;
+  default?: any;
+  description: string;
+  enum?: string[];
+}
+
+export interface AutomationDefinition {
+  id: string;
+  number: number;
+  name: string;
+  description: string;
+  category: AutomationCategory;
+  version: string;
+  workflowFile: string;
+  status: AutomationStatus;
+  tags: string[];
+  requiredCredentials: Record<string, CredentialRequirement>;
+  inputParameters: Record<string, ParameterDefinition>;
+  metadata: {
+    nodeCount?: number;
+    triggers?: string[];
+    gmapsEndpoint?: string;
+    lastValidatedAt?: string;
+    validationErrors?: string[];
+  };
+}
+
+export interface LeadFindingInput {
+  category: string;
+  location: string;
+  radiusMeters?: number;
+  maxResults?: number;
+  variant?: string;
+}
+
+export interface RawGooglePlaceRecord {
+  id?: string;
+  place_id?: string;
+  displayName?: { text: string } | string;
+  name?: string;
+  business_name?: string;
+  formattedAddress?: string;
+  address?: string;
+  nationalPhoneNumber?: string;
+  phone?: string;
+  websiteUri?: string;
+  website?: string;
+  rating?: number | string;
+  userRatingCount?: number;
+  reviews?: number | string;
+  location?: { latitude?: number; longitude?: number; lat?: number; lon?: number; lng?: number };
+  editorialSummary?: { text: string } | string;
+  description?: string;
+  types?: string[] | string;
+  primaryType?: string;
+  primaryTypeDisplayName?: { text: string } | string;
+  reviews_link?: string;
+  photos_link?: string;
+  [key: string]: any;
+}
+
+export interface NormalizedLead {
+  googlePlaceId: string;
+  businessName: string;
+  organizationName: string;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  website: string | null;
+  googleMapsUri: string | null;
+  industry: string;
+  geography: string;
+  qualityScore: number;
+  reviewCount: number;
+  rating: number | null;
+  source: string;
+  notes: string | null;
+  metadata: {
+    lat?: number;
+    lng?: number;
+    scoreFactors?: Record<string, number>;
+    rawPlaceId?: string;
+    editorialSummary?: string | null;
+    ingestedAt: string;
+    automationId: string;
+  };
+}
+
+export interface IngestionResult {
+  totalProcessed: number;
+  created: number;
+  duplicates: number;
+  invalid: Array<{ index: number; reason: string }>;
+  leadIds: string[];
+}
+
+export type EnrichmentStatus =
+  | 'PENDING'
+  | 'ENRICHED'
+  | 'NO_WEBSITE'
+  | 'UNREACHABLE'
+  | 'BLOCKED'
+  | 'FAILED'
+  | 'PARTIAL';
+
+export type EmailVerificationStatus =
+  | 'SYNTAX_INVALID'
+  | 'DOMAIN_NOT_FOUND'
+  | 'NO_MX_RECORDS'
+  | 'VALID_SYNTAX_MX'
+  | 'UNKNOWN';
+
+export interface EmailVerificationResult {
+  email: string;
+  status: EmailVerificationStatus;
+  syntaxValid: boolean;
+  domain: string;
+  mxFound: boolean;
+  mxRecords: string[];
+  verificationMethod: 'DNS_MX' | 'SYNTAX_ONLY';
+  isDeliverableInbox: boolean;
+  notes: string;
+  verifiedAt: string;
+}
+
+export interface ExtractedBusinessFacts {
+  businessDescription: string;
+  services: string[];
+  contactEmails: string[];
+  contactPhones: string[];
+  socialLinks: {
+    linkedin?: string;
+    facebook?: string;
+    instagram?: string;
+    twitter?: string;
+    youtube?: string;
+    [key: string]: string | undefined;
+  };
+  businessSignals: {
+    onlineBookingAvailable?: boolean;
+    hasContactForm?: boolean;
+    yearsInBusiness?: number;
+    pricingMentioned?: boolean;
+    [key: string]: any;
+  };
+  idealCustomerProfile?: string;
+  enrichmentSummary?: string;
+}
+
+export interface EnrichmentScoreResult {
+  enrichmentScore: number;
+  factors: {
+    websiteReachable: number;
+    businessFactsExtracted: number;
+    emailVerified: number;
+    phoneVerified: number;
+    socialPresence: number;
+  };
+  explanation: string;
+}
+
+export interface EnrichmentProvenance {
+  originalWebsite: string | null;
+  originalPhone: string | null;
+  originalEmail: string | null;
+  conflicts: Array<{
+    field: string;
+    existing: any;
+    extracted: any;
+    resolution: 'PRESERVED_EXISTING' | 'UPDATED_MISSING';
+  }>;
+}
+
+export interface LeadEnrichmentMetadata {
+  automationId: string;
+  status: EnrichmentStatus;
+  enrichedAt: string;
+  reachability: {
+    checked: boolean;
+    reachable: boolean;
+    statusCode?: number;
+    responseTimeMs?: number;
+    finalUrl?: string;
+    error?: string;
+  };
+  extracted?: ExtractedBusinessFacts;
+  emailVerification?: EmailVerificationResult | null;
+  provenance: EnrichmentProvenance;
+  score: EnrichmentScoreResult;
+  modelMetadata: {
+    provider: string;
+    model: string;
+    durationMs?: number;
+    usedFallback?: boolean;
+  };
+}
+
+export interface LeadEnrichmentResult {
+  leadId: string;
+  companyId: string;
+  status: EnrichmentStatus;
+  enrichmentScore: number;
+  metadata: LeadEnrichmentMetadata;
+  updatedFields: {
+    contactEmail?: string | null;
+    qualityScore?: number;
+    notes?: string | null;
+  };
+  error?: string;
+}
+
+export interface EnrichmentBatchSummary {
+  companyId: string;
+  totalRequested: number;
+  processed: number;
+  enriched: number;
+  noWebsite: number;
+  unreachable: number;
+  failed: number;
+  leads: LeadEnrichmentResult[];
+}
+
+export interface AutomationReadinessStatus {
+  ollama: {
+    ready: boolean;
+    url: string;
+    model: string;
+    version?: string;
+    error?: string;
+  };
+  crawler: {
+    ready: boolean;
+    provider: 'native' | 'crawl4ai';
+    url?: string;
+    error?: string;
+  };
+  n8n: {
+    configured: boolean;
+    reachable: boolean;
+    url?: string;
+  };
+  dns: {
+    ready: boolean;
+  };
+  database: {
+    ready: boolean;
+  };
+}
+
+// -------------------------------------------------------------
+// Automation #3 — AI Sales Research & Opportunity Scoring Types
+// -------------------------------------------------------------
+
+export type ResearchPriority = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface OpportunityScoreComponent {
+  score: number; // 0 - 100
+  weight: number; // e.g. 0.25
+  weightedScore: number;
+  explanation: string;
+  signals: string[];
+}
+
+export interface OpportunityScoreComponents {
+  commercialFit: OpportunityScoreComponent;
+  digitalModernization: OpportunityScoreComponent;
+  operationalMaturity: OpportunityScoreComponent;
+  contactability: OpportunityScoreComponent;
+  serviceExpansion: OpportunityScoreComponent;
+}
+
+export interface OpportunityScoreResult {
+  opportunityScore: number; // 0 - 100
+  confidence: number; // 0 - 100 (evidence confidence)
+  priority: ResearchPriority;
+  components: OpportunityScoreComponents;
+  scoringVersion: string;
+  explanation: string;
+}
+
+export interface ResearchEvidenceSource {
+  url?: string;
+  type: 'GOOGLE_PLACES' | 'WEBSITE_SCRAPE' | 'DNS_MX' | 'SOCIAL_PROFILE';
+  snippet?: string;
+  timestamp?: string;
+}
+
+export interface ResearchBrief {
+  leadId: string;
+  companyId: string;
+  opportunityScore: number;
+  confidence: number;
+  priority: ResearchPriority;
+  recommendation: 'QUALIFIED' | 'DISQUALIFIED' | 'NEEDS_MORE_INFO';
+  executiveSummary: string;
+  identifiedPains: string[];
+  identifiedOpportunities: string[];
+  buyingSignals: string[];
+  recommendedPitch: string;
+  recommendedNextAction: string;
+  evidenceSources: ResearchEvidenceSource[];
+  missingEvidence: string[];
+  researchedAt: string;
+  model: string;
+  scoringVersion: string;
+  components: OpportunityScoreComponents;
+}
+
+export type SalesResearchStatus =
+  | 'RESEARCHED'
+  | 'SKIPPED'
+  | 'FAILED'
+  | 'INELIGIBLE';
+
+export interface SalesResearchResult {
+  leadId: string;
+  companyId: string;
+  status: SalesResearchStatus;
+  opportunityScore?: number;
+  confidence?: number;
+  priority?: ResearchPriority;
+  recommendation?: 'QUALIFIED' | 'DISQUALIFIED' | 'NEEDS_MORE_INFO';
+  brief?: ResearchBrief;
+  qualificationRecordId?: string;
+  error?: string;
+}
+
+export interface ResearchBatchSummary {
+  companyId: string;
+  totalRequested: number;
+  processed: number;
+  researched: number;
+  skipped: number;
+  ineligible: number;
+  failed: number;
+  leads: SalesResearchResult[];
+}
+
+export interface IcpConfig {
+  targetIndustries?: string[];
+  targetKeywords?: string[];
+  minServiceLines?: number;
+  preferredCompanySizes?: string[];
+}
+

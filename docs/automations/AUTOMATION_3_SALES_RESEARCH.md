@@ -1,0 +1,301 @@
+# AEVORA Automation #3: AI Sales Research & Opportunity Scoring Integration Guide
+
+**Automation ID:** `automation-3-sales-research`  
+**Internal Name:** AI Sales Research & Opportunity Scoring  
+**Workflow Definition File:** `n8n/3.ai-sales-research-opportunity-scoring.json`  
+**Category:** `SALES`  
+**Integration Status:** Complete (Production-Engineered & Unit/Integration-Verified)  
+**Target Architecture:** Zero-Mandatory-Cost Local Pipeline (AEVORA Core API + Local Ollama `qwen2.5:7b` + Deterministic Opportunity Scoring Engine + Prisma Persistence + Tenant Isolation)
+
+---
+
+## 1. Overview and Architecture
+
+AEVORA Automation #3 provides automated, source-grounded B2B sales research and deterministic opportunity scoring for qualified commercial leads. It builds directly upon Automation #1 (Google Maps Lead Finding) and Automation #2 (Lead Enrichment & Verification).
+
+The implementation strictly honors AEVORA's **zero mandatory external cost** policy:
+- **Zero Paid AI APIs:** Uses local self-hosted Ollama (`qwen2.5:7b` or configured local model). Absolutely no dependencies on OpenAI, Anthropic, or external inference APIs.
+- **Zero External Scraping/Search APIs:** Reuses verified business facts from Auto #1 and enrichment evidence from Auto #2. No SerpAPI, ScrapingBee, or Google Sheets dependencies.
+- **Strict Evidence Grounding:** AI insights (pains, opportunities, buying signals, pitch, next action) are synthesized strictly from verified evidence. All interpretations are explicitly labeled as hypotheses. Missing evidence is never assumed to be a business flaw.
+- **Deterministic Opportunity Scoring Engine:** Replaces black-box LLM scoring with transparent, documented, weighted component rubrics (25% Commercial Fit, 25% Digital Modernization, 20% Operational Maturity, 15% Contactability, 15% Service Expansion).
+- **Separation of Concerns:** Evidence confidence is computed independently from the opportunity score.
+- **Native AEVORA Schema Compatibility:** Persists into existing `SalesLead.metadata.researchBrief`, `QualificationRecord` (with `evaluatorType: AI_AGENT`), and `LeadGenAudit` without requiring database migrations.
+- **Tenant Isolation:** Enforces strict company scoping at the API and service boundary.
+
+---
+
+## 2. Architecture & Data Flow
+
+```
+[ AEVORA UI / Sales Dashboard / Scheduled Task / n8n Orchestrator ]
+                            │
+                            │ (Authorized Request: JWT Bearer OR x-integration-key + x-company-id)
+                            ▼
+               [ POST /automation/research/start   ]
+               [ POST /automation/webhook/research ]
+                            │
+                            ▼
+               [ SalesResearchService ]
+                            │
+            ┌───────────────┴───────────────────────────┐
+            ▼                                           ▼
+   [ Tenant Isolation Guard ]               [ Candidate Selection & Eligibility ]
+   - Enforces companyId check               - Default: status in {QUALIFIED, ENRICHED}
+   - Cross-tenant access blocked (404)        OR qualityScore >= 60
+                                            - Idempotency: skips if already researched
+                                              (unless forceRefresh: true)
+                            │
+                            ▼
+               [ Evidence Synthesis Package ]
+               - Auto #1 Facts: Google Place ID, category, reviews, geography
+               - Auto #2 Evidence: Reachability status, latency, finalUrl,
+                 extracted services, description, social profiles, business signals
+               - DNS/MX Verification: Deliverability status, MX host records
+                            │
+                            ▼
+               [ Local Ollama Inference (qwen2.5:7b) ]
+               - Prompt-shielded against prompt injection (untrusted content block)
+               - Format: strict JSON schema
+               - Explicit runtime schema validation
+               - Strict failure: NO external AI fallback
+                            │
+                            ▼
+               [ Deterministic Opportunity Scoring Engine ]
+               - 1. Commercial Fit & ICP: 25% (normalized 0-100)
+               - 2. Digital Modernization / Gaps: 25% (normalized 0-100)
+               - 3. Operational Maturity & Capacity: 20% (normalized 0-100)
+               - 4. Contactability Feasibility: 15% (normalized 0-100)
+               - 5. Service Expansion Potential: 15% (normalized 0-100)
+               - Independent Evidence Confidence (0-100%)
+               - Priority Banding: HIGH (75-100), MEDIUM (50-74), LOW (0-49)
+                            │
+                            ▼
+               [ CRM Persistence & Audit (Atomic Transaction) ]
+               - SalesLead.qualityScore updated to max(existing, opportunityScore)
+               - SalesLead.metadata.researchBrief & metadata.research populated
+               - QualificationRecord created (evaluatorType: AI_AGENT)
+               - LeadGenAudit logged (event: OPPORTUNITY_RESEARCH_COMPLETED)
+```
+
+---
+
+## 3. API Contracts and Authorization
+
+All research endpoints reside in `AutomationController` (`apps/api/src/automation/automation.controller.ts`) and enforce dual-guard authentication (`JwtAuthGuard` or `IntegrationApiKeyGuard`) with role-based access control (`RolesGuard`).
+
+### 3.1 Start Research (Company Scoped)
+- **Route:** `POST /automation/research/start`
+- **Guards:** `JwtAuthGuard` / `IntegrationApiKeyGuard`, `@Roles('CHAIRMAN', 'MANAGEMENT')`
+- **Headers:** `Authorization: Bearer <jwt>` OR `x-integration-key: <key>` + `x-company-id: <uuid>`
+- **Request Body:**
+  ```json
+  {
+    "leadIds": ["uuid-lead-1", "uuid-lead-2"],
+    "limit": 10,
+    "forceRefresh": false,
+    "icpConfig": {
+      "targetIndustries": ["Dental", "Medical", "Professional Services"],
+      "targetKeywords": ["cosmetic", "specialist"]
+    }
+  }
+  ```
+- **Response:** `200 OK`
+  ```json
+  {
+    "companyId": "9d98b53b-3b79-45b8-9bb9-6cbac171bc3c",
+    "totalRequested": 2,
+    "processed": 2,
+    "researched": 2,
+    "skipped": 0,
+    "ineligible": 0,
+    "failed": 0,
+    "leads": [
+      {
+        "leadId": "uuid-lead-1",
+        "companyId": "9d98b53b-3b79-45b8-9bb9-6cbac171bc3c",
+        "status": "RESEARCHED",
+        "opportunityScore": 82,
+        "confidence": 85,
+        "priority": "HIGH",
+        "recommendation": "QUALIFIED",
+        "qualificationRecordId": "uuid-qual-record"
+      }
+    ]
+  }
+  ```
+
+### 3.2 Research Webhook (n8n Orchestrator Callback)
+- **Route:** `POST /automation/webhook/research`
+- **Guards:** `IntegrationApiKeyGuard` (`@IntegrationAuth()`)
+- **Headers:** `x-integration-key: <INTEGRATION_API_KEY>`, `x-company-id: <uuid>`, `Content-Type: application/json`
+- **Payload:** Same as `POST /automation/research/start`
+
+### 3.3 Research Status Summary
+- **Route:** `GET /automation/research/status`
+- **Guards:** Authorized company context
+- **Response:**
+  ```json
+  {
+    "companyId": "9d98b53b-3b79-45b8-9bb9-6cbac171bc3c",
+    "totalLeads": 15,
+    "eligibleLeads": 8,
+    "researched": 5,
+    "pendingResearch": 3,
+    "priorityBreakdown": {
+      "high": 3,
+      "medium": 2,
+      "low": 0
+    }
+  }
+  ```
+
+### 3.4 Retry Single Lead Research
+- **Route:** `POST /automation/research/retry`
+- **Guards:** `@Roles('CHAIRMAN', 'MANAGEMENT')`
+- **Body:** `{ "leadId": "uuid-lead-1" }`
+- **Behavior:** Re-runs research with `forceRefresh: true` and updates the brief.
+
+---
+
+## 4. Eligibility Rules
+
+By default, a lead is eligible for Automation #3 if:
+1. Its status is `QUALIFIED` or `ENRICHED` with an existing `qualityScore >= 50`; **OR**
+2. Its `qualityScore` is `>= 60` regardless of current status.
+
+Leads with `qualityScore < 60` and status `NEW` are marked `INELIGIBLE` during batch runs to prevent wasting local inference cycles on unqualified raw place listings. Providing an explicit `leadId` with `forceRefresh: true` permits administrative overrides.
+
+---
+
+## 5. Deterministic Opportunity Scoring Engine
+
+Implemented in `OpportunityScoringEngine` (`apps/api/src/automation/opportunity-scoring.engine.ts`).
+
+### Approved Architectural Weights
+| Component | Weight | Evaluated Evidence |
+| :--- | :---: | :--- |
+| **Commercial Fit & ICP** | **25%** | Industry match, target customer profile, depth of service lines, optional tenant ICP configuration. |
+| **Digital Modernization Need** | **25%** | Verified lack of online booking, absence of modern contact form, web latency (>1200ms), sparse social channels. |
+| **Operational Maturity** | **20%** | Service breadth (8+ services), dual contact channels (phone + email), years in business (longevity). |
+| **Contactability Feasibility** | **15%** | Deliverable DNS MX email (+45), direct phone number (+35), active direct social channels (+20). |
+| **Service Expansion Potential** | **15%** | High appointment/inquiry velocity business model, workflow automation applicability, inbound messaging triage. |
+| **TOTAL** | **100%** | `Math.round(Σ weightedComponents)` clamped between 0 and 100. |
+
+### Priority Bands
+- **HIGH:** Score `75 – 100` (Strongest commercial fit, high modernization need, verified reachability).
+- **MEDIUM:** Score `50 – 74` (Viable prospect, moderate gaps or single verified channel).
+- **LOW:** Score `0 – 49` (Weak fit, low contactability, or existing modernized tech stack).
+
+### Evidence Grounding Rules
+- **Missing Evidence Rule:** Missing evidence is **NEVER** treated as proof of a problem or lack of fit. A neutral baseline (40-50 pts) is applied, and the item is recorded in `missingEvidence`.
+- **Zero Industry Bias:** Without an explicit `icpConfig`, no vertical or industry receives an implicit preference or bonus. All industries start at the same neutral baseline (50 pts), and bonuses apply only when a tenant provides an explicit ICP configuration (`targetIndustries`, `targetKeywords`, `minServiceLines`).
+- **No Popularity Inflation:** Review counts, rating volume, and website text size do not inflate opportunity scores.
+- **Independent Confidence Score:** Computed on a separate 0–100 scale based on data completeness (live website: +30, extracted facts: +25, MX-verified email: +15, phone: +10, place record: +20).
+
+---
+
+## 6. Structured Research Brief Specification
+
+Stored inside `SalesLead.metadata.researchBrief` and `metadata.research`:
+
+```typescript
+export interface ResearchBrief {
+  leadId: string;
+  companyId: string;
+  opportunityScore: number;                 // 0 - 100
+  confidence: number;                       // 0 - 100
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  recommendation: 'QUALIFIED' | 'DISQUALIFIED' | 'NEEDS_MORE_INFO';
+  executiveSummary: string;                 // Grounded executive overview
+  identifiedPains: string[];                // Concrete operational friction points
+  identifiedOpportunities: string[];        // Automation & modernization opportunities
+  buyingSignals: string[];                  // Verified indicators of capacity and activity
+  recommendedPitch: string;                 // Tailored value proposition
+  recommendedNextAction: string;            // Next sales action (e.g. Schedule discovery call)
+  evidenceSources: Array<{
+    url?: string;
+    type: 'GOOGLE_PLACES' | 'WEBSITE_SCRAPE' | 'DNS_MX' | 'SOCIAL_PROFILE';
+    snippet?: string;
+    timestamp?: string;
+  }>;
+  missingEvidence: string[];                // Explicitly recorded unverified facts
+  researchedAt: string;                     // ISO timestamp
+  model: string;                            // "qwen2.5:7b"
+  scoringVersion: string;                   // "1.0.0"
+  components: OpportunityScoreComponents;    // Full 5-component breakdown and signals
+}
+```
+
+---
+
+## 7. Persistence & Audit
+
+Persistence is performed within an atomic Prisma transaction:
+1. **`SalesLead` Metadata Update:** Updates `metadata.researchBrief` and `metadata.research` while preserving existing fields (`metadata.enrichment`, `metadata.scoreFactors`, `metadata.rawPlaceId`). Updates `qualityScore` if `opportunityScore > qualityScore`.
+2. **`QualificationRecord` Creation:**
+   - `evaluatorType: 'AI_AGENT'`
+   - `evaluatorId`: Looked up from company's authorized agent/employee record
+   - `customerFitScore`: Component 1 score (Commercial Fit)
+   - `problemClarityScore`: Component 2 score (Digital Modernization)
+   - `budgetSignalScore`: Component 3 score (Operational Maturity)
+   - `authorityScore`: Component 4 score (Contactability)
+   - `strategicRelevanceScore`: Component 5 score (Service Expansion)
+   - `overallScore`: `opportunityScore`
+   - `recommendation`: Enum value (`QUALIFIED`, `NEEDS_MORE_INFO`, `DISQUALIFIED`)
+   - `evidence`: JSON array of `evidenceSources`
+3. **`LeadGenAudit` Event:**
+   - `event: 'OPPORTUNITY_RESEARCH_COMPLETED'`
+   - Details: `opportunityScore`, `priority`, `confidence`, `recommendation`, `model`, `automationId`.
+
+---
+
+## 8. Idempotency & Retries
+
+- **Default Execution:** If a lead already has `metadata.research` or `metadata.researchBrief` and `forceRefresh !== true`, `researchLead` immediately returns the cached brief with `status: 'SKIPPED'`. No LLM inference is triggered, and no duplicate qualification or audit records are written.
+- **Forced Re-research:** Setting `forceRefresh: true` executes a fresh research run and updates the records.
+
+---
+
+## 9. Security Controls
+
+- **Prompt Injection Defense:** Prospect website text and business names are treated as **untrusted data**. Special LLM tokens (`<|...|>`), control characters, and instructions are sanitized before feeding to the prompt. The system prompt explicitly commands the model to ignore any embedded directives.
+- **Strict Local Inference (No Silent Fallback):** If local Ollama is offline or errors, the service logs the error and returns `status: 'FAILED'`. It **never** falls back to paid third-party APIs (OpenAI, Anthropic).
+- **Tenant Isolation:** Every operation verifies `companyId`. Cross-tenant lead access throws `NotFoundException`.
+- **Zero Execution Retention in n8n:** Workflow definition enforces `saveDataSuccessExecution: "none"`, `saveDataErrorExecution: "none"`, `saveManualExecutions: false`, preventing prospect data retention in n8n execution tables on both success and error states.
+
+---
+
+## 10. Verification Commands
+
+All unit and integration tests execute locally without live outreach or production CRM mutations:
+
+```bash
+# 1. Run Opportunity Scoring Engine unit tests (14 tests)
+npm test -- apps/api/src/automation/opportunity-scoring.engine.spec.ts
+
+# 2. Run Sales Research Service unit tests (10 tests)
+npm test -- apps/api/src/automation/sales-research.service.spec.ts
+
+# 3. Run Automation Controller REST endpoint tests (14 tests)
+npm test -- apps/api/src/automation/automation.controller.spec.ts
+
+# 4. Run Registry validation tests (9 tests)
+npm test -- apps/api/src/automation/automation-registry.service.spec.ts
+
+# 5. Run all automation test suites (11 suites, 103 tests)
+npm test -- apps/api/src/automation/
+
+# 6. Verify backend production build
+cd apps/api && npm run build
+
+# 7. Verify frontend production build
+cd apps/web && npm run build
+```
+
+---
+
+## 11. Known Limitations & Unresolved Commercial Configuration
+
+1. **Configurable ICP Foundation:** AEVORA's specific target ICP (target industries, target company size, pricing tiers) is provided as a configurable runtime object (`IcpConfig`). In the absence of tenant-specific ICP configuration, the engine applies neutral professional/commercial baselines (50 pts) without penalizing unclassified leads.
+2. **Local Inference Concurrency:** To keep local GPU/CPU inference stable on Ollama `qwen2.5:7b`, batch research processes leads sequentially.
+3. **Controlled Integration Requirement:** The refactored workflow (`n8n/3.ai-sales-research-opportunity-scoring.json`) is maintained as code in the repository. Per safety protocol, it has **not** been imported into live n8n, activated, or run against production CRM data.

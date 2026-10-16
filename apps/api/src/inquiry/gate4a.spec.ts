@@ -54,7 +54,7 @@ describe('validateIntake', () => {
 
 function prismaMock() {
   return {
-    company: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', status: 'ACTIVE' }) },
+    company: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', status: 'ACTIVE' }), findFirst: jest.fn().mockResolvedValue(null) },
     clientInquiry: {
       findFirst: jest.fn().mockResolvedValue(null),
       findUnique: jest.fn().mockResolvedValue(null),

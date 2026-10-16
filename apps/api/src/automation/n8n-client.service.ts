@@ -194,27 +194,63 @@ export class N8nClientService {
   /**
    * Executes an automation workflow in the connected n8n engine.
    * For Automation #1, triggers the Google Maps lead finding webhook in n8n.
+   * For Automation #2, triggers the lead enrichment webhook in n8n.
    */
   async executeWorkflow(
     automationId: string,
-    params: LeadFindingInput & { companyId: string },
+    params: any,
   ): Promise<N8nExecutionResult> {
     if (!this.isConfigured()) {
       throw new BadRequestException('n8n API connection is not configured');
     }
 
     try {
-      const res = await fetch(`${this.apiUrl}/webhook/aevora-leads-trigger`, {
+      const isResearch =
+        automationId === 'automation-3-sales-research' ||
+        automationId === '3';
+
+      const isEnrichment =
+        !isResearch &&
+        (automationId === 'automation-2-lead-enrichment' ||
+          automationId === '2' ||
+          (params.leadIds !== undefined && params.category === undefined));
+
+      let webhookPath = '/webhook/aevora-leads-trigger';
+      let payload: any = {
+        category: params.category || 'dentists',
+        location: params.location || 'Dallas, TX',
+        maxResults: params.maxResults || 20,
+        companyId: params.companyId,
+      };
+
+      if (isResearch) {
+        webhookPath = '/webhook/aevora-research-trigger';
+        payload = {
+          companyId: params.companyId,
+          leadIds: params.leadIds || [],
+          limit: params.limit || 10,
+          forceRefresh: !!params.forceRefresh,
+          icpConfig: params.icpConfig,
+          apiUrl: process.env.PUBLIC_API_URL || 'http://127.0.0.1:13000',
+        };
+      } else if (isEnrichment) {
+        webhookPath = '/webhook/aevora-enrichment-trigger';
+        payload = {
+          companyId: params.companyId,
+          leadIds: params.leadIds || [],
+          limit: params.limit || 10,
+          forceRefresh: !!params.forceRefresh,
+          apiUrl: process.env.PUBLIC_API_URL || 'http://127.0.0.1:13000',
+        };
+      }
+
+      const res = await fetch(`${this.apiUrl}${webhookPath}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-integration-key': process.env.INTEGRATION_API_KEY || '',
         },
-        body: JSON.stringify({
-          category: params.category || 'dentists',
-          location: params.location || 'Dallas, TX',
-          maxResults: params.maxResults || 20,
-          companyId: params.companyId,
-        }),
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(60000),
       });
 

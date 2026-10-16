@@ -233,5 +233,31 @@ describe('LeadNormalizerService — Business Lead Normalization & Ingestion', ()
       expect(mockDb[0].leadGenAudits.create.event).toBe('AUTOMATION_DISCOVERED');
       expect(mockDb[0].leadGenAudits.create.detail.automationId).toBe('automation-1-google-lead-finding');
     });
+
+    it('strictly caps newly created leads when limit option is provided', async () => {
+      const records = [
+        { id: 'place-1', name: 'Business 1' },
+        { id: 'place-2', name: 'Business 2' },
+        { id: 'place-3', name: 'Business 3' },
+        { id: 'place-4', name: 'Business 4' },
+        { id: 'place-5', name: 'Business 5' },
+      ];
+
+      const res = await service.ingestLeads('company-A', records, { limit: 3 });
+      expect(res.created).toBe(3);
+      expect(res.leadIds.length).toBe(3);
+      expect(mockDb.length).toBe(3);
+    });
+
+    it('persists pilotId in metadata and leadGenAudit when provided', async () => {
+      const records = [{ id: 'place-pilot', name: 'Pilot Business' }];
+      const res = await service.ingestLeads('company-A', records, {
+        pilotId: 'pro1-pilot-run-1',
+      });
+
+      expect(res.created).toBe(1);
+      expect(mockDb[0].metadata.pilotId).toBe('pro1-pilot-run-1');
+      expect(mockDb[0].leadGenAudits.create.detail.pilotId).toBe('pro1-pilot-run-1');
+    });
   });
 });

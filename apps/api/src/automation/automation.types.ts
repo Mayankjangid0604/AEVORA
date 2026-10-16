@@ -16,7 +16,7 @@ export interface CredentialRequirement {
 }
 
 export interface ParameterDefinition {
-  type: 'string' | 'number' | 'boolean' | 'array';
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
   required: boolean;
   default?: any;
   description: string;
@@ -111,3 +111,342 @@ export interface IngestionResult {
   invalid: Array<{ index: number; reason: string }>;
   leadIds: string[];
 }
+
+export type EnrichmentStatus =
+  | 'PENDING'
+  | 'ENRICHED'
+  | 'NO_WEBSITE'
+  | 'UNREACHABLE'
+  | 'BLOCKED'
+  | 'FAILED'
+  | 'PARTIAL';
+
+export type EmailVerificationStatus =
+  | 'SYNTAX_INVALID'
+  | 'DOMAIN_NOT_FOUND'
+  | 'NO_MX_RECORDS'
+  | 'VALID_SYNTAX_MX'
+  | 'UNKNOWN';
+
+export interface EmailVerificationResult {
+  email: string;
+  status: EmailVerificationStatus;
+  syntaxValid: boolean;
+  domain: string;
+  mxFound: boolean;
+  mxRecords: string[];
+  verificationMethod: 'DNS_MX' | 'SYNTAX_ONLY';
+  isDeliverableInbox: boolean;
+  notes: string;
+  verifiedAt: string;
+}
+
+export interface ExtractedBusinessFacts {
+  businessDescription: string;
+  services: string[];
+  contactEmails: string[];
+  contactPhones: string[];
+  socialLinks: {
+    linkedin?: string;
+    facebook?: string;
+    instagram?: string;
+    twitter?: string;
+    youtube?: string;
+    [key: string]: string | undefined;
+  };
+  businessSignals: {
+    onlineBookingAvailable?: boolean;
+    hasContactForm?: boolean;
+    yearsInBusiness?: number;
+    pricingMentioned?: boolean;
+    [key: string]: any;
+  };
+  idealCustomerProfile?: string;
+  enrichmentSummary?: string;
+}
+
+export interface EnrichmentScoreResult {
+  enrichmentScore: number;
+  factors: {
+    websiteReachable: number;
+    businessFactsExtracted: number;
+    emailVerified: number;
+    phoneVerified: number;
+    socialPresence: number;
+  };
+  explanation: string;
+}
+
+export interface EnrichmentProvenance {
+  originalWebsite: string | null;
+  originalPhone: string | null;
+  originalEmail: string | null;
+  conflicts: Array<{
+    field: string;
+    existing: any;
+    extracted: any;
+    resolution: 'PRESERVED_EXISTING' | 'UPDATED_MISSING';
+  }>;
+}
+
+export interface LeadEnrichmentMetadata {
+  automationId: string;
+  status: EnrichmentStatus;
+  enrichedAt: string;
+  reachability: {
+    checked: boolean;
+    reachable: boolean;
+    statusCode?: number;
+    responseTimeMs?: number;
+    finalUrl?: string;
+    error?: string;
+  };
+  extracted?: ExtractedBusinessFacts;
+  emailVerification?: EmailVerificationResult | null;
+  provenance: EnrichmentProvenance;
+  score: EnrichmentScoreResult;
+  modelMetadata: {
+    provider: string;
+    model: string;
+    durationMs?: number;
+    usedFallback?: boolean;
+  };
+}
+
+export interface LeadEnrichmentResult {
+  leadId: string;
+  companyId: string;
+  status: EnrichmentStatus;
+  enrichmentScore: number;
+  metadata: LeadEnrichmentMetadata;
+  updatedFields: {
+    contactEmail?: string | null;
+    qualityScore?: number;
+    notes?: string | null;
+  };
+  error?: string;
+}
+
+export interface EnrichmentBatchSummary {
+  companyId: string;
+  totalRequested: number;
+  processed: number;
+  enriched: number;
+  noWebsite: number;
+  unreachable: number;
+  failed: number;
+  leads: LeadEnrichmentResult[];
+}
+
+export interface AutomationReadinessStatus {
+  ollama: {
+    ready: boolean;
+    url: string;
+    model: string;
+    version?: string;
+    error?: string;
+  };
+  crawler: {
+    ready: boolean;
+    provider: 'native' | 'crawl4ai';
+    url?: string;
+    error?: string;
+  };
+  n8n: {
+    configured: boolean;
+    reachable: boolean;
+    url?: string;
+  };
+  dns: {
+    ready: boolean;
+  };
+  database: {
+    ready: boolean;
+  };
+}
+
+// -------------------------------------------------------------
+// Automation #3 — AI Sales Research & Opportunity Scoring Types
+// -------------------------------------------------------------
+
+export type ResearchPriority = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface OpportunityScoreComponent {
+  score: number; // 0 - 100
+  weight: number; // e.g. 0.25
+  weightedScore: number;
+  explanation: string;
+  signals: string[];
+}
+
+export interface OpportunityScoreComponents {
+  commercialFit: OpportunityScoreComponent;
+  digitalModernization: OpportunityScoreComponent;
+  operationalMaturity: OpportunityScoreComponent;
+  contactability: OpportunityScoreComponent;
+  serviceExpansion: OpportunityScoreComponent;
+}
+
+export interface OpportunityScoreResult {
+  opportunityScore: number; // 0 - 100
+  confidence: number; // 0 - 100 (evidence confidence)
+  priority: ResearchPriority;
+  components: OpportunityScoreComponents;
+  scoringVersion: string;
+  explanation: string;
+}
+
+export interface ResearchEvidenceSource {
+  url?: string;
+  type: 'GOOGLE_PLACES' | 'WEBSITE_SCRAPE' | 'DNS_MX' | 'SOCIAL_PROFILE';
+  snippet?: string;
+  timestamp?: string;
+}
+
+export interface ResearchBrief {
+  leadId: string;
+  companyId: string;
+  opportunityScore: number;
+  confidence: number;
+  priority: ResearchPriority;
+  recommendation: 'QUALIFIED' | 'DISQUALIFIED' | 'NEEDS_MORE_INFO';
+  executiveSummary: string;
+  identifiedPains: string[];
+  identifiedOpportunities: string[];
+  buyingSignals: string[];
+  recommendedPitch: string;
+  recommendedNextAction: string;
+  evidenceSources: ResearchEvidenceSource[];
+  missingEvidence: string[];
+  researchedAt: string;
+  model: string;
+  scoringVersion: string;
+  components: OpportunityScoreComponents;
+}
+
+export type SalesResearchStatus =
+  | 'RESEARCHED'
+  | 'SKIPPED'
+  | 'FAILED'
+  | 'INELIGIBLE';
+
+export interface SalesResearchResult {
+  leadId: string;
+  companyId: string;
+  status: SalesResearchStatus;
+  opportunityScore?: number;
+  confidence?: number;
+  priority?: ResearchPriority;
+  recommendation?: 'QUALIFIED' | 'DISQUALIFIED' | 'NEEDS_MORE_INFO';
+  brief?: ResearchBrief;
+  qualificationRecordId?: string;
+  error?: string;
+}
+
+export interface ResearchBatchSummary {
+  companyId: string;
+  totalRequested: number;
+  processed: number;
+  researched: number;
+  skipped: number;
+  ineligible: number;
+  failed: number;
+  leads: SalesResearchResult[];
+}
+
+export interface IcpConfig {
+  targetIndustries?: string[];
+  targetKeywords?: string[];
+  minServiceLines?: number;
+  preferredCompanySizes?: string[];
+}
+
+// -------------------------------------------------------------
+// Automation #4 — AI Sales Outreach & Follow-up Types
+// -------------------------------------------------------------
+
+export type OutreachChannelType = 'EMAIL' | 'LINKEDIN' | 'OTHER';
+
+export type OutreachDraftStatus =
+  | 'DRAFT'
+  | 'APPROVAL_PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'DELIVERY_PENDING'
+  | 'SENT'
+  | 'FAILED'
+  | 'SKIPPED'
+  | 'SUPPRESSED'
+  | 'INELIGIBLE';
+
+export type OutreachApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'NONE';
+
+export type OutreachDeliveryStatus = 'DISABLED' | 'PENDING' | 'DELIVERED' | 'FAILED' | 'SIMULATED' | 'CAPTURED_MOCK';
+
+export interface OutreachDraft {
+  id: string;
+  version: number;
+  channel: OutreachChannelType;
+  subject: string;
+  body: string;
+  personalizationRationale: string;
+  evidenceReferences: string[];
+  recommendedNextStep: string;
+  followUpIntervalDays: number;
+  followUpRecommendation: string;
+  status: OutreachDraftStatus;
+  approvalRequestId?: string | null;
+  approvalStatus: OutreachApprovalStatus;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  deliveryStatus: OutreachDeliveryStatus;
+  deliveredAt?: string | null;
+  generatedAt: string;
+  model: string;
+  confidence: number;
+  missingEvidence: string[];
+  isEdited?: boolean;
+}
+
+export interface SalesOutreachResult {
+  leadId: string;
+  companyId: string;
+  status: OutreachDraftStatus;
+  draft?: OutreachDraft;
+  approvalRequestId?: string | null;
+  activityId?: string | null;
+  error?: string;
+}
+
+export interface OutreachBatchSummary {
+  companyId: string;
+  totalRequested: number;
+  processed: number;
+  drafted: number;
+  skipped: number;
+  suppressed: number;
+  ineligible: number;
+  failed: number;
+  leads: SalesOutreachResult[];
+}
+
+export interface OutreachApprovalInput {
+  leadId: string;
+  decision: 'APPROVE' | 'REJECT';
+  reason?: string;
+  editedSubject?: string;
+  editedBody?: string;
+}
+
+export interface OutreachSendResult {
+  leadId: string;
+  companyId: string;
+  status: 'SENT' | 'SIMULATED' | 'BLOCKED_BY_SAFEGUARD' | 'FAILED' | 'CAPTURED_MOCK';
+  deliveryStatus: OutreachDeliveryStatus;
+  deliveredAt?: string;
+  message?: string;
+  error?: string;
+  draft?: OutreachDraft;
+  capturedEmail?: any;
+}
+

@@ -188,6 +188,8 @@ export class LeadNormalizerService {
       location?: string;
       actorId?: string;
       automationId?: string;
+      limit?: number;
+      pilotId?: string;
     } = {}
   ): Promise<IngestionResult> {
     if (!companyId) throw new BadRequestException('companyId is required');
@@ -198,6 +200,7 @@ export class LeadNormalizerService {
     const category = options.category || 'general';
     const location = options.location || 'unspecified';
     const automationId = options.automationId || 'automation-1-google-lead-finding';
+    const maxLimit = typeof options.limit === 'number' && options.limit > 0 ? options.limit : undefined;
 
     const result: IngestionResult = {
       totalProcessed: records.length,
@@ -218,6 +221,11 @@ export class LeadNormalizerService {
     );
 
     for (let index = 0; index < records.length; index++) {
+      if (maxLimit && result.created >= maxLimit) {
+        this.logger.log(`Reached limit of ${maxLimit} newly created leads for company ${companyId}`);
+        break;
+      }
+
       const raw = records[index];
       const { lead, error } = this.normalizeRecord(raw, category, location, automationId);
 
@@ -240,6 +248,11 @@ export class LeadNormalizerService {
       }
 
       try {
+        const metadataWithPilot = {
+          ...lead.metadata,
+          ...(options.pilotId ? { pilotId: options.pilotId } : {}),
+        };
+
         const created = await this.prisma.salesLead.create({
           data: {
             companyId,
@@ -255,7 +268,7 @@ export class LeadNormalizerService {
             source: lead.source,
             status: SalesLeadStatus.NEW,
             notes: lead.notes,
-            metadata: lead.metadata,
+            metadata: metadataWithPilot,
             leadGenAudits: {
               create: {
                 event: 'AUTOMATION_DISCOVERED',
@@ -263,6 +276,7 @@ export class LeadNormalizerService {
                   automationId,
                   qualityScore: lead.qualityScore,
                   googleMapsUri: lead.googleMapsUri,
+                  ...(options.pilotId ? { pilotId: options.pilotId } : {}),
                 },
                 actorId: options.actorId,
               },
@@ -275,6 +289,11 @@ export class LeadNormalizerService {
 
         result.created++;
         result.leadIds.push(created.id);
+
+        if (maxLimit && result.created >= maxLimit) {
+          this.logger.log(`Reached limit of ${maxLimit} newly created leads for company ${companyId}`);
+          break;
+        }
       } catch (err: any) {
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
           // Concurrent duplicate insertion hit @@unique([companyId, googlePlaceId])

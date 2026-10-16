@@ -1,0 +1,167 @@
+{
+  "id": "Q9N7ZD67zRlwdUNl",
+  "name": "Automation #1 - Google Maps Lead Finding (Live)",
+  "active": true,
+  "nodes": [
+    {
+      "id": "webhook-trigger-1",
+      "name": "Aevora Trigger Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aevora-leads-trigger",
+        "responseMode": "lastNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "eQMpPTdYlqA3dAdw",
+          "name": "Aevora Integration Header Auth"
+        }
+      },
+      "webhookId": "2c4e0f02-4a35-45b8-aade-38e5a45f1e69"
+    },
+    {
+      "id": "gmaps-api-node-1",
+      "name": "Google Places API v1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        350,
+        300
+      ],
+      "parameters": {
+        "url": "https://places.googleapis.com/v1/places:searchText",
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.location,places.primaryType,places.editorialSummary"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"textQuery\": \"{{ $('Aevora Trigger Webhook').item.json.body.category || 'dentists' }} in {{ $('Aevora Trigger Webhook').item.json.body.location || 'Dallas, TX' }}\",\n  \"pageSize\": {{ $('Aevora Trigger Webhook').item.json.body.maxResults || 3 }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Q9dqQLm1MUxQ26Sk",
+          "name": "Google Places API Header Auth"
+        }
+      }
+    },
+    {
+      "id": "format-leads-node-1",
+      "name": "Format & Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const triggerData = $('Aevora Trigger Webhook').item.json.body || {};\nconst placesData = $json.places || [];\nreturn [{\n  json: {\n    category: triggerData.category || 'dentists',\n    location: triggerData.location || 'Dallas, TX',\n    companyId: triggerData.companyId,\n    records: placesData\n  }\n}];"
+      }
+    },
+    {
+      "id": "aevora-webhook-node-1",
+      "name": "Deliver to AEVORA Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        850,
+        300
+      ],
+      "parameters": {
+        "url": "http://127.0.0.1:13000/automation/webhook/leads",
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-company-id",
+              "value": "={{ $json.companyId }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"category\": \"{{ $json.category }}\",\n  \"location\": \"{{ $json.location }}\",\n  \"records\": {{ JSON.stringify($json.records) }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "eQMpPTdYlqA3dAdw",
+          "name": "Aevora Integration Header Auth"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Aevora Trigger Webhook": {
+      "main": [
+        [
+          {
+            "node": "Google Places API v1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Places API v1": {
+      "main": [
+        [
+          {
+            "node": "Format & Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format & Normalize": {
+      "main": [
+        [
+          {
+            "node": "Deliver to AEVORA Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  }
+}

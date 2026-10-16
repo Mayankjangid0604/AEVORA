@@ -1,0 +1,1134 @@
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
+import {
+  Prisma,
+  ApprovalRequestStatus,
+  ApprovalRiskLevel,
+  SalesActivityType,
+  SalesActorType,
+} from '@prisma/client';
+import * as crypto from 'crypto';
+import { PrismaService } from '../prisma/prisma.service';
+import { OllamaClientService } from './ollama-client.service';
+import {
+  ExtractedBusinessFacts,
+  OutreachBatchSummary,
+  OutreachChannelType,
+  OutreachDraft,
+  OutreachDraftStatus,
+  ResearchBrief,
+  SalesOutreachResult,
+  OutreachSendResult,
+} from './automation.types';
+
+@Injectable()
+export class SalesOutreachService {
+  private readonly logger = new Logger(SalesOutreachService.name);
+  private readonly automationId = 'automation-4-sales-outreach';
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ollamaClient: OllamaClientService
+  ) {}
+
+  /**
+   * Checks whether a lead is opted out or suppressed from receiving sales outreach.
+   */
+  isLeadSuppressed(lead: {
+    status?: string | null;
+    metadata?: any;
+    contactEmail?: string | null;
+  }): { suppressed: boolean; reason?: string } {
+    const status = String(lead.status || '').toUpperCase();
+    const metadata = (lead.metadata || {}) as Record<string, any>;
+
+    if (metadata.optOut === true || metadata.unsubscribed === true) {
+      return { suppressed: true, reason: 'Prospect has explicitly opted out of outreach (optOut flag set).' };
+    }
+
+    if (status === 'DO_NOT_CONTACT' || status === 'UNSUBSCRIBED' || status === 'SUPPRESSED') {
+      return { suppressed: true, reason: `Prospect CRM status is "${status}". Outreach prohibited.` };
+    }
+
+    if (metadata.suppression?.suppressed === true) {
+      return { suppressed: true, reason: metadata.suppression?.reason || 'Prospect matched suppression list.' };
+    }
+
+    return { suppressed: false };
+  }
+
+  /**
+   * Comprehensive async suppression check:
+   * 1. Evaluates lead metadata and CRM status flags.
+   * 2. Checks persistent EmailSuppression table for the companyId + normalized recipient email.
+   */
+  async checkSuppression(
+    companyId: string,
+    lead: {
+      status?: string | null;
+      metadata?: any;
+      contactEmail?: string | null;
+    }
+  ): Promise<{ suppressed: boolean; reason?: string }> {
+    const syncCheck = this.isLeadSuppressed(lead);
+    if (syncCheck.suppressed) {
+      return syncCheck;
+    }
+
+    if (lead.contactEmail) {
+      const normalizedEmail = lead.contactEmail.trim().toLowerCase();
+      try {
+        const suppressionRecord = await this.prisma.emailSuppression.findUnique({
+          where: {
+            companyId_email: {
+              companyId,
+              email: normalizedEmail,
+            },
+          },
+        });
+
+        if (suppressionRecord) {
+          return {
+            suppressed: true,
+            reason: `Recipient email "${normalizedEmail}" is registered in suppression database (reason: ${suppressionRecord.reason || 'UNSUBSCRIBE'}).`,
+          };
+        }
+      } catch (err: any) {
+        this.logger.warn(`Could not query EmailSuppression table for ${normalizedEmail}: ${err?.message || err}`);
+      }
+    }
+
+    return { suppressed: false };
+  }
+
+  /**
+   * Evaluates if a lead satisfies eligibility criteria for Automation #4:
+   * Status 'QUALIFIED' or 'ENRICHED', qualityScore >= 50, or possesses an Automation #3 research brief.
+   */
+  isLeadEligible(lead: {
+    status?: string | null;
+    qualityScore?: number | null;
+    metadata?: any;
+  }): boolean {
+    const suppression = this.isLeadSuppressed(lead);
+    if (suppression.suppressed) {
+      return false;
+    }
+
+    const status = String(lead.status || '').toUpperCase();
+    const score = lead.qualityScore ?? 0;
+    const metadata = (lead.metadata || {}) as Record<string, any>;
+    const researchBrief = (metadata.researchBrief || metadata.research) as ResearchBrief | undefined;
+
+    // If research brief explicitly disqualified the lead, it is ineligible
+    if (researchBrief && researchBrief.recommendation === 'DISQUALIFIED') {
+      return false;
+    }
+
+    // High quality research brief
+    if (researchBrief && researchBrief.recommendation === 'QUALIFIED') {
+      return true;
+    }
+
+    // Status qualified or enriched with reasonable score
+    if ((status === 'QUALIFIED' || status === 'ENRICHED') && score >= 40) {
+      return true;
+    }
+
+    return score >= 50;
+  }
+
+  /**
+   * Generates a personalized, evidence-grounded sales outreach draft for a lead.
+   * Strictly enforces tenant isolation, idempotency, evidence grounding, and human approval staging.
+   */
+  async generateOutreachDraft(
+    companyId: string,
+    leadId: string,
+    options: {
+      forceRefresh?: boolean;
+      channel?: OutreachChannelType;
+      actorId?: string;
+    } = {}
+  ): Promise<SalesOutreachResult> {
+    if (!companyId || !leadId) {
+      throw new BadRequestException('companyId and leadId are required');
+    }
+
+    // 1. Retrieve lead with strict tenant isolation
+    const lead = await this.prisma.salesLead.findFirst({
+      where: { id: leadId, companyId },
+    });
+
+    if (!lead) {
+      throw new NotFoundException(`Lead "${leadId}" not found for company "${companyId}"`);
+    }
+
+    const currentMetadata = (lead.metadata || {}) as Record<string, any>;
+
+    // 2. Suppression Check
+    const suppressionCheck = await this.checkSuppression(companyId, lead);
+    if (suppressionCheck.suppressed) {
+      this.logger.warn(`Outreach suppressed for lead "${lead.name}" (${lead.id}): ${suppressionCheck.reason}`);
+      return {
+        leadId: lead.id,
+        companyId,
+        status: 'SUPPRESSED',
+        error: suppressionCheck.reason,
+      };
+    }
+
+    // 3. Idempotency Check: Return existing draft if not forceRefresh
+    if (!options.forceRefresh && currentMetadata.outreachDraft) {
+      const existingDraft = currentMetadata.outreachDraft as OutreachDraft;
+      this.logger.log(`Idempotency hit: Lead "${lead.name}" (${lead.id}) already has draft (status: ${existingDraft.status}).`);
+      return {
+        leadId: lead.id,
+        companyId,
+        status: 'SKIPPED',
+        draft: existingDraft,
+        approvalRequestId: existingDraft.approvalRequestId,
+      };
+    }
+
+    // 4. Eligibility Check
+    if (!options.forceRefresh && !this.isLeadEligible(lead)) {
+      this.logger.warn(`Lead "${lead.name}" (${lead.id}) is ineligible for outreach (status: ${lead.status}, score: ${lead.qualityScore})`);
+      return {
+        leadId: lead.id,
+        companyId,
+        status: 'INELIGIBLE',
+        error: `Lead is not eligible for outreach (status: ${lead.status}, score: ${lead.qualityScore || 0})`,
+      };
+    }
+
+    // 5. Gather evidence package from Automation #1, #2, #3
+    const researchBrief: ResearchBrief | null =
+      (currentMetadata.researchBrief || currentMetadata.research || null) as ResearchBrief | null;
+    const enrichmentFacts: ExtractedBusinessFacts | null =
+      (currentMetadata.enrichment?.extracted || null) as ExtractedBusinessFacts | null;
+    const websiteSnippet: string =
+      lead.notes ||
+      (currentMetadata.enrichment?.reachability?.finalUrl
+        ? `Website: ${currentMetadata.enrichment.reachability.finalUrl}`
+        : '');
+
+    // Determine confidence and missing evidence
+    let confidence = 50;
+    const missingEvidence: string[] = [];
+
+    if (researchBrief) {
+      confidence = Math.min(95, Math.max(50, Math.round(researchBrief.confidence * 0.95)));
+      if (researchBrief.missingEvidence?.length) {
+        missingEvidence.push(...researchBrief.missingEvidence);
+      }
+    } else {
+      confidence = enrichmentFacts ? 50 : 35;
+      missingEvidence.push('Comprehensive opportunity research brief from Automation #3 is absent');
+    }
+
+    if (!lead.contactEmail) {
+      missingEvidence.push('Verified direct recipient email is missing from CRM record');
+    }
+
+    // 6. Generate draft with local Ollama
+    const targetChannel: OutreachChannelType = options.channel || 'EMAIL';
+    let ollamaResult;
+    try {
+      ollamaResult = await this.ollamaClient.generateSalesOutreach({
+        businessName: lead.name,
+        industry: lead.industry,
+        contactPerson: null,
+        channel: targetChannel,
+        researchBrief,
+        facts: enrichmentFacts,
+        websiteSnippet,
+      });
+    } catch (err: any) {
+      this.logger.error(`Failed to generate outreach draft for lead "${lead.id}": ${err?.message || err}`);
+      return {
+        leadId: lead.id,
+        companyId,
+        status: 'FAILED',
+        error: err?.message || 'Ollama generation failed',
+      };
+    }
+
+    // 7. Manage Invalidation of Prior Approvals
+    // If there were existing PENDING or APPROVED requests, cancel them because the draft changed
+    const priorApprovalRequests = await this.prisma.approvalRequest.findMany({
+      where: {
+        companyId,
+        targetType: 'SalesLead',
+        targetId: lead.id,
+        status: { in: [ApprovalRequestStatus.PENDING, ApprovalRequestStatus.APPROVED] },
+      },
+    });
+
+    for (const priorReq of priorApprovalRequests) {
+      await this.prisma.approvalRequest.update({
+        where: { id: priorReq.id },
+        data: {
+          status: ApprovalRequestStatus.CANCELLED,
+          decisionReason: 'Draft regenerated or updated — prior approval invalidated',
+          decisionTime: new Date(),
+        },
+      });
+      this.logger.log(`Invalidated prior approval request ${priorReq.id} for lead ${lead.id}`);
+    }
+
+    // 8. Create new ApprovalRequest for the new draft
+    const previousDraft = currentMetadata.outreachDraft as OutreachDraft | undefined;
+    const version = previousDraft ? (previousDraft.version || 1) + 1 : 1;
+    const draftId = crypto.randomUUID();
+
+    const approvalRequest = await this.prisma.approvalRequest.create({
+      data: {
+        companyId,
+        requesterId: options.actorId || 'system:automation-4',
+        action: 'SALES_OUTREACH_SEND',
+        targetType: 'SalesLead',
+        targetId: lead.id,
+        proposedParams: {
+          draftId,
+          version,
+          channel: targetChannel,
+          subject: ollamaResult.draft.subject,
+          body: ollamaResult.draft.body,
+          recipientEmail: lead.contactEmail,
+          recommendedNextStep: ollamaResult.draft.recommendedNextStep,
+          followUpIntervalDays: ollamaResult.draft.followUpIntervalDays,
+        },
+        riskLevel: ApprovalRiskLevel.LOW,
+        status: ApprovalRequestStatus.PENDING,
+        reasoning: ollamaResult.draft.personalizationRationale,
+      },
+    });
+
+    // 9. Construct full OutreachDraft structure
+    const outreachDraft: OutreachDraft = {
+      id: draftId,
+      version,
+      channel: targetChannel,
+      subject: ollamaResult.draft.subject,
+      body: ollamaResult.draft.body,
+      personalizationRationale: ollamaResult.draft.personalizationRationale,
+      evidenceReferences: ollamaResult.draft.evidenceReferences,
+      recommendedNextStep: ollamaResult.draft.recommendedNextStep,
+      followUpIntervalDays: ollamaResult.draft.followUpIntervalDays,
+      followUpRecommendation: ollamaResult.draft.followUpRecommendation,
+      status: 'APPROVAL_PENDING',
+      approvalRequestId: approvalRequest.id,
+      approvalStatus: 'PENDING',
+      approvedAt: null,
+      approvedBy: null,
+      deliveryStatus: 'DISABLED',
+      deliveredAt: null,
+      generatedAt: new Date().toISOString(),
+      model: ollamaResult.model,
+      confidence,
+      missingEvidence,
+      isEdited: false,
+    };
+
+    // 10. Resolve Employee for SalesActivity (if any exists in company)
+    let actorEmployeeId: string | null = null;
+    if (options.actorId) {
+      const emp = await this.prisma.employee.findFirst({
+        where: { id: options.actorId, companyId },
+        select: { id: true },
+      });
+      if (emp) actorEmployeeId = emp.id;
+    }
+    if (!actorEmployeeId) {
+      const fallbackEmp = await this.prisma.employee.findFirst({
+        where: { companyId },
+        select: { id: true },
+      });
+      if (fallbackEmp) actorEmployeeId = fallbackEmp.id;
+    }
+
+    let activityId: string | undefined;
+
+    // 11. Transactionally persist draft, audits, and activity record
+    await this.prisma.$transaction(async (tx) => {
+      // Update SalesLead metadata
+      await tx.salesLead.update({
+        where: { id: lead.id },
+        data: {
+          metadata: {
+            ...currentMetadata,
+            outreachDraft: outreachDraft as any,
+          } as Prisma.InputJsonObject,
+        },
+      });
+
+      // Append LeadGenAudit event
+      await tx.leadGenAudit.create({
+        data: {
+          leadId: lead.id,
+          event: 'OUTREACH_DRAFT_GENERATED',
+          detail: {
+            draftId,
+            version,
+            channel: targetChannel,
+            subject: outreachDraft.subject,
+            approvalRequestId: approvalRequest.id,
+            model: outreachDraft.model,
+            confidence: outreachDraft.confidence,
+            automationId: this.automationId,
+          } as any,
+          actorId: options.actorId || 'system:automation-4',
+        },
+      });
+
+      // If prior requests were invalidated, audit it
+      if (priorApprovalRequests.length > 0) {
+        await tx.leadGenAudit.create({
+          data: {
+            leadId: lead.id,
+            event: 'OUTREACH_APPROVAL_INVALIDATED',
+            detail: {
+              invalidatedCount: priorApprovalRequests.length,
+              newVersion: version,
+              automationId: this.automationId,
+            } as any,
+            actorId: options.actorId || 'system:automation-4',
+          },
+        });
+      }
+
+      // Create SalesActivity for CRM visibility if employee is found
+      if (actorEmployeeId) {
+        const activity = await tx.salesActivity.create({
+          data: {
+            companyId,
+            actorId: actorEmployeeId,
+            actorType: SalesActorType.AI_AGENT,
+            salesLeadId: lead.id,
+            activityType: SalesActivityType.EMAIL,
+            subject: `Outreach Draft: ${outreachDraft.subject}`,
+            description: outreachDraft.body,
+            outcome: 'APPROVAL_PENDING',
+            nextAction: outreachDraft.recommendedNextStep,
+            metadata: {
+              draftId,
+              version,
+              approvalRequestId: approvalRequest.id,
+              followUpIntervalDays: outreachDraft.followUpIntervalDays,
+              followUpRecommendation: outreachDraft.followUpRecommendation,
+            } as any,
+            idempotencyKey: `outreach-draft-${draftId}`,
+          },
+        });
+        activityId = activity.id;
+      }
+    });
+
+    this.logger.log(
+      `Outreach draft generated for lead "${lead.name}" (${lead.id}), version ${version}, approval request ${approvalRequest.id}`
+    );
+
+    return {
+      leadId: lead.id,
+      companyId,
+      status: 'APPROVAL_PENDING',
+      draft: outreachDraft,
+      approvalRequestId: approvalRequest.id,
+      activityId,
+    };
+  }
+
+  /**
+   * Explicitly approves a sales outreach draft.
+   * If manual edits to subject or body are provided, creates a new version and approves it.
+   */
+  async approveDraft(
+    companyId: string,
+    leadId: string,
+    options: {
+      actorId?: string;
+      reason?: string;
+      editedSubject?: string;
+      editedBody?: string;
+    } = {}
+  ): Promise<SalesOutreachResult> {
+    if (!companyId || !leadId) {
+      throw new BadRequestException('companyId and leadId are required');
+    }
+
+    const lead = await this.prisma.salesLead.findFirst({
+      where: { id: leadId, companyId },
+    });
+
+    if (!lead) {
+      throw new NotFoundException(`Lead "${leadId}" not found for company "${companyId}"`);
+    }
+
+    const currentMetadata = (lead.metadata || {}) as Record<string, any>;
+    const draft = currentMetadata.outreachDraft as OutreachDraft | undefined;
+
+    if (!draft) {
+      throw new BadRequestException(`No outreach draft exists for lead "${leadId}"`);
+    }
+
+    const isEdit = Boolean(
+      (options.editedSubject && options.editedSubject.trim() !== draft.subject) ||
+      (options.editedBody && options.editedBody.trim() !== draft.body)
+    );
+
+    const now = new Date();
+    let finalVersion = draft.version;
+    let finalApprovalRequestId = draft.approvalRequestId;
+    let finalSubject = draft.subject;
+    let finalBody = draft.body;
+
+    if (isEdit) {
+      // Content changed: cancel prior approval request, create a new one, and approve it
+      if (draft.approvalRequestId) {
+        await this.prisma.approvalRequest.updateMany({
+          where: { id: draft.approvalRequestId, companyId },
+          data: {
+            status: ApprovalRequestStatus.CANCELLED,
+            decisionReason: 'Draft edited during review — replacing prior approval request',
+            decisionTime: now,
+          },
+        });
+      }
+
+      finalVersion = draft.version + 1;
+      finalSubject = (options.editedSubject || draft.subject).trim();
+      finalBody = (options.editedBody || draft.body).trim();
+
+      const newApprovalReq = await this.prisma.approvalRequest.create({
+        data: {
+          companyId,
+          requesterId: options.actorId || 'system:human-reviewer',
+          action: 'SALES_OUTREACH_SEND',
+          targetType: 'SalesLead',
+          targetId: lead.id,
+          proposedParams: {
+            draftId: draft.id,
+            version: finalVersion,
+            channel: draft.channel,
+            subject: finalSubject,
+            body: finalBody,
+            recipientEmail: lead.contactEmail,
+            recommendedNextStep: draft.recommendedNextStep,
+          },
+          riskLevel: ApprovalRiskLevel.LOW,
+          status: ApprovalRequestStatus.APPROVED,
+          approverId: options.actorId || 'human-reviewer',
+          decisionReason: options.reason || 'Approved with manual edits',
+          decisionTime: now,
+        },
+      });
+
+      finalApprovalRequestId = newApprovalReq.id;
+    } else {
+      // Approving existing draft content
+      if (draft.approvalRequestId) {
+        await this.prisma.approvalRequest.updateMany({
+          where: { id: draft.approvalRequestId, companyId },
+          data: {
+            status: ApprovalRequestStatus.APPROVED,
+            approverId: options.actorId || 'human-reviewer',
+            decisionReason: options.reason || 'Approved by human reviewer',
+            decisionTime: now,
+          },
+        });
+      }
+    }
+
+    const updatedDraft: OutreachDraft = {
+      ...draft,
+      version: finalVersion,
+      subject: finalSubject,
+      body: finalBody,
+      status: 'APPROVED',
+      approvalStatus: 'APPROVED',
+      approvalRequestId: finalApprovalRequestId,
+      approvedAt: now.toISOString(),
+      approvedBy: options.actorId || 'human-reviewer',
+      isEdited: isEdit || draft.isEdited,
+    };
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.salesLead.update({
+        where: { id: lead.id },
+        data: {
+          metadata: {
+            ...currentMetadata,
+            outreachDraft: updatedDraft as any,
+          } as Prisma.InputJsonObject,
+        },
+      });
+
+      await tx.leadGenAudit.create({
+        data: {
+          leadId: lead.id,
+          event: 'OUTREACH_DRAFT_APPROVED',
+          detail: {
+            draftId: updatedDraft.id,
+            version: updatedDraft.version,
+            approvalRequestId: finalApprovalRequestId,
+            isEdited: updatedDraft.isEdited,
+            reason: options.reason || 'Approved by human reviewer',
+          } as any,
+          actorId: options.actorId || 'human-reviewer',
+        },
+      });
+    });
+
+    this.logger.log(`Outreach draft approved for lead "${lead.name}" (${lead.id}), version ${finalVersion}`);
+
+    return {
+      leadId: lead.id,
+      companyId,
+      status: 'APPROVED',
+      draft: updatedDraft,
+      approvalRequestId: finalApprovalRequestId,
+    };
+  }
+
+  /**
+   * Edits an outreach draft without immediately approving it.
+   * Increments the draft version, cancels any active approval request, and sets status to APPROVAL_PENDING.
+   */
+  async editDraft(
+    companyId: string,
+    leadId: string,
+    options: {
+      subject: string;
+      body: string;
+      actorId?: string;
+    }
+  ): Promise<SalesOutreachResult> {
+    if (!companyId || !leadId) {
+      throw new BadRequestException('companyId and leadId are required');
+    }
+    if (!options?.subject?.trim() || !options?.body?.trim()) {
+      throw new BadRequestException('subject and body are required to edit outreach draft');
+    }
+
+    const lead = await this.prisma.salesLead.findFirst({
+      where: { id: leadId, companyId },
+    });
+
+    if (!lead) {
+      throw new NotFoundException(`Lead "${leadId}" not found for company "${companyId}"`);
+    }
+
+    const currentMetadata = (lead.metadata || {}) as Record<string, any>;
+    const draft = currentMetadata.outreachDraft as OutreachDraft | undefined;
+
+    if (!draft) {
+      throw new BadRequestException(`No outreach draft exists for lead "${leadId}"`);
+    }
+
+    const now = new Date();
+    if (draft.approvalRequestId) {
+      await this.prisma.approvalRequest.updateMany({
+        where: { id: draft.approvalRequestId, companyId },
+        data: {
+          status: ApprovalRequestStatus.CANCELLED,
+          decisionReason: 'Draft edited — invalidated prior approval request',
+          decisionTime: now,
+        },
+      });
+    }
+
+    const nextVersion = draft.version + 1;
+    const finalSubject = options.subject.trim();
+    const finalBody = options.body.trim();
+
+    const newApprovalReq = await this.prisma.approvalRequest.create({
+      data: {
+        companyId,
+        requesterId: options.actorId || 'system:sales-outreach',
+        action: 'SALES_OUTREACH_SEND',
+        targetType: 'SalesLead',
+        targetId: lead.id,
+        proposedParams: {
+          draftId: draft.id,
+          version: nextVersion,
+          channel: draft.channel,
+          subject: finalSubject,
+          body: finalBody,
+          recipientEmail: lead.contactEmail,
+          recommendedNextStep: draft.recommendedNextStep,
+        },
+        riskLevel: ApprovalRiskLevel.LOW,
+        status: ApprovalRequestStatus.PENDING,
+      },
+    });
+
+    const updatedDraft: OutreachDraft = {
+      ...draft,
+      version: nextVersion,
+      subject: finalSubject,
+      body: finalBody,
+      status: 'APPROVAL_PENDING',
+      approvalStatus: 'PENDING',
+      approvalRequestId: newApprovalReq.id,
+      approvedAt: null,
+      approvedBy: null,
+      isEdited: true,
+    };
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.salesLead.update({
+        where: { id: lead.id },
+        data: {
+          metadata: {
+            ...currentMetadata,
+            outreachDraft: updatedDraft as any,
+          } as Prisma.InputJsonObject,
+        },
+      });
+
+      await tx.leadGenAudit.create({
+        data: {
+          leadId: lead.id,
+          event: 'OUTREACH_DRAFT_EDITED',
+          detail: {
+            draftId: updatedDraft.id,
+            version: updatedDraft.version,
+            approvalRequestId: newApprovalReq.id,
+            isEdited: true,
+          } as any,
+          actorId: options.actorId || 'human-editor',
+        },
+      });
+    });
+
+    this.logger.log(`Outreach draft edited for lead "${lead.name}" (${lead.id}), version incremented to ${nextVersion}`);
+
+    return {
+      leadId: lead.id,
+      companyId,
+      status: 'APPROVAL_PENDING',
+      draft: updatedDraft,
+      approvalRequestId: newApprovalReq.id,
+    };
+  }
+
+  /**
+   * Rejects an outreach draft.
+   */
+  async rejectDraft(
+    companyId: string,
+    leadId: string,
+    options: {
+      actorId?: string;
+      reason?: string;
+    } = {}
+  ): Promise<SalesOutreachResult> {
+    if (!companyId || !leadId) {
+      throw new BadRequestException('companyId and leadId are required');
+    }
+
+    const lead = await this.prisma.salesLead.findFirst({
+      where: { id: leadId, companyId },
+    });
+
+    if (!lead) {
+      throw new NotFoundException(`Lead "${leadId}" not found for company "${companyId}"`);
+    }
+
+    const currentMetadata = (lead.metadata || {}) as Record<string, any>;
+    const draft = currentMetadata.outreachDraft as OutreachDraft | undefined;
+
+    if (!draft) {
+      throw new BadRequestException(`No outreach draft exists for lead "${leadId}"`);
+    }
+
+    const now = new Date();
+
+    if (draft.approvalRequestId) {
+      await this.prisma.approvalRequest.updateMany({
+        where: { id: draft.approvalRequestId, companyId },
+        data: {
+          status: ApprovalRequestStatus.REJECTED,
+          approverId: options.actorId || 'human-reviewer',
+          decisionReason: options.reason || 'Rejected by reviewer',
+          decisionTime: now,
+        },
+      });
+    }
+
+    const updatedDraft: OutreachDraft = {
+      ...draft,
+      status: 'REJECTED',
+      approvalStatus: 'REJECTED',
+      approvedAt: null,
+      approvedBy: options.actorId || 'human-reviewer',
+    };
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.salesLead.update({
+        where: { id: lead.id },
+        data: {
+          metadata: {
+            ...currentMetadata,
+            outreachDraft: updatedDraft as any,
+          } as Prisma.InputJsonObject,
+        },
+      });
+
+      await tx.leadGenAudit.create({
+        data: {
+          leadId: lead.id,
+          event: 'OUTREACH_DRAFT_REJECTED',
+          detail: {
+            draftId: updatedDraft.id,
+            version: updatedDraft.version,
+            approvalRequestId: draft.approvalRequestId,
+            reason: options.reason || 'Rejected by reviewer',
+          } as any,
+          actorId: options.actorId || 'human-reviewer',
+        },
+      });
+    });
+
+    this.logger.log(`Outreach draft rejected for lead "${lead.name}" (${lead.id})`);
+
+    return {
+      leadId: lead.id,
+      companyId,
+      status: 'REJECTED',
+      draft: updatedDraft,
+      approvalRequestId: draft.approvalRequestId,
+    };
+  }
+
+  /**
+   * Safe delivery dispatch gate.
+   * STRICT SAFEGUARD:
+   * 1. Requires ApprovalRequest to be in APPROVED state with matching version.
+   * 2. In this implementation phase, external message transmission (email/LinkedIn) is explicitly disabled.
+   */
+  async sendOutreach(
+    companyId: string,
+    leadId: string,
+    options: { actorId?: string; mockTransport?: boolean; captureOnly?: boolean } = {}
+  ): Promise<OutreachSendResult> {
+    if (!companyId || !leadId) {
+      throw new BadRequestException('companyId and leadId are required');
+    }
+
+    const lead = await this.prisma.salesLead.findFirst({
+      where: { id: leadId, companyId },
+    });
+
+    if (!lead) {
+      throw new NotFoundException(`Lead "${leadId}" not found for company "${companyId}"`);
+    }
+
+    const currentMetadata = (lead.metadata || {}) as Record<string, any>;
+    const draft = currentMetadata.outreachDraft as OutreachDraft | undefined;
+
+    if (!draft) {
+      throw new BadRequestException(`No draft exists for lead "${leadId}"`);
+    }
+
+    // SAFEGUARD 0.1: Recipient email validation
+    if (!lead.contactEmail || !lead.contactEmail.trim()) {
+      throw new BadRequestException(
+        `Lead "${lead.id}" does not have a valid contact email address for email outreach.`
+      );
+    }
+
+    // SAFEGUARD 0.2: Duplicate-send / idempotency prevention
+    if (draft.deliveryStatus === 'DELIVERED') {
+      throw new BadRequestException(
+        `Outreach draft "${draft.id}" for lead "${lead.id}" has already been delivered.`
+      );
+    }
+
+    // SAFEGUARD 0: Opt-out and persistent suppression check
+    const suppressionCheck = await this.checkSuppression(companyId, lead);
+    if (suppressionCheck.suppressed) {
+      this.logger.warn(`Send blocked: Lead "${lead.id}" is suppressed (${suppressionCheck.reason})`);
+      throw new ForbiddenException(
+        `Outreach dispatch blocked: ${suppressionCheck.reason}`
+      );
+    }
+
+    // SAFEGUARD 1: Explicit human approval check
+    if (draft.approvalStatus !== 'APPROVED') {
+      this.logger.warn(`Send blocked: Lead "${lead.id}" draft is not approved (status: ${draft.approvalStatus})`);
+      throw new ForbiddenException(
+        `Explicit human approval is required before outreach can be sent. Current approval status: "${draft.approvalStatus}".`
+      );
+    }
+
+    // SAFEGUARD 2: ApprovalRequest record verification
+    if (!draft.approvalRequestId) {
+      throw new ForbiddenException('Approval request record is missing. Cannot verify human approval.');
+    }
+
+    const approvalReq = await this.prisma.approvalRequest.findFirst({
+      where: { id: draft.approvalRequestId, companyId },
+    });
+
+    if (!approvalReq || approvalReq.status !== ApprovalRequestStatus.APPROVED) {
+      throw new ForbiddenException(
+        `Approval request record is not in APPROVED state (current state: ${approvalReq?.status || 'NOT_FOUND'}).`
+      );
+    }
+
+    // SAFEGUARD 3: Version matching verification
+    const proposedVersion = (approvalReq.proposedParams as any)?.version;
+    if (proposedVersion !== draft.version) {
+      throw new ForbiddenException(
+        `Draft version mismatch: Approval was granted for version ${proposedVersion}, but current draft is version ${draft.version}. Renewed approval is required.`
+      );
+    }
+
+    // SAFEGUARD 0.3: Mock capture mode for safe testing without external transmission
+    if (options.captureOnly || options.mockTransport) {
+      const capturedPayload = {
+        recipientEmail: lead.contactEmail,
+        subject: draft.subject,
+        body: draft.body,
+        channel: draft.channel,
+        version: draft.version,
+        capturedAt: new Date().toISOString(),
+      };
+
+      const capturedDraft: OutreachDraft = {
+        ...draft,
+        deliveryStatus: 'CAPTURED_MOCK',
+      };
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.salesLead.update({
+          where: { id: lead.id },
+          data: {
+            metadata: {
+              ...currentMetadata,
+              outreachDraft: capturedDraft as any,
+            } as Prisma.InputJsonObject,
+          },
+        });
+
+        await tx.leadGenAudit.create({
+          data: {
+            leadId: lead.id,
+            event: 'OUTREACH_DISPATCH_CAPTURED_MOCK',
+            detail: {
+              draftId: draft.id,
+              version: draft.version,
+              approvalRequestId: draft.approvalRequestId,
+              capturedPayload,
+            } as any,
+            actorId: options.actorId || 'system:mock-capture',
+          },
+        });
+      });
+
+      this.logger.log(`[MOCK CAPTURE] Outreach email captured for lead "${lead.name}" (${lead.id}) without external transmission.`);
+      return {
+        leadId: lead.id,
+        companyId,
+        status: 'CAPTURED_MOCK',
+        deliveryStatus: 'CAPTURED_MOCK',
+        message: 'Mock email captured successfully in local test mode. External transmission remained disabled.',
+        draft: capturedDraft,
+        capturedEmail: capturedPayload,
+      };
+    }
+
+    // SAFEGUARD 4: External delivery disabled policy
+    // Real email/LinkedIn outreach transmission is strictly disabled in this phase.
+    await this.prisma.leadGenAudit.create({
+      data: {
+        leadId: lead.id,
+        event: 'OUTREACH_DELIVERY_BLOCKED_SAFEGUARD',
+        detail: {
+          draftId: draft.id,
+          version: draft.version,
+          approvalRequestId: draft.approvalRequestId,
+          policy: 'External transmission disabled by safeguard policy in this phase.',
+        } as any,
+        actorId: options.actorId || 'system:safeguard-guard',
+      },
+    });
+
+    this.logger.log(
+      `Delivery requested for approved lead "${lead.name}" (${lead.id}): Held in safe mode (transmission disabled).`
+    );
+
+    return {
+      leadId: lead.id,
+      companyId,
+      status: 'BLOCKED_BY_SAFEGUARD',
+      deliveryStatus: 'DISABLED',
+      message:
+        'External outreach transmission is currently disabled by AEVORA safeguard policy. The message is verified and approved, but will not be sent to external networks without separate authorization.',
+    };
+  }
+
+  /**
+   * Processes a batch of leads for outreach draft generation.
+   */
+  async processBatch(
+    companyId: string,
+    leadIds: string[],
+    options: {
+      forceRefresh?: boolean;
+      channel?: OutreachChannelType;
+      actorId?: string;
+    } = {}
+  ): Promise<OutreachBatchSummary> {
+    const results: SalesOutreachResult[] = [];
+    let drafted = 0;
+    let skipped = 0;
+    let suppressed = 0;
+    let ineligible = 0;
+    let failed = 0;
+
+    for (const leadId of leadIds) {
+      try {
+        const result = await this.generateOutreachDraft(companyId, leadId, options);
+        results.push(result);
+
+        if (result.status === 'APPROVAL_PENDING') drafted++;
+        else if (result.status === 'SKIPPED') skipped++;
+        else if (result.status === 'SUPPRESSED') suppressed++;
+        else if (result.status === 'INELIGIBLE') ineligible++;
+        else if (result.status === 'FAILED') failed++;
+      } catch (err: any) {
+        this.logger.error(`Error processing outreach for lead "${leadId}": ${err?.message || err}`);
+        failed++;
+        results.push({
+          leadId,
+          companyId,
+          status: 'FAILED',
+          error: err?.message || 'Unexpected processing error',
+        });
+      }
+    }
+
+    return {
+      companyId,
+      totalRequested: leadIds.length,
+      processed: results.length,
+      drafted,
+      skipped,
+      suppressed,
+      ineligible,
+      failed,
+      leads: results,
+    };
+  }
+
+  /**
+   * Discovers and processes eligible company leads for outreach drafting.
+   */
+  async processCompanyLeads(
+    companyId: string,
+    options: {
+      leadIds?: string[];
+      limit?: number;
+      channel?: OutreachChannelType;
+      forceRefresh?: boolean;
+      actorId?: string;
+    } = {}
+  ): Promise<OutreachBatchSummary> {
+    const limit = Math.min(Math.max(1, options.limit || 10), 50);
+
+    let targetLeadIds: string[] = [];
+
+    if (options.leadIds && options.leadIds.length > 0) {
+      const existing = await this.prisma.salesLead.findMany({
+        where: { id: { in: options.leadIds }, companyId },
+        select: { id: true },
+      });
+      targetLeadIds = existing.map((l) => l.id);
+    } else {
+      // Find eligible leads in company
+      const candidates = await this.prisma.salesLead.findMany({
+        where: { companyId },
+        orderBy: [{ qualityScore: 'desc' }, { createdAt: 'desc' }],
+        take: 100,
+        select: { id: true, status: true, qualityScore: true, metadata: true, contactEmail: true },
+      });
+
+      targetLeadIds = candidates
+        .filter((c) => {
+          if (!this.isLeadEligible(c)) return false;
+          if (!options.forceRefresh) {
+            const meta = (c.metadata || {}) as Record<string, any>;
+            if (meta.outreachDraft) return false;
+          }
+          return true;
+        })
+        .slice(0, limit)
+        .map((c) => c.id);
+    }
+
+    return this.processBatch(companyId, targetLeadIds, options);
+  }
+
+  /**
+   * Retrieves outreach summary metrics for the authenticated company.
+   */
+  async getOutreachStatus(companyId: string) {
+    const totalLeads = await this.prisma.salesLead.count({ where: { companyId } });
+    const leads = await this.prisma.salesLead.findMany({
+      where: { companyId },
+      select: { id: true, status: true, qualityScore: true, metadata: true, contactEmail: true },
+    });
+
+    let eligible = 0;
+    let suppressed = 0;
+    let draftsTotal = 0;
+    let pendingApproval = 0;
+    let approved = 0;
+    let rejected = 0;
+    let deliveryDisabled = 0;
+
+    for (const lead of leads) {
+      const suppression = this.isLeadSuppressed(lead);
+      if (suppression.suppressed) {
+        suppressed++;
+        continue;
+      }
+
+      if (this.isLeadEligible(lead)) {
+        eligible++;
+      }
+
+      const meta = (lead.metadata || {}) as Record<string, any>;
+      const draft = meta.outreachDraft as OutreachDraft | undefined;
+      if (draft?.id) {
+        draftsTotal++;
+        if (draft.approvalStatus === 'PENDING') pendingApproval++;
+        else if (draft.approvalStatus === 'APPROVED') approved++;
+        else if (draft.approvalStatus === 'REJECTED') rejected++;
+
+        if (draft.deliveryStatus === 'DISABLED') deliveryDisabled++;
+      }
+    }
+
+    return {
+      companyId,
+      totalLeads,
+      eligibleLeads: eligible,
+      suppressedLeads: suppressed,
+      draftsTotal,
+      pendingApproval,
+      approved,
+      rejected,
+      deliveryDisabled,
+      policy: 'External outreach transmission disabled by safeguard policy.',
+    };
+  }
+}
