@@ -165,6 +165,9 @@ export function AdministrationOverview({ companyId }: { companyId: string }) {
           ))}
         </ul>
       </Panel>
+      <p className="text-xs text-muted">
+        Need to update your company details? <a className="text-accent hover:underline" href={`/company/${encodeURIComponent(companyId)}/administration/profile`}>Edit company profile &rarr;</a>
+      </p>
       <p className="text-xs text-muted">Integrations, credentials, model configuration and environment settings are deliberately not shown.</p>
     </div>
   );

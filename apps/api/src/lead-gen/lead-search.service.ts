@@ -95,12 +95,6 @@ export function applyDemoEmail(l: FoundLead, demo = process.env.LEAD_DEMO_EMAIL?
 
 const OVERPASS_URL = process.env.OVERPASS_URL ?? 'https://overpass-api.de/api/interpreter';
 
-const PLACES_URL = 'https://places.googleapis.com/v1/places:searchText';
-const FIELD_MASK = [
-  'places.id', 'places.displayName', 'places.formattedAddress', 'places.websiteUri',
-  'places.nationalPhoneNumber', 'places.userRatingCount', 'places.editorialSummary', 'places.location',
-].join(',');
-
 const _SEARCH_OFFSETS: Record<string, number> = { best: 0, popular: 0 };
 
 @Injectable()
@@ -201,86 +195,10 @@ export class LeadSearchService {
       return this.mock(q, max).filter((l) => !knownPlaceIds.has(l.googlePlaceId));
     }
 
-    // Google provider path - MUST FAIL CLOSED on disabled/misconfigured/failed provider
-    if (process.env.LEAD_GEN_PROVIDER_ENABLED !== 'true') {
-      throw new Error('Lead discovery failed: Google Places provider is disabled (LEAD_GEN_PROVIDER_ENABLED must be "true")');
-    }
-    if (!process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_PLACES_API_KEY.trim() === '') {
-      throw new Error('Lead discovery failed: Google Places API key is missing (GOOGLE_PLACES_API_KEY is not set)');
-    }
-
-    const body: any = { textQuery: `${q.variant ? `${q.variant} ` : ''}${q.category} in ${q.location}`, maxResultCount: max };
-    if (q.radius) {
-      const center = await this.places({ textQuery: q.location, maxResultCount: 1 });
-      const loc = center[0]?.location;
-      if (loc) body.locationBias = { circle: { center: loc, radius: Math.min(q.radius, 50000) } };
-    }
-
-    const placesData = await this.places(body);
-    if (!Array.isArray(placesData)) {
-      throw new Error('Lead discovery failed: invalid response from Google Places provider (expected places array)');
-    }
-
-    const results: FoundLead[] = [];
-    for (const p of placesData) {
-      if (!p || !p.id) continue;
-      if (knownPlaceIds.has(p.id)) continue;
-      const website: string | null = p.websiteUri ?? null;
-      const lead = {
-        googlePlaceId: p.id,
-        businessName: p.displayName?.text ?? 'Unknown',
-        category: q.category,
-        location: p.formattedAddress ?? q.location,
-        website,
-        email: website ? await this.scrapeEmail(website) : null,
-        phone: p.nationalPhoneNumber ?? null,
-        description: p.editorialSummary?.text ?? null,
-        reviewCount: p.userRatingCount ?? 0,
-        lat: p.location?.latitude,
-        lng: p.location?.longitude,
-      };
-      results.push({ ...lead, qualityScore: scoreLead(lead) });
-    }
-    return results;
-  }
-
-  private async places(body: any): Promise<any[]> {
-    const key = process.env.GOOGLE_PLACES_API_KEY?.trim();
-    if (!key) {
-      throw new Error('Google Places provider request failed: missing API key');
-    }
-    const res = await fetch(PLACES_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': key,
-        'X-Goog-FieldMask': FIELD_MASK,
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      throw new Error(`Google Places API request failed with status ${res.status}: ${errText}`);
-    }
-    const json = await res.json().catch((e) => {
-      throw new Error(`Google Places API returned invalid JSON: ${e.message}`);
-    });
-    if (json && typeof json === 'object' && json.error) {
-      throw new Error(`Google Places API returned error: ${json.error.message ?? JSON.stringify(json.error)}`);
-    }
-    return json?.places ?? [];
-  }
-
-  private async scrapeEmail(url: string): Promise<string | null> {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-      const html = (await res.text()).slice(0, 500_000);
-      const m = html.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.(?!png|jpg|jpeg|gif|svg|webp)[A-Z]{2,}/i);
-      return m ? m[0].toLowerCase() : null;
-    } catch {
-      return null;
-    }
+    // Google provider path - Obsolete direct scraping is retired in favor of Automation #1 (n8n).
+    throw new Error(
+      'Direct Google Places search in LeadSearchService is retired. Google Maps lead finding routes via Automation #1 (n8n) in LeadGenService.',
+    );
   }
 
   private mock(q: LeadSearchQuery, max: number): FoundLead[] {

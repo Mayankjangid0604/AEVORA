@@ -5,6 +5,7 @@ import { RealtimeGateway } from '../devices/realtime.gateway';
 import { createHash } from 'crypto';
 import { LeadSearchService, scoreFactors, scoreLead } from './lead-search.service';
 import { isRecipientSuppressed } from '../integration/integration.service';
+import { N8nClientService } from '../automation/n8n-client.service';
 
 export interface ImportLeadRow {
   businessName: string;
@@ -54,6 +55,7 @@ export class LeadGenService {
     private readonly prisma: PrismaService,
     private readonly search: LeadSearchService,
     private readonly realtime: RealtimeGateway,
+    private readonly n8nClient?: N8nClientService,
   ) {}
 
   async runForCompany(companyId: string, triggeredBy: string, actorId?: string) {
@@ -91,42 +93,87 @@ export class LeadGenService {
         SEARCH_VARIANTS.slice(0, Math.min(SEARCH_VARIANTS.length, Math.max(1, weights[category] ?? 1))).map((variant) => ({ location, category, variant })),
       ));
       for (const { location, category, variant } of searches) {
-        const found = await this.search.search({ category, location, radius, maxResults: 20, variant }, known);
-        totalFound += found.length;
-        for (const f of found) {
-          known.add(f.googlePlaceId);
-          try {
-            const lead = await this.prisma.salesLead.create({
-              data: {
-                companyId,
-                name: f.businessName,
-                organizationName: f.businessName,
-                contactEmail: f.email,
-                contactPhone: f.phone,
-                website: f.website,
-                googlePlaceId: f.googlePlaceId,
-                qualityScore: f.qualityScore,
-                industry: f.category,
-                geography: f.location,
-                source: f.googlePlaceId.startsWith('osm-') ? 'LEAD_GEN_OSM' : f.googlePlaceId.startsWith('mock-') ? 'LEAD_GEN_MOCK' : 'LEAD_GEN_GOOGLE_PLACES',
-                notes: f.description,
-                metadata: { leadGenRunId: run.id, reviewCount: f.reviewCount, scoreFactors: scoreFactors(f), collectedAt: new Date().toISOString(), ...(f.lat != null && f.lng != null ? { lat: f.lat, lng: f.lng } : {}) },
-                leadGenAudits: { create: { event: 'FOUND', detail: { runId: run.id, qualityScore: f.qualityScore }, actorId } },
-              },
-            });
-            totalNew++;
-            await this.prisma.simulationEvent.create({
-              data: {
-                type: 'LEAD_FOUND',
-                simulationTime: new Date(),
-                payload: { companyId, leadId: lead.id, qualityScore: f.qualityScore },
-                idempotencyKey: `lead.found:${lead.id}`,
-              },
-            });
-            this.realtime.broadcastToUser(company.chairmanId, 'lead.found', { leadId: lead.id, businessName: lead.name, qualityScore: f.qualityScore });
-          } catch (e) {
-            // Unique (companyId, googlePlaceId): inserted concurrently, skip.
-            if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002')) throw e;
+        if (this.search.source === 'google') {
+          // Primary lead-finding source: Automation #1 (n8n Google Maps workflow)
+          if (!this.n8nClient || !this.n8nClient.isConfigured()) {
+            throw new Error(
+              'Google Maps lead finding requires Automation #1 (n8n). Configure N8N_API_URL and N8N_API_KEY in environment.',
+            );
+          }
+
+          this.logger.log(`Executing Automation #1 (n8n Google Maps) for "${category}" in "${location}"`);
+          const execRes = await this.n8nClient.executeWorkflow('automation-1-google-lead-finding', {
+            category,
+            location,
+            maxResults: 20,
+            companyId,
+          });
+
+          if (!execRes.executed || !execRes.result) {
+            throw new Error(`Automation #1 execution failed: ${execRes.error || 'Unknown n8n error'}`);
+          }
+
+          const count = execRes.result.count ?? 0;
+          const created = execRes.result.created ?? 0;
+          totalFound += count;
+          totalNew += created;
+
+          if (execRes.result.leads && Array.isArray(execRes.result.leads)) {
+            for (const lead of execRes.result.leads) {
+              await this.prisma.simulationEvent.create({
+                data: {
+                  type: 'LEAD_FOUND',
+                  simulationTime: new Date(),
+                  payload: { companyId, leadId: lead.id, qualityScore: lead.qualityScore },
+                  idempotencyKey: `lead.found:${lead.id}`,
+                },
+              }).catch(() => {});
+              this.realtime.broadcastToUser(company.chairmanId, 'lead.found', {
+                leadId: lead.id,
+                businessName: lead.name,
+                qualityScore: lead.qualityScore,
+              });
+            }
+          }
+        } else {
+          // Non-Google provider fallback (OSM or explicit test mock)
+          const found = await this.search.search({ category, location, radius, maxResults: 20, variant }, known);
+          totalFound += found.length;
+          for (const f of found) {
+            known.add(f.googlePlaceId);
+            try {
+              const lead = await this.prisma.salesLead.create({
+                data: {
+                  companyId,
+                  name: f.businessName,
+                  organizationName: f.businessName,
+                  contactEmail: f.email,
+                  contactPhone: f.phone,
+                  website: f.website,
+                  googlePlaceId: f.googlePlaceId,
+                  qualityScore: f.qualityScore,
+                  industry: f.category,
+                  geography: f.location,
+                  source: f.googlePlaceId.startsWith('osm-') ? 'LEAD_GEN_OSM' : 'LEAD_GEN_MOCK',
+                  notes: f.description,
+                  metadata: { leadGenRunId: run.id, reviewCount: f.reviewCount, scoreFactors: scoreFactors(f), collectedAt: new Date().toISOString(), ...(f.lat != null && f.lng != null ? { lat: f.lat, lng: f.lng } : {}) },
+                  leadGenAudits: { create: { event: 'FOUND', detail: { runId: run.id, qualityScore: f.qualityScore }, actorId } },
+                },
+              });
+              totalNew++;
+              await this.prisma.simulationEvent.create({
+                data: {
+                  type: 'LEAD_FOUND',
+                  simulationTime: new Date(),
+                  payload: { companyId, leadId: lead.id, qualityScore: f.qualityScore },
+                  idempotencyKey: `lead.found:${lead.id}`,
+                },
+              });
+              this.realtime.broadcastToUser(company.chairmanId, 'lead.found', { leadId: lead.id, businessName: lead.name, qualityScore: f.qualityScore });
+            } catch (e) {
+              // Unique (companyId, googlePlaceId): inserted concurrently, skip.
+              if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002')) throw e;
+            }
           }
         }
       }

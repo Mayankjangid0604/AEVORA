@@ -1,0 +1,479 @@
+/**
+ * AEVORA AUTOMATION #3 — CONTROLLED INTEGRATION TEST
+ *
+ * SAFETY RESTRICTIONS:
+ * - SAFE BY DEFAULT: Runs in DRY RUN (plan) mode unless BOTH --execute AND
+ *   --expected-tenant=<CONFIRMED_TEST_TENANT_ID> are explicitly passed.
+ * - NEVER targets the production tenant (AEVORA Technologies).
+ * - Verifies baseline counts, creates isolated synthetic records in test tenant only,
+ *   executes single research pipeline, validates brief/scoring/qualification/audit,
+ *   verifies production tenant isolation, and executes complete dependency-safe cleanup.
+ */
+
+const fs = require('fs');
+const http = require('http');
+
+function loadEnvKey(key) {
+  for (const f of ['.env', 'apps/api/.env']) {
+    if (!fs.existsSync(f)) continue;
+    for (const rawLine of fs.readFileSync(f, 'utf8').split('\n')) {
+      const l = rawLine.trim();
+      if (!l || l.startsWith('#') || !l.includes('=')) continue;
+      const eqIdx = l.indexOf('=');
+      const k = l.slice(0, eqIdx).trim();
+      if (k === key) {
+        let v = l.slice(eqIdx + 1).trim();
+        if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+          v = v.slice(1, -1);
+        }
+        return v;
+      }
+    }
+  }
+  return null;
+}
+
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = loadEnvKey('DATABASE_URL');
+}
+
+const CONFIRMED_TEST_TENANT_ID = '607da85a-7ad3-43b6-bf88-eace1125984d';
+const PRODUCTION_TENANT_ID = '9d98b53b-3b79-45b8-9bb9-6cbac171bc3c';
+const integrationKey = loadEnvKey('INTEGRATION_API_KEY');
+
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
+// Parse CLI flags
+const args = process.argv.slice(2);
+const isExecute = args.includes('--execute');
+const tenantArg = args.find(a => a.startsWith('--expected-tenant='))?.split('=')[1]
+  || args.find(a => a.startsWith('--tenant-id='))?.split('=')[1]
+  || null;
+
+async function checkHttp(url, headers = {}) {
+  return new Promise((resolve) => {
+    try {
+      const u = new URL(url);
+      const req = http.request({
+        hostname: u.hostname,
+        port: u.port,
+        path: u.pathname + u.search,
+        method: 'GET',
+        headers,
+        timeout: 5000,
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => resolve({ status: res.statusCode, ok: res.statusCode >= 200 && res.statusCode < 400, data }));
+      });
+      req.on('error', err => resolve({ status: 0, ok: false, error: err.message }));
+      req.on('timeout', () => { req.destroy(); resolve({ status: 0, ok: false, error: 'TIMEOUT' }); });
+      req.end();
+    } catch (e) {
+      resolve({ status: 0, ok: false, error: e.message });
+    }
+  });
+}
+
+async function postHttp(url, headers, body) {
+  return new Promise((resolve) => {
+    try {
+      const u = new URL(url);
+      const dataStr = JSON.stringify(body);
+      const req = http.request({
+        hostname: u.hostname,
+        port: u.port,
+        path: u.pathname + u.search,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(dataStr),
+          ...headers,
+        },
+        timeout: 120000, // 2 minutes for LLM generation
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            resolve({ status: res.statusCode, ok: res.statusCode >= 200 && res.statusCode < 400, json: JSON.parse(data) });
+          } catch(e) {
+            resolve({ status: res.statusCode, ok: false, raw: data });
+          }
+        });
+      });
+      req.on('error', err => resolve({ status: 0, ok: false, error: err.message }));
+      req.on('timeout', () => { req.destroy(); resolve({ status: 0, ok: false, error: 'TIMEOUT' }); });
+      req.write(dataStr);
+      req.end();
+    } catch (e) {
+      resolve({ status: 0, ok: false, error: e.message });
+    }
+  });
+}
+
+async function main() {
+  console.log('================================================================');
+  console.log('  AEVORA AUTOMATION #3 — CONTROLLED INTEGRATION TEST');
+  console.log('================================================================');
+  console.log(`Mode: ${isExecute ? 'LIVE EXECUTION (AUTHORIZED)' : 'DRY RUN / PLAN ONLY (SAFE)'}`);
+  console.log(`Timestamp: ${new Date().toISOString()}`);
+
+  // 1. Preflight Health Verification
+  console.log('\n--- 1. Preflight Health Checks ---');
+  const apiHealth = await checkHttp('http://127.0.0.1:13000/automation/readiness');
+  console.log(`  API Health (http://127.0.0.1:13000): ${apiHealth.ok ? 'OK (200)' : 'FAILED (' + (apiHealth.error || apiHealth.status) + ')'}`);
+
+  const ollamaHealth = await checkHttp('http://127.0.0.1:11434/api/tags');
+  console.log(`  Ollama Health (http://127.0.0.1:11434): ${ollamaHealth.ok ? 'OK (200)' : 'FAILED (' + (ollamaHealth.error || ollamaHealth.status) + ')'}`);
+
+  if (!apiHealth.ok || !ollamaHealth.ok) {
+    console.error('\n[ABORT] Prerequisites not met: API and Ollama must be reachable.');
+    process.exit(1);
+  }
+
+  // 2. Tenant Safety & Boundary Checks
+  console.log('\n--- 2. Tenant Verification & Safety Gate ---');
+  if (tenantArg === PRODUCTION_TENANT_ID) {
+    console.error(`\n[FATAL] TARGET TENANT IS PRODUCTION TENANT (${PRODUCTION_TENANT_ID}).`);
+    console.error('[FATAL] Under no circumstances may integration tests run against the production tenant.');
+    process.exit(1);
+  }
+
+  const testTenant = await prisma.company.findUnique({
+    where: { id: CONFIRMED_TEST_TENANT_ID },
+    include: {
+      salesLeads: true,
+      employees: true,
+    }
+  });
+
+  if (!testTenant) {
+    console.error(`\n[ABORT] Confirmed isolated test tenant (${CONFIRMED_TEST_TENANT_ID}) not found in database.`);
+    process.exit(1);
+  }
+
+  console.log(`  Test Tenant ID: ${testTenant.id}`);
+  console.log(`  Test Tenant Name: "${testTenant.name}" (Status: ${testTenant.status})`);
+  console.log(`  Current Leads in Test Tenant: ${testTenant.salesLeads.length}`);
+  console.log(`  Current Employees in Test Tenant: ${testTenant.employees.length}`);
+
+  if (testTenant.salesLeads.length > 0) {
+    console.error('\n[ABORT] Isolated test tenant contains unexpected existing leads. Refusing to proceed.');
+    process.exit(1);
+  }
+
+  // 3. Baseline Snapshot
+  console.log('\n--- 3. Baseline Counts Snapshot ---');
+  const prodLeadCountBefore = await prisma.salesLead.count({ where: { companyId: PRODUCTION_TENANT_ID } });
+  const prodQualCountBefore = await prisma.qualificationRecord.count({ where: { companyId: PRODUCTION_TENANT_ID } });
+  const prodAuditCountBefore = await prisma.leadGenAudit.count({ where: { lead: { companyId: PRODUCTION_TENANT_ID } } });
+  const prodEmpCountBefore = await prisma.employee.count({ where: { companyId: PRODUCTION_TENANT_ID } });
+  const totalAuditCountBefore = await prisma.leadGenAudit.count();
+
+  console.log(`  Production Tenant (${PRODUCTION_TENANT_ID}):`);
+  console.log(`    - SalesLeads: ${prodLeadCountBefore}`);
+  console.log(`    - QualificationRecords: ${prodQualCountBefore}`);
+  console.log(`    - LeadGenAudits: ${prodAuditCountBefore}`);
+  console.log(`    - Employees: ${prodEmpCountBefore}`);
+  console.log(`  Total Global LeadGenAudit Records: ${totalAuditCountBefore}`);
+
+  // DRY RUN GUARD
+  if (!isExecute || tenantArg !== CONFIRMED_TEST_TENANT_ID) {
+    console.log('\n================================================================');
+    console.log('  DRY RUN / PLAN COMPLETED (ZERO WRITES PERFORMED)');
+    console.log('================================================================');
+    console.log('The script is safe by default and will NOT modify records or trigger research.');
+    console.log('To execute this test under controlled authorization, both parameters are required:');
+    console.log(`  node scripts/test-auto3-controlled-integration.js --execute --expected-tenant=${CONFIRMED_TEST_TENANT_ID}`);
+    await prisma.$disconnect();
+    return;
+  }
+
+  // 4. Authorized Execution Phase
+  console.log('\n--- 4. Seeding Isolated Synthetic Test Records ---');
+  const testRunId = `test-${Date.now()}`;
+  let createdDept = null;
+  let createdRole = null;
+  let createdEmployee = null;
+  let createdLead = null;
+  let executionErrorOccurred = false;
+
+  try {
+    // 4.1 Create test Department & Role & Employee for qualification record evaluation
+    createdDept = await prisma.department.create({
+      data: {
+        companyId: CONFIRMED_TEST_TENANT_ID,
+        name: `Automated Testing Dept - ${testRunId}`,
+      }
+    });
+
+    createdRole = await prisma.role.create({
+      data: {
+        companyId: CONFIRMED_TEST_TENANT_ID,
+        departmentId: createdDept.id,
+        title: `AI Sales Evaluator - ${testRunId}`,
+      }
+    });
+
+    createdEmployee = await prisma.employee.create({
+      data: {
+        companyId: CONFIRMED_TEST_TENANT_ID,
+        departmentId: createdDept.id,
+        roleId: createdRole.id,
+        name: 'AI Agent Evaluator',
+        identitySeed: `test-identity-${testRunId}`,
+      }
+    });
+    console.log(`  Created Synthetic Employee: ${createdEmployee.id} in Dept: ${createdDept.id}`);
+
+    // 4.2 Create Synthetic SalesLead
+    createdLead = await prisma.salesLead.create({
+      data: {
+        companyId: CONFIRMED_TEST_TENANT_ID,
+        name: `Synthetic Enterprise Solutions - ${testRunId}`,
+        website: 'https://test-synthetic-enterprise.local',
+        contactPhone: '(555) 019-9821',
+        contactEmail: 'contact@synthetic-enterprise.local',
+        industry: 'Commercial IT Services',
+        status: 'QUALIFIED',
+        qualityScore: 65,
+        metadata: {
+          isSynthetic: true,
+          testRunId,
+          scoreFactors: { reviews: 25 },
+          enrichment: {
+            reachability: { checked: true, reachable: true, statusCode: 200, responseTimeMs: 1420 },
+            emailVerification: { email: 'contact@synthetic-enterprise.local', status: 'VALID_SYNTAX_MX', syntaxValid: true, mxFound: true },
+            extractedFacts: {
+              businessDescription: 'Provider of commercial cloud architecture, legacy modernization, and IT support services.',
+              services: [
+                'Cloud Architecture & Migration',
+                'Managed IT Infrastructure',
+                'Legacy Database Modernization',
+                '24/7 Systems Monitoring',
+                'Cybersecurity Compliance'
+              ],
+              contactEmails: ['contact@synthetic-enterprise.local'],
+              contactPhones: ['(555) 019-9821'],
+              socialLinks: { linkedin: 'https://linkedin.com/company/synthetic-it' },
+              businessSignals: {
+                onlineBookingAvailable: false,
+                hasContactForm: false,
+                yearsInBusiness: 8,
+              },
+              idealCustomerProfile: 'Mid-sized commercial businesses seeking digital infrastructure modernization.',
+            }
+          }
+        }
+      }
+    });
+    console.log(`  Created Synthetic SalesLead: ${createdLead.id} ("${createdLead.name}")`);
+
+    // 5. Trigger Research Execution Endpoint
+    console.log('\n--- 5. Triggering Research Webhook Endpoint ---');
+    const researchPayload = {
+      leadIds: [createdLead.id],
+      forceRefresh: true,
+      limit: 1,
+    };
+
+    const webhookRes = await postHttp(
+      'http://127.0.0.1:13000/automation/webhook/research',
+      {
+        'x-integration-key': integrationKey,
+        'x-company-id': CONFIRMED_TEST_TENANT_ID,
+      },
+      researchPayload
+    );
+
+    console.log(`  HTTP Response Status: ${webhookRes.status} (ok: ${webhookRes.ok})`);
+    if (!webhookRes.ok) {
+      console.error('  Response Body:', webhookRes.raw || webhookRes.json);
+      throw new Error(`Research webhook execution failed with status ${webhookRes.status}`);
+    }
+
+    const resJson = webhookRes.json;
+    console.log(`  Researched Count: ${resJson.researched}, Ineligible: ${resJson.ineligible}, Failed: ${resJson.failed}`);
+    const leadResult = resJson.leads?.[0];
+    console.log(`  Opportunity Score: ${leadResult?.opportunityScore}/100, Priority: ${leadResult?.priority}, Recommendation: ${leadResult?.recommendation}`);
+
+    // 6. Verify Persisted Records & DB State
+    console.log('\n--- 6. Verifying Database State & Assertions ---');
+    const updatedLead = await prisma.salesLead.findUnique({
+      where: { id: createdLead.id },
+      include: {
+        qualifications: true,
+        leadGenAudits: true,
+      }
+    });
+
+    const brief = updatedLead?.metadata?.researchBrief;
+    console.log(`  [ASSERT] Research Brief in Metadata: ${brief ? 'YES' : 'NO'}`);
+    console.log(`  [ASSERT] Executive Summary present: ${brief?.executiveSummary ? 'YES' : 'NO'}`);
+    console.log(`  [ASSERT] Identified Pains count: ${brief?.identifiedPains?.length || 0}`);
+    console.log(`  [ASSERT] Recommended Pitch present: ${brief?.recommendedPitch ? 'YES' : 'NO'}`);
+    console.log(`  [ASSERT] QualificationRecord created: ${updatedLead?.qualifications?.length || 0}`);
+    console.log(`  [ASSERT] LeadGenAudit event created: ${updatedLead?.leadGenAudits?.length || 0}`);
+
+    // 7. Verify Production Tenant Isolation (All Models)
+    console.log('\n--- 7. Verifying Production Tenant Isolation (Comprehensive) ---');
+    const prodLeadCountAfter = await prisma.salesLead.count({ where: { companyId: PRODUCTION_TENANT_ID } });
+    const prodQualCountAfter = await prisma.qualificationRecord.count({ where: { companyId: PRODUCTION_TENANT_ID } });
+    const prodAuditCountAfter = await prisma.leadGenAudit.count({ where: { lead: { companyId: PRODUCTION_TENANT_ID } } });
+    const prodEmpCountAfter = await prisma.employee.count({ where: { companyId: PRODUCTION_TENANT_ID } });
+
+    console.log(`  Production Leads: Before=${prodLeadCountBefore}, After=${prodLeadCountAfter}`);
+    console.log(`  Production Qualifications: Before=${prodQualCountBefore}, After=${prodQualCountAfter}`);
+    console.log(`  Production Audits: Before=${prodAuditCountBefore}, After=${prodAuditCountAfter}`);
+    console.log(`  Production Employees: Before=${prodEmpCountBefore}, After=${prodEmpCountAfter}`);
+
+    if (
+      prodLeadCountBefore !== prodLeadCountAfter ||
+      prodQualCountBefore !== prodQualCountAfter ||
+      prodAuditCountBefore !== prodAuditCountAfter ||
+      prodEmpCountBefore !== prodEmpCountAfter
+    ) {
+      throw new Error('[CRITICAL LEAK] Production tenant counts changed during test execution!');
+    }
+    console.log('  [PASS] Zero production records modified or touched across all CRM tables.');
+
+    console.log('\n--- Test Pipeline Executed Successfully ---');
+
+  } catch (err) {
+    executionErrorOccurred = true;
+    console.error('\n[ERROR DURING EXECUTION]:', err.message);
+  } finally {
+    // 8. Safe Cleanup in Dependency-Safe Order with Settle Delay and Secondary Sweep
+    console.log('\n--- 8. Safe Cleanup of Synthetic Records ---');
+
+    if (executionErrorOccurred) {
+      console.log('  Pausing 1.5s for any in-flight database transactions to settle...');
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
+    // Step 8.1: Primary Delete by Captured In-Memory IDs
+    if (createdLead) {
+      try {
+        const deletedAudits = await prisma.leadGenAudit.deleteMany({
+          where: { leadId: createdLead.id }
+        });
+        console.log(`  Cleaned up LeadGenAudit records: ${deletedAudits.count}`);
+      } catch (cleanErr) {
+        console.error('  [CLEANUP ERROR (LeadGenAudit)]: ', cleanErr.message);
+      }
+
+      try {
+        const deletedQuals = await prisma.qualificationRecord.deleteMany({
+          where: { salesLeadId: createdLead.id }
+        });
+        console.log(`  Cleaned up QualificationRecords: ${deletedQuals.count}`);
+      } catch (cleanErr) {
+        console.error('  [CLEANUP ERROR (QualificationRecord)]: ', cleanErr.message);
+      }
+
+      try {
+        const deletedLead = await prisma.salesLead.delete({
+          where: { id: createdLead.id }
+        });
+        console.log(`  Cleaned up SalesLead: ${deletedLead.id}`);
+      } catch (cleanErr) {
+        console.error('  [CLEANUP ERROR (SalesLead)]: ', cleanErr.message);
+      }
+    }
+
+    if (createdEmployee) {
+      try {
+        await prisma.employee.delete({ where: { id: createdEmployee.id } });
+        console.log(`  Cleaned up Employee: ${createdEmployee.id}`);
+      } catch (cleanErr) {
+        console.error('  [CLEANUP ERROR (Employee)]: ', cleanErr.message);
+      }
+    }
+
+    if (createdRole) {
+      try {
+        await prisma.role.delete({ where: { id: createdRole.id } });
+        console.log(`  Cleaned up Role: ${createdRole.id}`);
+      } catch (cleanErr) {
+        console.error('  [CLEANUP ERROR (Role)]: ', cleanErr.message);
+      }
+    }
+
+    if (createdDept) {
+      try {
+        await prisma.department.delete({ where: { id: createdDept.id } });
+        console.log(`  Cleaned up Department: ${createdDept.id}`);
+      } catch (cleanErr) {
+        console.error('  [CLEANUP ERROR (Dept)]: ', cleanErr.message);
+      }
+    }
+
+    // Step 8.2: Secondary Sweep by testRunId Marker in Isolated Test Tenant Only
+    try {
+      await prisma.leadGenAudit.deleteMany({
+        where: { lead: { companyId: CONFIRMED_TEST_TENANT_ID, metadata: { path: ['testRunId'], equals: testRunId } } }
+      });
+      await prisma.qualificationRecord.deleteMany({
+        where: { companyId: CONFIRMED_TEST_TENANT_ID, salesLead: { metadata: { path: ['testRunId'], equals: testRunId } } }
+      });
+      await prisma.salesLead.deleteMany({
+        where: { companyId: CONFIRMED_TEST_TENANT_ID, metadata: { path: ['testRunId'], equals: testRunId } }
+      });
+      await prisma.employee.deleteMany({
+        where: { companyId: CONFIRMED_TEST_TENANT_ID, identitySeed: { contains: testRunId } }
+      });
+      await prisma.role.deleteMany({
+        where: { companyId: CONFIRMED_TEST_TENANT_ID, title: { contains: testRunId } }
+      });
+      await prisma.department.deleteMany({
+        where: { companyId: CONFIRMED_TEST_TENANT_ID, name: { contains: testRunId } }
+      });
+    } catch (sweepErr) {
+      console.error('  [CLEANUP ERROR (Secondary Sweep)]: ', sweepErr.message);
+    }
+
+    // Step 8.3: Rigorous Post-Cleanup Multi-Model Verification
+    console.log('\n--- 9. Rigorous Post-Cleanup Verification ---');
+    const remainingLeads = await prisma.salesLead.count({ where: { companyId: CONFIRMED_TEST_TENANT_ID } });
+    const remainingQuals = await prisma.qualificationRecord.count({ where: { companyId: CONFIRMED_TEST_TENANT_ID } });
+    const remainingAudits = await prisma.leadGenAudit.count({ where: { lead: { companyId: CONFIRMED_TEST_TENANT_ID } } });
+    const remainingEmployees = await prisma.employee.count({ where: { companyId: CONFIRMED_TEST_TENANT_ID } });
+    const remainingRoles = await prisma.role.count({ where: { companyId: CONFIRMED_TEST_TENANT_ID } });
+    const remainingDepts = await prisma.department.count({ where: { companyId: CONFIRMED_TEST_TENANT_ID } });
+
+    console.log(`  Remaining in Test Tenant:`);
+    console.log(`    - SalesLeads: ${remainingLeads} (expected 0)`);
+    console.log(`    - QualificationRecords: ${remainingQuals} (expected 0)`);
+    console.log(`    - LeadGenAudits: ${remainingAudits} (expected 0)`);
+    console.log(`    - Employees: ${remainingEmployees} (expected 0)`);
+    console.log(`    - Roles: ${remainingRoles} (expected 0)`);
+    console.log(`    - Departments: ${remainingDepts} (expected 0)`);
+
+    const hasLingeringRecords =
+      remainingLeads > 0 ||
+      remainingQuals > 0 ||
+      remainingAudits > 0 ||
+      remainingEmployees > 0 ||
+      remainingRoles > 0 ||
+      remainingDepts > 0;
+
+    console.log('================================================================');
+    if (hasLingeringRecords || executionErrorOccurred) {
+      console.error('  [FAILED] INTEGRATION TEST OR CLEANUP FAILED (RESIDUAL RECORDS DETECTED)');
+      console.log('================================================================');
+      process.exitCode = 1;
+    } else {
+      console.log('  CLEANUP COMPLETE & VERIFIED (ZERO RESIDUAL RECORDS)');
+      console.log('================================================================');
+    }
+    await prisma.$disconnect();
+  }
+}
+
+main().catch(async (err) => {
+  console.error('[FATAL]:', err);
+  await prisma.$disconnect();
+  process.exit(1);
+});

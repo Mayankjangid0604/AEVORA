@@ -1,0 +1,33 @@
+const fs = require('fs');
+
+function loadEnvKey(key) {
+  for (const f of ['.env', 'apps/api/.env']) {
+    if (!fs.existsSync(f)) continue;
+    for (const rawLine of fs.readFileSync(f, 'utf8').split('\n')) {
+      const l = rawLine.trim();
+      if (l.startsWith(key + '=')) {
+        let v = l.slice(key.length + 1).trim();
+        if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+          v = v.slice(1, -1);
+        }
+        return v;
+      }
+    }
+  }
+  return null;
+}
+
+const n8nKey = loadEnvKey('N8N_API_KEY');
+
+async function main() {
+  const schemaRes = await fetch('http://localhost:5678/api/v1/credentials/schema/httpHeaderAuth', {
+    headers: { 'X-N8N-API-KEY': n8nKey }
+  });
+  console.log('httpHeaderAuth schema status:', schemaRes.status);
+  if (schemaRes.ok) {
+    const data = await schemaRes.json();
+    console.log('Schema:', JSON.stringify(data, null, 2));
+  }
+}
+
+main().catch(console.error);

@@ -13,6 +13,9 @@ export const OPTIONAL_ENV: Record<string, string> = {
   UNSUBSCRIBE_SECRET: 'outbound email requires >=32 characters for signed unsubscribe tokens',
   PUBLIC_API_URL: 'outbound email requires a public base URL for RFC 8058 unsubscribe links',
   DEMO_PUBLISHING_ENABLED: 'external demo publishing is disabled by default',
+  N8N_API_URL: 'n8n workflow deployment and execution via API disabled',
+  N8N_API_KEY: 'n8n workflow deployment and execution via API disabled',
+  GOOGLE_PLACES_API_KEY: 'Google Places lead finding disabled',
 };
 
 export const KNOWN_INSECURE_JWT_SECRETS = new Set([
@@ -118,6 +121,12 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): string[] {
     .map(([k, why]) => `${k} not set: ${why}`);
   if (!env.COMPANY_EMAIL?.trim() && !env.SMTP_USER?.trim()) warnings.push('COMPANY_EMAIL not set (and no SMTP_USER): client emails and invoices will refuse to send');
   const outreach = env.OUTREACH_ENVIRONMENT;
+  // Misfilled SMTP fields are the most common reason mail silently never leaves. Values are never echoed.
+  const smtpHost = env.SMTP_HOST?.trim() ?? '';
+  const smtpUser = env.SMTP_USER?.trim() ?? '';
+  if (smtpHost.includes('@')) warnings.push('SMTP_HOST looks like an email address: it must be the mail SERVER name (for Gmail: smtp.gmail.com). Put the address in SMTP_USER.');
+  if (smtpHost && smtpUser && /(^|\.)gmail\.com$/i.test(smtpHost) && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(smtpUser)) warnings.push('SMTP_USER must be the full Gmail address (name@gmail.com) when SMTP_HOST is a Gmail server.');
+
   if (outreach && !['SIMULATION', 'SANDBOX', 'PRODUCTION'].includes(outreach)) warnings.push(`OUTREACH_ENVIRONMENT="${outreach}" is invalid: falling back to SANDBOX`);
   for (const k of ['MIN_BALANCE_PAISE', 'WARNING_BALANCE_PAISE']) {
     if (env[k] && !Number.isSafeInteger(Number(env[k]))) throw new Error(`${k} must be an integer number of paise`);

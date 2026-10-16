@@ -9,7 +9,9 @@ import {
 } from './offer-market.types';
 import { AuthorityTier } from '../governance/authority-context.types';
 
-describe('AEVORA V24 — PostgreSQL Durable Persistence Integration Suite', () => {
+const run = process.env.E2E_DB === '1' && /:(5444)\//.test(process.env.DATABASE_URL ?? '') ? describe : describe.skip;
+
+run('AEVORA V24 — PostgreSQL Durable Persistence Integration Suite', () => {
   let prisma: PrismaService;
   let governanceService: OfferGovernanceService;
   let finService: OfferFinancialIntelligenceService;

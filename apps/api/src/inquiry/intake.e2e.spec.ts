@@ -36,7 +36,10 @@ run('Customer intake → operator queue (real disposable DB)', () => {
       await prisma.customerAuditEvent.deleteMany({ where: { companyId } });
       await prisma.managementAuditEvent.deleteMany({ where: { companyId } });
       await prisma.backgroundJob.deleteMany({ where: { companyId } });
+      await prisma.opportunity.deleteMany({ where: { companyId } });
       await prisma.clientInquiry.deleteMany({ where: { companyId } });
+      await prisma.clientContact.deleteMany({ where: { client: { companyId } } });
+      await prisma.client.deleteMany({ where: { companyId } });
       await prisma.company.delete({ where: { id: companyId } }).catch((e) => console.warn(`left behind: ${e.message}`));
     }
     await prisma.$disconnect();
@@ -62,6 +65,15 @@ run('Customer intake → operator queue (real disposable DB)', () => {
     await Promise.all(['first note', 'second note'].map((n) => inquiries.addNote(A, chair, row.id, n))); // concurrent appends
     const after = await inquiries.transition(A, chair, row.id, 'QUALIFIED', 'CONVERTED');
     expect(after.status).toBe('CONVERTED');
+    // Conversion creates exactly one Client (with the contact) and one linked Opportunity, in tenant A only.
+    const opps = await prisma.opportunity.findMany({ where: { inquiryId: row.id } });
+    expect(opps).toHaveLength(1);
+    expect(opps[0]).toMatchObject({ companyId: A, status: 'DISCOVERED', salesStage: 'NEW' });
+    const client = await prisma.client.findUniqueOrThrow({ where: { id: opps[0].clientId }, include: { contacts: true } });
+    expect(client).toMatchObject({ companyId: A, name: 'Synthetic Cafe 1' });
+    expect(client.contacts.map((c) => c.email)).toEqual([`owner1@${tag}.test`]);
+    expect((await prisma.clientInquiry.findUniqueOrThrow({ where: { id: row.id } })).clientId).toBe(client.id);
+    expect(await prisma.client.count({ where: { companyId: B } })).toBe(0);
     expect(after.internalNotes).toContain('first note');
     expect(after.internalNotes).toContain('second note');
     expect(await prisma.customerAuditEvent.count({ where: { companyId: A, objectId: row.id, action: 'INQUIRY_STATUS_CHANGED' } })).toBe(3);

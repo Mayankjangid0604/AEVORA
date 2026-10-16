@@ -37,3 +37,6 @@ parsed-errors.json
 */.turbo/
 packages/*/.turbo/
 apps/*/.turbo/
+
+# local runtime state (email test result etc.), never committed
+.local-state/

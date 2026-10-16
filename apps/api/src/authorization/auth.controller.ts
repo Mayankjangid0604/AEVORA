@@ -19,6 +19,23 @@ export class AuthController {
     return this.authService.login(body.actorId, body.credential);
   }
 
+  /** Public onboarding: register a brand new company and its initial Chairman administrator. */
+  @Public()
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @Post('register-company')
+  async registerCompany(
+    @Body() body: {
+      adminName: string;
+      adminEmail: string;
+      password: string;
+      companyName: string;
+      legalName?: string;
+      description?: string;
+    },
+  ) {
+    return this.authService.registerCompany(body);
+  }
+
   /** Authoritative identity of the bearer, resolved from the verified token + database (no secrets). */
   @Get('me')
   me(@Request() req) {

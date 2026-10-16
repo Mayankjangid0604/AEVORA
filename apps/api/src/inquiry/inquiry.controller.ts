@@ -6,6 +6,8 @@ import { RolesGuard } from '../authorization/roles.guard';
 import { Roles } from '../authorization/roles.decorator';
 import { validateIntake } from './intake';
 import { InquiryService } from './inquiry.service';
+import { InquiryAutomationService } from './inquiry-automation.service';
+import { JobService } from '../job/job.service';
 
 /**
  * Public customer intake. No login; the receiving company is server configuration. Responses carry only the
@@ -23,7 +25,7 @@ export class PublicIntakeController {
   async submit(@Body() body: unknown) {
     const v = validateIntake(body);
     if ('errors' in v) throw new BadRequestException({ message: 'Please correct the highlighted fields.', errors: v.errors });
-    const r = await this.inquiries.submitPublic(v.value);
+    const r = await this.inquiries.submitPublic(v.value, typeof (body as any)?.companyId === 'string' ? (body as any).companyId.trim() : undefined);
     return { ...r, message: 'Thank you. We have received your request and will reply by email.' };
   }
 
@@ -41,7 +43,7 @@ export class PublicIntakeController {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('CHAIRMAN', 'MANAGEMENT', 'EMPLOYEE')
 export class InquiryController {
-  constructor(private readonly inquiries: InquiryService) {}
+  constructor(private readonly inquiries: InquiryService, private readonly automation: InquiryAutomationService, private readonly jobs: JobService) {}
 
   @Get()
   list(@Request() req, @Query('status') status?: string) {
@@ -58,6 +60,24 @@ export class InquiryController {
   @Roles('CHAIRMAN', 'MANAGEMENT')
   transition(@Request() req, @Param('id') id: string, @Body() body: { from?: string; to?: string }) {
     return this.inquiries.transition(req.user.companyId, actor(req), id, body?.from, body?.to);
+  }
+
+  /** Background triage state for this request (tenant-scoped; no payload). */
+  @Get(':id/automation')
+  async automationStatus(@Request() req, @Param('id') id: string) {
+    await this.inquiries.get(req.user.companyId, id);
+    return this.automation.status(req.user.companyId, id);
+  }
+
+  /** Queue triage if none exists, or replay a FAILED one. Never creates a second job for the same request. */
+  @Post(':id/automation/retry')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async automationRetry(@Request() req, @Param('id') id: string) {
+    await this.inquiries.get(req.user.companyId, id);
+    const s = await this.automation.status(req.user.companyId, id);
+    if (s.state === 'NOT_QUEUED') await this.automation.enqueue(req.user.companyId, id);
+    else if (s.state === 'FAILED' && 'jobId' in s) await this.jobs.controlJob(req.user.companyId, req.user.actorId, s.jobId, 'replay');
+    return this.automation.status(req.user.companyId, id);
   }
 
   @Post(':id/notes')

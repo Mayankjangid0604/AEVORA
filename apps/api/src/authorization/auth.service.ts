@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as crypto from 'crypto';
@@ -40,6 +40,14 @@ export class AuthService {
     return rows.map((c: any) => ({ id: c.id, name: c.name, status: c.status, groupId: c.groupId ?? null }));
   }
 
+  hashPassword(password: string): { hash: string; salt: string; algorithm: string; workFactor: number } {
+    const salt = crypto.randomBytes(32).toString('hex');
+    const workFactor = 600000;
+    const algorithm = 'PBKDF2-SHA512';
+    const hash = crypto.pbkdf2Sync(password, salt, workFactor, 64, 'sha512').toString('hex');
+    return { hash, salt, algorithm, workFactor };
+  }
+
   private verifyPassword(password: string, hash: string, salt: string, algorithm: string, workFactor: number): boolean {
     if (!salt || !workFactor || workFactor < 600000) {
       return false;
@@ -54,6 +62,169 @@ export class AuthService {
     }
     
     return false;
+  }
+
+  /**
+   * Fresh company onboarding. Creates the company, its initial authorized administrator (Chairman),
+   * default executive department, CEO employee, AC wallet, and Real money account in one atomic transaction.
+   * Never sets a default/public password; requires strong credentials.
+   */
+  async registerCompany(dto: {
+    adminName: string;
+    adminEmail: string;
+    password: string;
+    companyName: string;
+    legalName?: string;
+    description?: string;
+  }) {
+    const adminName = dto?.adminName?.trim();
+    const adminEmail = dto?.adminEmail?.trim().toLowerCase();
+    const companyName = dto?.companyName?.trim();
+    const legalName = dto?.legalName?.trim() || `${companyName} Ltd.`;
+    const description = dto?.description?.trim() || null;
+    const password = dto?.password;
+
+    if (!adminName || adminName.length < 2 || adminName.length > 80) {
+      throw new BadRequestException('Administrator name must be between 2 and 80 characters.');
+    }
+    const EMAIL_RE = /^[^\s@<>()"',;:]+@[^\s@<>()"',;:]+\.[a-z]{2,}$/i;
+    if (!adminEmail || !EMAIL_RE.test(adminEmail) || adminEmail.length > 254) {
+      throw new BadRequestException('A valid administrator email address is required.');
+    }
+    if (!password || password.length < 8 || password.length > 128) {
+      throw new BadRequestException('Password must be between 8 and 128 characters.');
+    }
+    if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+      throw new BadRequestException('Password must contain at least one letter and one number.');
+    }
+    if (!companyName || companyName.length < 2 || companyName.length > 120) {
+      throw new BadRequestException('Company name must be between 2 and 120 characters.');
+    }
+
+    const { hash, salt, algorithm, workFactor } = this.hashPassword(password);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      let chairman = await tx.chairman.findUnique({
+        where: { email: adminEmail },
+      });
+
+      if (chairman) {
+        if (!chairman.credentialHash || !this.verifyPassword(password, chairman.credentialHash, chairman.credentialSalt || '', chairman.hashAlgorithm || 'PBKDF2-SHA512', chairman.workFactor || 600000)) {
+          throw new ConflictException('An account with this email already exists. Please sign in or use a different email.');
+        }
+      } else {
+        chairman = await tx.chairman.create({
+          data: {
+            name: adminName,
+            email: adminEmail,
+            credentialHash: hash,
+            credentialSalt: salt,
+            hashAlgorithm: algorithm,
+            workFactor,
+          },
+        });
+      }
+
+      const existingCompany = await tx.company.findFirst({
+        where: {
+          chairmanId: chairman.id,
+          name: companyName,
+          status: 'ACTIVE',
+        },
+      });
+      if (existingCompany) {
+        throw new ConflictException('You already have an active company with this name.');
+      }
+
+      const company = await tx.company.create({
+        data: {
+          name: companyName,
+          legalName,
+          description,
+          chairmanId: chairman.id,
+          status: 'ACTIVE',
+          departments: {
+            create: [
+              { name: 'Executive' },
+              { name: 'Engineering' },
+              { name: 'Operations' },
+              { name: 'Sales' },
+            ],
+          },
+        },
+        include: { departments: true },
+      });
+
+      const executiveDept = company.departments.find((d) => d.name === 'Executive');
+      if (executiveDept) {
+        await tx.employee.create({
+          data: {
+            name: 'CEO',
+            identitySeed: `${company.id}-ceo-seed`,
+            status: 'ACTIVE',
+            company: { connect: { id: company.id } },
+            department: { connect: { id: executiveDept.id } },
+            role: {
+              create: {
+                title: 'CEO',
+                level: 1,
+                accessLevel: 'MANAGEMENT',
+                company: { connect: { id: company.id } },
+              },
+            },
+          },
+        });
+      }
+
+      await tx.realMoneyAccount.create({
+        data: {
+          companyId: company.id,
+          balance: 0,
+        },
+      });
+
+      await tx.aCWallet.create({
+        data: {
+          companyId: company.id,
+          balance: 0,
+        },
+      });
+
+      await tx.companyEvent.create({
+        data: {
+          companyId: company.id,
+          type: 'COMPANY_CREATED',
+          payload: {
+            name: company.name,
+            legalName: company.legalName,
+            chairmanId: chairman.id,
+            onboarding: 'FRESH_BUSINESS_ONBOARDING',
+          },
+        },
+      });
+
+      return { chairman, company };
+    });
+
+    const accessToken = await this.jwtService.signAsync({
+      actorId: result.chairman.id,
+      actorRole: 'CHAIRMAN',
+    });
+
+    return {
+      access_token: accessToken,
+      chairman: {
+        id: result.chairman.id,
+        name: result.chairman.name,
+        email: result.chairman.email,
+      },
+      company: {
+        id: result.company.id,
+        name: result.company.name,
+        legalName: result.company.legalName,
+        status: result.company.status,
+      },
+    };
   }
 
   /** #stream-401: a 60 s token that can only open an SSE stream (EventSource can't send headers). */

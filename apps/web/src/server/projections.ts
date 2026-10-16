@@ -3,7 +3,7 @@
  * (e.g. Employee.salary, identitySeed, performance scores). Only the listed fields ever reach the browser.
  * A projection returning `undefined` means "not found" (the BFF answers 404).
  */
-import type { AgentView, AssistantMessageView, ChairmanMailView, OperatingCycleView, ContentPostView, LeadGenRunView, SalesLeadView, CeoFeedItem, CeoQuestionView, ManagementDecision, OperationalAlert, TaskDetail, TaskSummary, AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance, OfferView, OfferMeasurementView, OfferOptimizationView, InquiryView, JobView } from '@/lib/types';
+import type { AgentView, AssistantMessageView, ChairmanMailView, OperatingCycleView, ContentPostView, LeadGenRunView, SalesLeadView, CeoFeedItem, CeoQuestionView, ManagementDecision, OperationalAlert, TaskDetail, TaskSummary, AssistanceRequestView, DecisionProposalView, IntelligenceSessionView, IntelligenceSummary, DepartmentSummary, EmployeeSummary, ProjectDetail, ProjectMilestone, ProjectRequirement, ProjectRisk, ProjectSummary, ProjectTeamMember, WorkerProvenance, OfferView, OfferMeasurementView, OfferOptimizationView, InquiryView, JobView, PipelineOpportunity, PipelineProposal, DeliveryProjectRow, DeliveryProject, DeliveryHistoryEvent, EmailStatusView, AutomationStatusView } from '@/lib/types';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -291,7 +291,95 @@ function job(v: unknown): JobView | undefined {
   };
 }
 
+// ---- Opportunity -> proposal -> project pipeline ----
+const PLACEHOLDER = 'DRAFT PLACEHOLDER';
+function pipelineOpportunity(v: unknown): PipelineOpportunity | undefined {
+  if (!isObj(v) || !str(v.id)) return undefined;
+  return {
+    id: v.id as string, title: str(v.title) ?? '', status: str(v.status) ?? '', salesStage: str(v.salesStage) ?? '', estimatedValue: num(v.estimatedValue),
+    currency: str(v.currency) ?? 'INR', createdAt: str(v.createdAt) ?? '',
+    clientName: isObj(v.client) ? str(v.client.name) : null, reference: isObj(v.inquiry) ? str(v.inquiry.publicRef) : null,
+    proposals: arr(v.proposals).filter(isObj).filter((p) => str(p.id)).map((p) => ({ id: p.id as string, status: str(p.status) ?? '', version: num(p.version) ?? 1, total: num(p.total) ?? 0, currency: str(p.currency) ?? 'INR' })),
+    projects: arr(v.projects).filter(isObj).filter((p) => str(p.id)).map((p) => ({ id: p.id as string, name: str(p.name) ?? '', status: str(p.status) ?? '' })),
+  };
+}
+function pipelineProposal(v: unknown): PipelineProposal | undefined {
+  if (!isObj(v) || !str(v.id) || !str(v.status)) return undefined;
+  const approvals = arr(v.approvals).filter(isObj).map((a) => ({ decision: str(a.decision) ?? '', reason: str(a.reason), at: str(a.timestamp) ?? '' }));
+  const scope = str(v.scope) ?? '', deliverables = str(v.deliverables) ?? '', unitPrice = num(v.unitPrice) ?? 0, timeline = num(v.estimatedTimeline);
+  const missing: string[] = [];
+  if (!scope.trim() || scope.includes(PLACEHOLDER)) missing.push('scope');
+  if (!deliverables.trim() || deliverables.includes(PLACEHOLDER)) missing.push('deliverables');
+  if (!(unitPrice > 0)) missing.push('price');
+  if (!(timeline && timeline > 0)) missing.push('timeline');
+  if (!(str(v.paymentTerms) ?? '').trim()) missing.push('payment terms');
+  const projects = arr(v.projects).filter(isObj);
+  return {
+    id: v.id as string, opportunityId: str(v.opportunityId) ?? '', customerName: isObj(v.customer) ? str(v.customer.name) : null, title: str(v.title) ?? '',
+    version: num(v.version) ?? 1, status: v.status as string, scope, deliverables, assumptions: str(v.assumptions), exclusions: str(v.exclusions), paymentTerms: str(v.paymentTerms),
+    currency: str(v.currency) ?? 'INR', quantity: num(v.quantity) ?? 1, unitPrice, discount: num(v.discount) ?? 0, tax: num(v.tax) ?? 0, total: num(v.total) ?? 0,
+    estimatedTimeline: timeline, validityPeriod: num(v.validityPeriod) ?? 30, internalEstimatedCost: num(v.internalEstimatedCost),
+    approvals, approved: approvals.at(-1)?.decision === 'APPROVE', missing, projectId: str(projects[0]?.id) ?? null,
+  };
+}
+function pipelineGenerated(v: unknown): { created: boolean; proposal: PipelineProposal } | undefined {
+  if (!isObj(v)) return undefined;
+  const proposal = pipelineProposal(v.proposal);
+  return proposal ? { created: v.created === true, proposal } : undefined;
+}
+function deliveryRow(v: unknown): DeliveryProjectRow | undefined {
+  if (!isObj(v) || !str(v.id)) return undefined;
+  return { id: v.id as string, name: str(v.name) ?? '', status: str(v.status) ?? '', quotedPrice: num(v.quotedPrice), clientName: isObj(v.client) ? str(v.client.name) : null, taskCount: isObj(v._count) ? num(v._count.tasks) ?? 0 : 0, createdAt: str(v.createdAt) ?? '' };
+}
+function deliveryProject(v: unknown): DeliveryProject | undefined {
+  if (!isObj(v) || !str(v.id)) return undefined;
+  return {
+    id: v.id as string, name: str(v.name) ?? '', status: str(v.status) ?? '', quotedPrice: num(v.quotedPrice), clientName: isObj(v.client) ? str(v.client.name) : null, createdAt: str(v.createdAt) ?? '',
+    opportunityTitle: isObj(v.opportunity) ? str(v.opportunity.title) : null, proposalTitle: isObj(v.proposal) ? str(v.proposal.title) : null, proposalId: isObj(v.proposal) ? str(v.proposal.id) : null,
+    tasks: arr(v.tasks).filter(isObj).filter((t) => str(t.id)).map((t) => ({ id: t.id as string, title: str(t.title) ?? '', description: str(t.description), status: str(t.status) ?? '', priority: str(t.priority) ?? 'NORMAL', assignedEmployeeId: str(t.assignedEmployeeId), dueAt: str(t.dueAt) })),
+  };
+}
+function deliveryHistoryEvent(v: unknown): DeliveryHistoryEvent | undefined {
+  if (!isObj(v) || !str(v.id) || !str(v.action)) return undefined;
+  return { id: v.id as string, action: v.action as string, actorType: str(v.actorType) ?? '', at: str(v.timestamp) ?? '' };
+}
+function emailStatusView(v: unknown): EmailStatusView | undefined {
+  if (!isObj(v) || !str(v.provider)) return undefined;
+  const t = isObj(v.lastTest) ? v.lastTest : null;
+  return {
+    provider: v.provider as string, configValid: v.configValid === true, problems: arr(v.problems).filter((p): p is string => typeof p === 'string'), safeMode: v.safeMode === true,
+    outreachEnvironment: str(v.outreachEnvironment) ?? 'SANDBOX', generalOutreachEnabled: v.generalOutreachEnabled === true,
+    lastTest: t ? { at: str(t.at) ?? '', recipient: str(t.recipient) ?? '', smtpAccepted: t.smtpAccepted === true, smtpResponse: str(t.smtpResponse), error: str(t.error), inboxDelivery: str(t.inboxDelivery) ?? 'NOT_VERIFIED' } : null,
+  };
+}
+function automationStatus(v: unknown): AutomationStatusView | undefined {
+  if (!isObj(v) || !str(v.state)) return undefined;
+  return { enabled: v.enabled === true, state: v.state as string, attempts: num(v.attempts) ?? 0, maxAttempts: num(v.maxAttempts) ?? 0, lastError: str(v.lastError) };
+}
+function createdFlag(v: unknown): { created: boolean } | undefined {
+  return isObj(v) ? { created: v.created === true } : undefined;
+}
+function projectCreated(v: unknown): { created: boolean; projectId: string } | undefined {
+  return isObj(v) && isObj(v.project) && str(v.project.id) ? { created: v.created === true, projectId: v.project.id as string } : undefined;
+}
+
+function companyRecord(v: unknown): { id: string; name: string; legalName: string | null; description: string | null; status: string } | undefined {
+  if (!isObj(v) || !str(v.id) || !str(v.name)) return undefined;
+  return { id: v.id as string, name: v.name as string, legalName: str(v.legalName), description: str(v.description), status: str(v.status) ?? 'ACTIVE' };
+}
+
 export const projections = {
+  pipelineOpportunities: list(pipelineOpportunity),
+  pipelineProposal,
+  pipelineGenerated,
+  projectCreated,
+  deliveryProjects: list(deliveryRow),
+  deliveryProject,
+  deliveryHistory: list(deliveryHistoryEvent),
+  createdFlag,
+  emailStatus: emailStatusView,
+  companyRecord,
+  automationStatus,
   departments: list(department),
   department, // backend returns null for a missing or foreign id -> undefined -> 404
   employees: list(employee),

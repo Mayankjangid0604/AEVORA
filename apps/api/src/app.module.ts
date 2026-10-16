@@ -27,6 +27,7 @@ import { WorkloadModule } from './workload/workload.module';
 import { PerformanceModule } from './performance/performance.module';
 import { SimulationModule } from './simulation/simulation.module';
 import { InquiryModule } from './inquiry/inquiry.module';
+import { EmailStatusModule } from './config/email-status.controller';
 import { OpportunityModule } from './opportunity/opportunity.module';
 import { ProposalModule } from './proposal/proposal.module';
 import { ProjectModule } from './project/project.module';
@@ -78,6 +79,7 @@ import { VoiceModule } from './voice/voice.module';
 import { ChairmanMailModule } from './notifications/chairman-mail.module';
 import { BrowserAiModule } from './browser-ai/browser-ai.module';
 import { AutomationOrchestrationModule } from './automation-orchestration/automation-orchestration.module';
+import { AutomationModule } from './automation/automation.module';
 import { ContinuousImprovementModule } from './continuous-improvement/continuous-improvement.module';
 import { ReliabilityModule } from './reliability/reliability.module';
 import { WorldStateGatewayModule } from './world-state-gateway/world-state-gateway.module';
@@ -117,6 +119,7 @@ import { OfferMarketModule } from './offer-market/offer-market.module';
     ClientModule,
     CrmModule,
     InquiryModule,
+    EmailStatusModule,
     OpportunityModule,
     ProposalModule,
     ProjectModule,
@@ -175,6 +178,7 @@ import { OfferMarketModule } from './offer-market/offer-market.module';
     ChairmanMailModule,
     BrowserAiModule,
     AutomationOrchestrationModule,
+    AutomationModule,
     WorldStateGatewayModule,
     SpatialModule,
     ThrottlerModule.forRoot([

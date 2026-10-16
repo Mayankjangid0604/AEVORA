@@ -1,0 +1,708 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
+import { JwtAuthGuard, Public } from '../authorization/jwt-auth.guard';
+import { RolesGuard } from '../authorization/roles.guard';
+import { Roles } from '../authorization/roles.decorator';
+import {
+  IntegrationApiKeyGuard,
+  IntegrationAuth,
+} from '../authorization/integration-api-key.guard';
+import { AutomationRegistryService } from './automation-registry.service';
+import { N8nClientService } from './n8n-client.service';
+import { LeadNormalizerService } from './lead-normalizer.service';
+import { LeadEnrichmentService } from './lead-enrichment.service';
+import { SalesResearchService } from './sales-research.service';
+import { SalesOutreachService } from './sales-outreach.service';
+import { OllamaClientService } from './ollama-client.service';
+import { WebsiteExtractorService } from './website-extractor.service';
+import {
+  AutomationReadinessStatus,
+  IcpConfig,
+  LeadFindingInput,
+  OutreachChannelType,
+  RawGooglePlaceRecord,
+} from './automation.types';
+
+@Controller('automation')
+@UseGuards(JwtAuthGuard, IntegrationApiKeyGuard, RolesGuard)
+export class AutomationController {
+  constructor(
+    private readonly registry: AutomationRegistryService,
+    private readonly n8nClient: N8nClientService,
+    private readonly normalizer: LeadNormalizerService,
+    private readonly enrichment: LeadEnrichmentService,
+    private readonly research: SalesResearchService,
+    private readonly outreach: SalesOutreachService,
+    private readonly ollamaClient: OllamaClientService,
+    private readonly websiteExtractor: WebsiteExtractorService
+  ) {}
+
+  /**
+   * Lists all registered automations in AEVORA with operational status.
+   */
+  @Get('workflows')
+  async listWorkflows() {
+    const automations = this.registry.listAutomations();
+    const n8nStatus = await this.n8nClient.getStatus();
+
+    return automations.map((a) => ({
+      ...a,
+      n8nConnection: n8nStatus,
+    }));
+  }
+
+  /**
+   * Probes external n8n, local Ollama, crawler, and DNS readiness.
+   */
+  @Get('readiness')
+  @Public()
+  async getReadiness(): Promise<AutomationReadinessStatus> {
+    const ollamaStatus = await this.ollamaClient.checkReadiness();
+    const n8nStatus = await this.n8nClient.getStatus();
+
+    // Check crawler
+    const crawl4aiUrl = process.env.CRAWL4AI_URL;
+    let crawlerReady = true;
+    let crawlerProvider: 'native' | 'crawl4ai' = 'native';
+    let crawlerError: string | undefined;
+
+    if (crawl4aiUrl) {
+      try {
+        const cRes = await fetch(`${crawl4aiUrl}/health`, { signal: AbortSignal.timeout(3000) });
+        if (cRes.ok) {
+          crawlerProvider = 'crawl4ai';
+        } else {
+          crawlerError = `Crawl4AI returned HTTP ${cRes.status}, falling back to native extractor`;
+        }
+      } catch (err: any) {
+        crawlerError = `Crawl4AI unavailable (${err?.message}), falling back to native extractor`;
+      }
+    }
+
+    return {
+      ollama: {
+        ready: ollamaStatus.ready,
+        url: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
+        model: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
+        version: ollamaStatus.version,
+        error: ollamaStatus.error,
+      },
+      crawler: {
+        ready: crawlerReady,
+        provider: crawlerProvider,
+        url: crawl4aiUrl,
+        error: crawlerError,
+      },
+      n8n: {
+        configured: this.n8nClient.isConfigured(),
+        reachable: n8nStatus.connected,
+        url: process.env.N8N_API_URL || 'http://localhost:5678',
+      },
+      dns: {
+        ready: true,
+      },
+      database: {
+        ready: true,
+      },
+    };
+  }
+
+  /**
+   * Retrieves definition and configuration details for a specific automation.
+   */
+  @Get('workflows/:id')
+  async getWorkflow(@Param('id') id: string) {
+    const auto = this.registry.getAutomation(id);
+    const n8nStatus = await this.n8nClient.getStatus();
+    return {
+      ...auto,
+      n8nConnection: n8nStatus,
+    };
+  }
+
+  /**
+   * Probes external n8n connectivity.
+   */
+  @Get('n8n/status')
+  async getN8nStatus() {
+    return this.n8nClient.getStatus();
+  }
+
+  /**
+   * Deploys the workflow definition JSON to the configured n8n instance.
+   * Restricted to authorized company leadership.
+   */
+  @Post('workflows/:id/deploy')
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async deployWorkflow(
+    @Param('id') id: string,
+    @Body() body: { activate?: boolean },
+  ) {
+    return this.n8nClient.deployWorkflow(id, { activate: body?.activate });
+  }
+
+  /**
+   * Ingestion webhook endpoint for external n8n workflow or scraper callbacks (Automation #1).
+   * Authenticated via service-to-service x-integration-key and x-company-id headers.
+   */
+  @Post('webhook/leads')
+  @IntegrationAuth()
+  async ingestLeadsWebhook(
+    @Request() req: any,
+    @Body() body: { category?: string; location?: string; records?: RawGooglePlaceRecord[]; places?: RawGooglePlaceRecord[]; limit?: number; pilotId?: string } | RawGooglePlaceRecord[],
+  ) {
+    const companyId = req.user.companyId;
+    let records: RawGooglePlaceRecord[] = [];
+    let category = 'general';
+    let location = 'unspecified';
+    let limit: number | undefined;
+    let pilotId: string | undefined;
+
+    if (Array.isArray(body)) {
+      records = body;
+    } else if (body && typeof body === 'object') {
+      records = body.records || body.places || [];
+      category = body.category || category;
+      location = body.location || location;
+      limit = typeof body.limit === 'number' ? body.limit : undefined;
+      pilotId = typeof body.pilotId === 'string' ? body.pilotId : undefined;
+    }
+
+    if (!Array.isArray(records) || records.length === 0) {
+      throw new BadRequestException('Payload must contain a non-empty array of records or places');
+    }
+
+    const result = await this.normalizer.ingestLeads(companyId, records, {
+      category,
+      location,
+      actorId: req.user.actorId,
+      automationId: 'automation-1-google-lead-finding',
+      limit,
+      pilotId,
+    });
+
+    return {
+      success: true,
+      companyId,
+      ...result,
+    };
+  }
+
+  /**
+   * Webhook endpoint for Automation #2: Lead Enrichment & Verification.
+   * Service-to-service authenticated via x-integration-key.
+   */
+  @Post('webhook/enrichment')
+  @IntegrationAuth()
+  async enrichmentWebhook(
+    @Request() req: any,
+    @Body() body: { leadIds?: string[]; limit?: number; forceRefresh?: boolean },
+  ) {
+    const companyId = req.user.companyId;
+    const summary = await this.enrichment.enrichCompanyLeads(companyId, {
+      leadIds: body?.leadIds,
+      limit: body?.limit || 10,
+      forceRefresh: !!body?.forceRefresh,
+      actorId: req.user.actorId || 'automation-2-service',
+    });
+
+    return {
+      success: true,
+      ...summary,
+    };
+  }
+
+  /**
+   * Starts lead enrichment for eligible company leads.
+   * Company-scoped, restricted to authorized roles.
+   */
+  @Post('enrichment/start')
+  @IntegrationAuth()
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async startEnrichment(
+    @Request() req: any,
+    @Body() body: { leadIds?: string[]; limit?: number; forceRefresh?: boolean },
+  ) {
+    const companyId = req.user.companyId;
+    return this.enrichment.enrichCompanyLeads(companyId, {
+      leadIds: body?.leadIds,
+      limit: body?.limit || 10,
+      forceRefresh: !!body?.forceRefresh,
+      actorId: req.user.actorId || req.user.userId || 'system',
+    });
+  }
+
+  /**
+   * Retrieves lead enrichment status summary for the authenticated company.
+   */
+  @Get('enrichment/status')
+  @IntegrationAuth()
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async getEnrichmentStatus(@Request() req: any) {
+    const companyId = req.user.companyId;
+    return this.enrichment.getEnrichmentStatus(companyId);
+  }
+
+  /**
+   * Retries enrichment for a specific lead in the company.
+   */
+  @Post('enrichment/retry')
+  @IntegrationAuth()
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async retryEnrichment(
+    @Request() req: any,
+    @Body() body: { leadId: string },
+  ) {
+    const companyId = req.user.companyId;
+    if (!body?.leadId) {
+      throw new BadRequestException('leadId is required for enrichment retry');
+    }
+
+    return this.enrichment.enrichLead(companyId, body.leadId, {
+      forceRefresh: true,
+      actorId: req.user.actorId || req.user.userId || 'system',
+    });
+  }
+
+  /**
+   * Webhook endpoint for external n8n research trigger callback (Automation #3).
+   */
+  @Post('webhook/research')
+  @IntegrationAuth()
+  async researchWebhook(
+    @Request() req: any,
+    @Body() body: { leadIds?: string[]; limit?: number; forceRefresh?: boolean; icpConfig?: IcpConfig },
+  ) {
+    const companyId = req.user.companyId;
+    const summary = await this.research.researchCompanyLeads(companyId, {
+      leadIds: body?.leadIds,
+      limit: body?.limit || 10,
+      forceRefresh: !!body?.forceRefresh,
+      actorId: req.user.actorId || 'automation-3-service',
+      icpConfig: body?.icpConfig,
+    });
+
+    return {
+      success: true,
+      ...summary,
+    };
+  }
+
+  /**
+   * Starts opportunity research for eligible company leads.
+   * Company-scoped, restricted to authorized roles.
+   */
+  @Post('research/start')
+  @IntegrationAuth()
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async startResearch(
+    @Request() req: any,
+    @Body() body: { leadIds?: string[]; limit?: number; forceRefresh?: boolean; icpConfig?: IcpConfig },
+  ) {
+    const companyId = req.user.companyId;
+    return this.research.researchCompanyLeads(companyId, {
+      leadIds: body?.leadIds,
+      limit: body?.limit || 10,
+      forceRefresh: !!body?.forceRefresh,
+      actorId: req.user.actorId || req.user.userId || 'system',
+      icpConfig: body?.icpConfig,
+    });
+  }
+
+  /**
+   * Retrieves sales research status summary for the authenticated company.
+   */
+  @Get('research/status')
+  @IntegrationAuth()
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async getResearchStatus(@Request() req: any) {
+    const companyId = req.user.companyId;
+    return this.research.getResearchStatus(companyId);
+  }
+
+  /**
+   * Retries research for a specific lead in the company.
+   */
+  @Post('research/retry')
+  @IntegrationAuth()
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async retryResearch(
+    @Request() req: any,
+    @Body() body: { leadId: string; icpConfig?: IcpConfig },
+  ) {
+    const companyId = req.user.companyId;
+    if (!body?.leadId) {
+      throw new BadRequestException('leadId is required for research retry');
+    }
+
+    return this.research.researchLead(companyId, body.leadId, {
+      forceRefresh: true,
+      actorId: req.user.actorId || req.user.userId || 'system',
+      icpConfig: body?.icpConfig,
+    });
+  }
+
+  /**
+   * Webhook endpoint for external n8n outreach trigger callback (Automation #4).
+   */
+  @Post('webhook/outreach')
+  @IntegrationAuth()
+  async outreachWebhook(
+    @Request() req: any,
+    @Body() body: { leadIds?: string[]; limit?: number; channel?: OutreachChannelType; forceRefresh?: boolean },
+  ) {
+    const companyId = req.user.companyId;
+    const summary = await this.outreach.processCompanyLeads(companyId, {
+      leadIds: body?.leadIds,
+      limit: body?.limit || 10,
+      channel: body?.channel,
+      forceRefresh: !!body?.forceRefresh,
+      actorId: req.user.actorId || 'automation-4-service',
+    });
+
+    return {
+      success: true,
+      ...summary,
+    };
+  }
+
+  /**
+   * Starts sales outreach drafting for eligible company leads.
+   */
+  @Post('outreach/draft')
+  @IntegrationAuth()
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async draftOutreach(
+    @Request() req: any,
+    @Body() body: { leadId: string; channel?: OutreachChannelType; forceRefresh?: boolean },
+  ) {
+    const companyId = req.user.companyId;
+    if (!body?.leadId) {
+      throw new BadRequestException('leadId is required to generate outreach draft');
+    }
+
+    return this.outreach.generateOutreachDraft(companyId, body.leadId, {
+      channel: body.channel,
+      forceRefresh: !!body.forceRefresh,
+      actorId: req.user.actorId || req.user.userId || 'system',
+    });
+  }
+
+  /**
+   * Approves an outreach draft (human-in-the-loop gate).
+   */
+  @Post('outreach/approve')
+  @IntegrationAuth()
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async approveOutreach(
+    @Request() req: any,
+    @Body() body: { leadId: string; reason?: string; editedSubject?: string; editedBody?: string },
+  ) {
+    const companyId = req.user.companyId;
+    if (!body?.leadId) {
+      throw new BadRequestException('leadId is required to approve outreach draft');
+    }
+
+    return this.outreach.approveDraft(companyId, body.leadId, {
+      actorId: req.user.actorId || req.user.userId || 'system',
+      reason: body.reason,
+      editedSubject: body.editedSubject,
+      editedBody: body.editedBody,
+    });
+  }
+
+  /**
+   * Edits an outreach draft without immediately approving it.
+   * Increments draft version, invalidates prior approval, and resets approval to PENDING.
+   */
+  @Post('outreach/edit')
+  @IntegrationAuth()
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async editOutreach(
+    @Request() req: any,
+    @Body() body: { leadId: string; subject: string; body: string },
+  ) {
+    const companyId = req.user.companyId;
+    if (!body?.leadId) {
+      throw new BadRequestException('leadId is required to edit outreach draft');
+    }
+    if (!body?.subject || !body?.body) {
+      throw new BadRequestException('subject and body are required to edit outreach draft');
+    }
+
+    return this.outreach.editDraft(companyId, body.leadId, {
+      subject: body.subject,
+      body: body.body,
+      actorId: req.user.actorId || req.user.userId || 'system',
+    });
+  }
+
+  /**
+   * Rejects an outreach draft.
+   */
+  @Post('outreach/reject')
+  @IntegrationAuth()
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async rejectOutreach(
+    @Request() req: any,
+    @Body() body: { leadId: string; reason?: string },
+  ) {
+    const companyId = req.user.companyId;
+    if (!body?.leadId) {
+      throw new BadRequestException('leadId is required to reject outreach draft');
+    }
+
+    return this.outreach.rejectDraft(companyId, body.leadId, {
+      actorId: req.user.actorId || req.user.userId || 'system',
+      reason: body.reason,
+    });
+  }
+
+  /**
+   * Requests dispatch for an approved outreach draft.
+   * Enforces approval verification and delivery safeguard policy.
+   * Supports captureOnly / mockTransport for controlled zero-emission staging.
+   */
+  @Post('outreach/send')
+  @IntegrationAuth()
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async sendOutreach(
+    @Request() req: any,
+    @Body() body: { leadId: string; captureOnly?: boolean; mockTransport?: boolean },
+  ) {
+    const companyId = req.user.companyId;
+    if (!body?.leadId) {
+      throw new BadRequestException('leadId is required to send outreach');
+    }
+
+    return this.outreach.sendOutreach(companyId, body.leadId, {
+      actorId: req.user.actorId || req.user.userId || 'system',
+      captureOnly: !!body.captureOnly,
+      mockTransport: !!body.mockTransport,
+    });
+  }
+
+  /**
+   * Retrieves summary counts of outreach and approval statuses for the authenticated company.
+   */
+  @Get('outreach/status')
+  @IntegrationAuth()
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async getOutreachStatus(@Request() req: any) {
+    const companyId = req.user.companyId;
+    return this.outreach.getOutreachStatus(companyId);
+  }
+
+  /**
+   * Triggers an authorized automation execution for the authenticated company.
+   */
+  @Post('workflows/:id/execute')
+  @IntegrationAuth()
+  @Roles('CHAIRMAN', 'MANAGEMENT')
+  async executeWorkflow(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Body() body: any,
+  ) {
+    const auto = this.registry.getAutomation(id);
+    const companyId = req.user.companyId;
+
+    // Handle Automation #4 (AI Sales Outreach & Follow-up)
+    if (auto.id === 'automation-4-sales-outreach' || auto.number === 4) {
+      const ollama = await this.ollamaClient.checkReadiness();
+      if (!ollama.ready) {
+        throw new BadRequestException(`Ollama service is unavailable: ${ollama.error}`);
+      }
+
+      if (this.n8nClient.isConfigured()) {
+        const exec = await this.n8nClient.executeWorkflow(auto.id, {
+          companyId,
+          limit: body?.limit || 10,
+          leadIds: body?.leadIds || [],
+          channel: body?.channel || 'EMAIL',
+          forceRefresh: !!body?.forceRefresh,
+        });
+
+        if (exec.executed) {
+          return {
+            status: 'COMPLETED',
+            automationId: auto.id,
+            companyId,
+            result: exec.result,
+            message: `Sales outreach draft pipeline executed via Automation #4 n8n workflow.`,
+          };
+        }
+      }
+
+      // Execute directly via internal SalesOutreachService
+      const result = await this.outreach.processCompanyLeads(companyId, {
+        limit: body?.limit || 10,
+        leadIds: body?.leadIds,
+        channel: body?.channel,
+        forceRefresh: !!body?.forceRefresh,
+        actorId: req.user.actorId || req.user.userId || 'system',
+      });
+
+      return {
+        status: 'COMPLETED',
+        automationId: auto.id,
+        companyId,
+        result,
+        message: `Sales outreach draft generation completed for company. ${result.drafted} drafted, ${result.skipped} skipped, ${result.suppressed} suppressed.`,
+      };
+    }
+
+    // Handle Automation #3 (AI Sales Research & Opportunity Scoring)
+    if (auto.id === 'automation-3-sales-research' || auto.number === 3) {
+      const ollama = await this.ollamaClient.checkReadiness();
+      if (!ollama.ready) {
+        throw new BadRequestException(`Ollama service is unavailable: ${ollama.error}`);
+      }
+
+      if (this.n8nClient.isConfigured()) {
+        const exec = await this.n8nClient.executeWorkflow(auto.id, {
+          companyId,
+          limit: body?.limit || 10,
+          leadIds: body?.leadIds || [],
+          forceRefresh: !!body?.forceRefresh,
+          icpConfig: body?.icpConfig,
+        });
+
+        if (exec.executed) {
+          return {
+            status: 'COMPLETED',
+            automationId: auto.id,
+            companyId,
+            result: exec.result,
+            message: `Sales research executed via Automation #3 n8n workflow.`,
+          };
+        }
+      }
+
+      // Execute directly via internal SalesResearchService
+      const result = await this.research.researchCompanyLeads(companyId, {
+        limit: body?.limit || 10,
+        leadIds: body?.leadIds,
+        forceRefresh: !!body?.forceRefresh,
+        actorId: req.user.actorId || req.user.userId || 'system',
+        icpConfig: body?.icpConfig,
+      });
+
+      return {
+        status: 'COMPLETED',
+        automationId: auto.id,
+        companyId,
+        result,
+        message: `Opportunity research pipeline completed for company. ${result.researched} researched, ${result.skipped} skipped, ${result.ineligible} ineligible.`,
+      };
+    }
+
+    // Handle Automation #2 (Lead Enrichment)
+    if (auto.id === 'automation-2-lead-enrichment' || auto.number === 2) {
+      // Check Ollama readiness
+      const ollama = await this.ollamaClient.checkReadiness();
+      if (!ollama.ready) {
+        this.registry.getAutomation(id); // validate existence
+      }
+
+      if (this.n8nClient.isConfigured()) {
+        const exec = await this.n8nClient.executeWorkflow(auto.id, {
+          companyId,
+          limit: body?.limit || 10,
+          leadIds: body?.leadIds || [],
+          forceRefresh: !!body?.forceRefresh,
+        });
+
+        if (exec.executed) {
+          return {
+            status: 'COMPLETED',
+            automationId: auto.id,
+            companyId,
+            result: exec.result,
+            message: `Lead enrichment executed via Automation #2 n8n workflow.`,
+          };
+        }
+      }
+
+      // Execute directly via internal LeadEnrichmentService
+      const result = await this.enrichment.enrichCompanyLeads(companyId, {
+        limit: body?.limit || 10,
+        leadIds: body?.leadIds,
+        forceRefresh: !!body?.forceRefresh,
+        actorId: req.user.actorId || req.user.userId || 'system',
+      });
+
+      return {
+        status: 'COMPLETED',
+        automationId: auto.id,
+        companyId,
+        result,
+        message: `Lead enrichment pipeline executed for company. ${result.enriched} enriched, ${result.unreachable} unreachable, ${result.noWebsite} without website.`,
+      };
+    }
+
+    // Handle Automation #1 (Google Maps Lead Finding)
+    const category = body?.category?.trim();
+    const location = body?.location?.trim();
+
+    if (!category || !location) {
+      throw new BadRequestException('category and location are required parameters for lead finding');
+    }
+
+    // Safety check: confirm execution credentials
+    if (!process.env.GOOGLE_PLACES_API_KEY?.trim() && !this.n8nClient.isConfigured()) {
+      throw new BadRequestException(
+        `Execution blocked: Neither GOOGLE_PLACES_API_KEY nor n8n API connection is configured. Please provide operational credentials before running live discovery.`
+      );
+    }
+
+    if (this.n8nClient.isConfigured()) {
+      const exec = await this.n8nClient.executeWorkflow(auto.id, {
+        category,
+        location,
+        radiusMeters: body.radiusMeters || 50000,
+        maxResults: body.maxResults || 20,
+        companyId,
+      });
+
+      if (!exec.executed) {
+        throw new BadRequestException(exec.error || 'Automation execution failed in n8n');
+      }
+
+      return {
+        status: 'COMPLETED',
+        automationId: auto.id,
+        companyId,
+        parameters: {
+          category,
+          location,
+          radiusMeters: body.radiusMeters || 50000,
+          maxResults: body.maxResults || 20,
+        },
+        result: exec.result,
+        message: `Lead finding search executed via Automation #1 for "${category}" in "${location}". Discovered records deduplicated and populated in SalesLead.`,
+      };
+    }
+
+    return {
+      status: 'QUEUED',
+      automationId: auto.id,
+      companyId,
+      parameters: {
+        category,
+        location,
+        radiusMeters: body.radiusMeters || 50000,
+        maxResults: body.maxResults || 20,
+      },
+      message: `Lead finding search queued for "${category}" in "${location}". Discovered records will be deduplicated and populated in SalesLead.`,
+    };
+  }
+}

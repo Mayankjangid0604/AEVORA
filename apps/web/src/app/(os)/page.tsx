@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { backendFetch } from '@/server/api';
 import { redirectIfUnauthenticated } from '@/server/guard';
 import { CompanySelector } from '@/components/company-selector';
+import { CreateCompanyDialog } from '@/components/create-company-dialog';
 import { SystemState } from '@/components/system-state';
 import { selectionOutcome } from '@/lib/company-selection';
 import type { AccessibleCompany, Group } from '@/lib/types';
@@ -33,6 +34,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
       {outcome.kind === 'none'
         ? <SystemState kind="empty" title="No accessible company" detail="AEVORA found no company this account can access." />
         : <CompanySelector companies={outcome.kind === 'enter' ? (r.data as AccessibleCompany[]) : outcome.companies} />}
+      <CreateCompanyDialog />
       {groups.length > 0 && (
         <section aria-labelledby="groups-title" className="space-y-2">
           <h2 id="groups-title" className="text-sm font-semibold">Groups</h2>

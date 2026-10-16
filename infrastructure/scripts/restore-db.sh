@@ -26,6 +26,13 @@ if [ "$TARGET_CONTAINER" = "aevora_postgres" ] || [ "$TARGET_CONTAINER" = "hoste
   exit 1
 fi
 
+# SAFETY GUARD 1b: the live local application database needs explicit confirmation (restore overwrites existing tables)
+if [ "$TARGET_CONTAINER" = "aevora_postgres_fresh" ] && [ "${CONFIRM_LOCAL_RESTORE:-false}" != "true" ]; then
+  echo "SAFETY GUARD: '$TARGET_CONTAINER' is the live local AEVORA application database."
+  echo "Restoring overwrites its current data. Take a fresh backup first, then re-run with CONFIRM_LOCAL_RESTORE=true."
+  exit 1
+fi
+
 # SAFETY GUARD 2: Explicit confirmation required when targeting production databases
 if [[ "$TARGET_CONTAINER" == *"prod"* ]]; then
   if [ "${CONFIRM_PRODUCTION_RESTORE:-false}" != "true" ]; then

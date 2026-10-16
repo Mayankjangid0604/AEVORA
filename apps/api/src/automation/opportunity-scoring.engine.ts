@@ -1,0 +1,447 @@
+import { Injectable, Logger } from '@nestjs/common';
+import {
+  EmailVerificationResult,
+  ExtractedBusinessFacts,
+  IcpConfig,
+  OpportunityScoreComponent,
+  OpportunityScoreComponents,
+  OpportunityScoreResult,
+  ResearchPriority,
+} from './automation.types';
+
+export interface OpportunityScoringInput {
+  leadName: string;
+  industry?: string | null;
+  website?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  emailVerification?: EmailVerificationResult | null;
+  extractedFacts?: ExtractedBusinessFacts | null;
+  reachability?: {
+    checked: boolean;
+    reachable: boolean;
+    statusCode?: number;
+    responseTimeMs?: number;
+  } | null;
+  placeScoreFactors?: {
+    reviews?: number;
+    hasEmail?: number;
+    hasPhone?: number;
+    noWebsite?: number;
+  } | null;
+  icpConfig?: IcpConfig | null;
+}
+
+@Injectable()
+export class OpportunityScoringEngine {
+  private readonly logger = new Logger(OpportunityScoringEngine.name);
+  public static readonly SCORING_VERSION = '1.0.0';
+
+  // Approved architectural weights summing exactly to 1.0 (100%)
+  public static readonly WEIGHTS = {
+    commercialFit: 0.25,
+    digitalModernization: 0.25,
+    operationalMaturity: 0.20,
+    contactability: 0.15,
+    serviceExpansion: 0.15,
+  } as const;
+
+  /**
+   * Deterministically calculates opportunity score components, weighted final score,
+   * priority band, and independent evidence confidence score.
+   */
+  calculateOpportunityScore(input: OpportunityScoringInput): OpportunityScoreResult {
+    const commercialFit = this.scoreCommercialFit(input);
+    const digitalModernization = this.scoreDigitalModernization(input);
+    const operationalMaturity = this.scoreOperationalMaturity(input);
+    const contactability = this.scoreContactability(input);
+    const serviceExpansion = this.scoreServiceExpansion(input);
+
+    const components: OpportunityScoreComponents = {
+      commercialFit,
+      digitalModernization,
+      operationalMaturity,
+      contactability,
+      serviceExpansion,
+    };
+
+    const rawFinalScore =
+      commercialFit.weightedScore +
+      digitalModernization.weightedScore +
+      operationalMaturity.weightedScore +
+      contactability.weightedScore +
+      serviceExpansion.weightedScore;
+
+    const opportunityScore = Math.max(0, Math.min(100, Math.round(rawFinalScore)));
+    const confidence = this.calculateConfidence(input);
+    const priority = this.classifyPriority(opportunityScore);
+
+    const explanation =
+      `Opportunity Score: ${opportunityScore}/100 (${priority} priority, ${confidence}% confidence). ` +
+      `Fit: ${commercialFit.score}/100, Modernization Need: ${digitalModernization.score}/100, ` +
+      `Maturity: ${operationalMaturity.score}/100, Contactability: ${contactability.score}/100, ` +
+      `Expansion: ${serviceExpansion.score}/100.`;
+
+    return {
+      opportunityScore,
+      confidence,
+      priority,
+      components,
+      scoringVersion: OpportunityScoringEngine.SCORING_VERSION,
+      explanation,
+    };
+  }
+
+  /**
+   * 1. Commercial Fit and ICP Alignment (Weight: 25%)
+   * Evaluates category relevance, verified services, and ICP alignment.
+   * Completely industry-agnostic by default; bonuses apply only when explicit ICP is configured.
+   * Missing evidence is NOT penalized as lack of fit.
+   */
+  private scoreCommercialFit(input: OpportunityScoringInput): OpportunityScoreComponent {
+    const weight = OpportunityScoringEngine.WEIGHTS.commercialFit;
+    let score = 50; // Neutral baseline for commercial entity
+    const signals: string[] = [];
+
+    const industryText = (input.industry || '').toLowerCase();
+    const leadNameText = (input.leadName || '').toLowerCase();
+    const services = input.extractedFacts?.services || [];
+
+    // Verified commercial sector presence (industry-agnostic)
+    if (input.industry && input.industry.trim().length > 0) {
+      score += 10;
+      signals.push(`Identified commercial industry sector: ${input.industry} (+10)`);
+    }
+
+    // Configurable ICP industries match if provided
+    if (input.icpConfig?.targetIndustries?.length) {
+      const matchesIcp = input.icpConfig.targetIndustries.some((target) =>
+        industryText.includes(target.toLowerCase()) || leadNameText.includes(target.toLowerCase())
+      );
+      if (matchesIcp) {
+        score += 20;
+        signals.push('Explicit match with configured tenant ICP target industries (+20)');
+      }
+    }
+
+    // Configurable ICP target keywords match if provided
+    if (input.icpConfig?.targetKeywords?.length) {
+      const allText = `${leadNameText} ${industryText} ${services.join(' ')} ${input.extractedFacts?.businessDescription || ''}`.toLowerCase();
+      const matched = input.icpConfig.targetKeywords.filter((kw) =>
+        allText.includes(kw.toLowerCase())
+      );
+      if (matched.length > 0) {
+        score += 15;
+        signals.push(`Matches configured tenant ICP target keywords (${matched.join(', ')}) (+15)`);
+      }
+    }
+
+    // Configurable ICP minimum service lines threshold
+    if (typeof input.icpConfig?.minServiceLines === 'number' && services.length >= input.icpConfig.minServiceLines) {
+      score += 10;
+      signals.push(`Meets configured tenant ICP minimum service lines (${services.length} >= ${input.icpConfig.minServiceLines}) (+10)`);
+    }
+
+    // Concrete services catalog depth (industry-agnostic)
+    if (services.length >= 5) {
+      score += 15;
+      signals.push(`Extensive service catalog identified (${services.length} services) (+15)`);
+    } else if (services.length >= 2) {
+      score += 10;
+      signals.push(`Defined service lines identified (${services.length} services) (+10)`);
+    }
+
+    if (input.extractedFacts?.idealCustomerProfile) {
+      score += 10;
+      signals.push('Clear target customer profile identified (+10)');
+    }
+
+    if (!input.industry && services.length === 0) {
+      signals.push('Industry and services unverified; neutral baseline applied without penalty');
+    }
+
+    const normalizedScore = Math.max(0, Math.min(100, score));
+    return {
+      score: normalizedScore,
+      weight,
+      weightedScore: normalizedScore * weight,
+      explanation: signals.join('. ') || 'Standard commercial profile evaluated.',
+      signals,
+    };
+  }
+
+  /**
+   * 2. Digital Modernization and Evidence of Relevant Problems (Weight: 25%)
+   * Evaluates verified operational gaps: online booking, contact forms, slow web performance, etc.
+   * Missing evidence is NOT assumed to be a business problem.
+   */
+  private scoreDigitalModernization(input: OpportunityScoringInput): OpportunityScoreComponent {
+    const weight = OpportunityScoringEngine.WEIGHTS.digitalModernization;
+    let score = 30; // Baseline for modern, already-digitized businesses
+    const signals: string[] = [];
+
+    const reachability = input.reachability;
+    const extracted = input.extractedFacts;
+
+    if (!reachability?.checked || !reachability?.reachable) {
+      // If website was not checked or absent, we do NOT invent problems
+      score = 40;
+      signals.push('Website unverified or absent; missing evidence not treated as confirmed problem (neutral 40)');
+      return {
+        score,
+        weight,
+        weightedScore: score * weight,
+        explanation: signals.join('. '),
+        signals,
+      };
+    }
+
+    // Fact 1: Verified lack of online booking / self-service appointment scheduling
+    if (extracted?.businessSignals?.onlineBookingAvailable === false) {
+      score += 25;
+      signals.push('No online booking or self-service scheduling detected on live website (+25)');
+    } else if (extracted?.businessSignals?.onlineBookingAvailable === true) {
+      signals.push('Online booking is already implemented (modernized workflow)');
+    }
+
+    // Fact 2: Verified lack of modern structured contact form
+    if (extracted?.businessSignals?.hasContactForm === false) {
+      score += 20;
+      signals.push('No interactive contact form found on website (+20)');
+    }
+
+    // Fact 3: Slow server response time (> 1000ms is a clear digital performance gap)
+    if (reachability.responseTimeMs && reachability.responseTimeMs > 1200) {
+      score += 15;
+      signals.push(`Slow web response latency observed (${reachability.responseTimeMs}ms > 1200ms) (+15)`);
+    }
+
+    // Fact 4: Fragmented or sparse digital presence
+    const socialLinks = extracted?.socialLinks || {};
+    const socialCount = Object.values(socialLinks).filter(Boolean).length;
+    if (socialCount === 0) {
+      score += 10;
+      signals.push('No active social media channels linked from website (+10)');
+    }
+
+    const normalizedScore = Math.max(0, Math.min(100, score));
+    return {
+      score: normalizedScore,
+      weight,
+      weightedScore: normalizedScore * weight,
+      explanation: signals.join('. ') || 'Digital presence evaluated.',
+      signals,
+    };
+  }
+
+  /**
+   * 3. Operational Maturity and Capacity (Weight: 20%)
+   * Evaluates operating stability, business breadth, and capacity.
+   * Popularity / review counts / data volume do NOT independently inflate this score.
+   */
+  private scoreOperationalMaturity(input: OpportunityScoringInput): OpportunityScoreComponent {
+    const weight = OpportunityScoringEngine.WEIGHTS.operationalMaturity;
+    let score = 40; // Baseline for single operating unit
+    const signals: string[] = [];
+
+    const extracted = input.extractedFacts;
+    const services = extracted?.services || [];
+
+    // Service breadth indicates operational structure and division of labor
+    if (services.length >= 8) {
+      score += 25;
+      signals.push(`Comprehensive multi-service operations (${services.length} offerings) (+25)`);
+    } else if (services.length >= 4) {
+      score += 15;
+      signals.push(`Established multi-service operations (${services.length} offerings) (+15)`);
+    }
+
+    // Dual-channel communications (phone + email) indicates mature customer desk
+    const hasPhone = !!(input.contactPhone || extracted?.contactPhones?.length);
+    const hasEmail = !!(input.contactEmail || extracted?.contactEmails?.length);
+
+    if (hasPhone && hasEmail) {
+      score += 20;
+      signals.push('Dual business contact channels established (phone and email) (+20)');
+    } else if (hasPhone || hasEmail) {
+      score += 10;
+      signals.push('Single verified contact channel established (+10)');
+    }
+
+    // Years in business if documented in facts
+    if (extracted?.businessSignals?.yearsInBusiness) {
+      const yrs = extracted.businessSignals.yearsInBusiness;
+      if (yrs >= 5) {
+        score += 15;
+        signals.push(`Demonstrated longevity in business (${yrs} years) (+15)`);
+      } else if (yrs >= 2) {
+        score += 10;
+        signals.push(`Established business track record (${yrs} years) (+10)`);
+      }
+    }
+
+    const normalizedScore = Math.max(0, Math.min(100, score));
+    return {
+      score: normalizedScore,
+      weight,
+      weightedScore: normalizedScore * weight,
+      explanation: signals.join('. ') || 'Operational capacity assessed.',
+      signals,
+    };
+  }
+
+  /**
+   * 4. Contactability and Channel Feasibility (Weight: 15%)
+   * Evaluates verified outbound reachability channels without spam risk.
+   */
+  private scoreContactability(input: OpportunityScoringInput): OpportunityScoreComponent {
+    const weight = OpportunityScoringEngine.WEIGHTS.contactability;
+    let score = 0;
+    const signals: string[] = [];
+
+    const emailVerif = input.emailVerification;
+    const directEmail = input.contactEmail || input.extractedFacts?.contactEmails?.[0];
+    const directPhone = input.contactPhone || input.extractedFacts?.contactPhones?.[0];
+
+    // Email channel verification
+    if (emailVerif?.status === 'VALID_SYNTAX_MX') {
+      score += 45;
+      signals.push('Deliverable business email with verified DNS MX records (+45)');
+    } else if (emailVerif?.syntaxValid || directEmail) {
+      score += 25;
+      signals.push('Business email format present (+25)');
+    }
+
+    // Direct telephone channel
+    if (directPhone) {
+      score += 35;
+      signals.push('Direct business telephone number available (+35)');
+    }
+
+    // Social or messaging channel
+    const socialCount = Object.values(input.extractedFacts?.socialLinks || {}).filter(Boolean).length;
+    if (socialCount >= 2) {
+      score += 20;
+      signals.push(`Multiple digital direct messaging channels available (${socialCount}) (+20)`);
+    } else if (socialCount === 1) {
+      score += 10;
+      signals.push('Single active social channel available (+10)');
+    }
+
+    if (score === 0) {
+      score = 10;
+      signals.push('Low contactability: no direct phone or verified email detected (10)');
+    }
+
+    const normalizedScore = Math.max(0, Math.min(100, score));
+    return {
+      score: normalizedScore,
+      weight,
+      weightedScore: normalizedScore * weight,
+      explanation: signals.join('. ') || 'Contact feasibility assessed.',
+      signals,
+    };
+  }
+
+  /**
+   * 5. Relevant Service Expansion Potential (Weight: 15%)
+   * Evaluates potential to deliver digital automation, AI assistant, or workflow solutions.
+   */
+  private scoreServiceExpansion(input: OpportunityScoringInput): OpportunityScoreComponent {
+    const weight = OpportunityScoringEngine.WEIGHTS.serviceExpansion;
+    let score = 40; // Neutral baseline
+    const signals: string[] = [];
+
+    const industry = (input.industry || '').toLowerCase();
+    const services = input.extractedFacts?.services || [];
+
+    // Appointment / inquiry-intensive sectors benefit heavily from automation
+    const highInteractionSectors = ['dent', 'medic', 'clinic', 'law', 'consult', 'hvac', 'plumb', 'salon', 'spa'];
+    const isHighInteraction = highInteractionSectors.some((k) => industry.includes(k));
+
+    if (isHighInteraction) {
+      score += 25;
+      signals.push('Appointment-driven business model with high inquiry velocity (+25)');
+    }
+
+    if (services.length >= 4) {
+      score += 20;
+      signals.push(`Diverse service catalog supports automation workflow modularity (+20)`);
+    }
+
+    // Active social presence creates inbound messaging automation opportunity
+    const socialCount = Object.values(input.extractedFacts?.socialLinks || {}).filter(Boolean).length;
+    if (socialCount >= 2) {
+      score += 15;
+      signals.push('Active social channels present inbound DM triage opportunity (+15)');
+    }
+
+    const normalizedScore = Math.max(0, Math.min(100, score));
+    return {
+      score: normalizedScore,
+      weight,
+      weightedScore: normalizedScore * weight,
+      explanation: signals.join('. ') || 'Service expansion evaluated.',
+      signals,
+    };
+  }
+
+  /**
+   * Calculates evidence confidence score (0 to 100) independently from opportunity score.
+   */
+  calculateConfidence(input: OpportunityScoringInput): number {
+    let confidence = 20; // Baseline for Google Places record alone
+
+    if (input.reachability?.reachable) {
+      confidence += 30; // Verified live web presence
+    }
+
+    if (input.extractedFacts?.businessDescription && (input.extractedFacts?.services?.length || 0) > 0) {
+      confidence += 25; // Structured facts extracted
+    }
+
+    if (input.emailVerification?.status === 'VALID_SYNTAX_MX') {
+      confidence += 15; // DNS-verified email
+    } else if (input.contactEmail) {
+      confidence += 5;
+    }
+
+    if (input.contactPhone) {
+      confidence += 10; // Verified phone
+    }
+
+    return Math.max(0, Math.min(100, confidence));
+  }
+
+  /**
+   * Maps opportunity score to approved priority band:
+   * 75 - 100: HIGH
+   * 50 - 74: MEDIUM
+   * 0 - 49: LOW
+   */
+  classifyPriority(opportunityScore: number): ResearchPriority {
+    if (opportunityScore >= 75) return 'HIGH';
+    if (opportunityScore >= 50) return 'MEDIUM';
+    return 'LOW';
+  }
+
+  /**
+   * Maps score and confidence to qualification recommendation:
+   * QUALIFIED | NEEDS_MORE_INFO | DISQUALIFIED
+   */
+  classifyRecommendation(
+    opportunityScore: number,
+    confidence: number
+  ): 'QUALIFIED' | 'DISQUALIFIED' | 'NEEDS_MORE_INFO' {
+    if (confidence < 45) {
+      return 'NEEDS_MORE_INFO';
+    }
+    if (opportunityScore >= 60) {
+      return 'QUALIFIED';
+    }
+    if (opportunityScore < 40) {
+      return 'DISQUALIFIED';
+    }
+    return 'NEEDS_MORE_INFO';
+  }
+}

@@ -3167,7 +3167,7 @@ model ApprovalRequest {
   decisionReason         String?
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
-  company                Company?                @relation(fields: [companyId], references: [id])
+  company                Company?                @relation(fields: [companyId], references: [id], onDelete: Restrict)
   backgroundJobs         BackgroundJob[]
   invoices               Invoice[]
   contracts              Contract[]
@@ -8841,6 +8841,9 @@ model CeoAutonomousDecision {
   createdAt   DateTime  @default(now())
   executedAt  DateTime?
   completedAt DateTime?
+
+  @@index([companyId])
+  @@index([ceoId])
 }
 
 // ------------------------------------------------------

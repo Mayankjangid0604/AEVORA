@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Optional, Inject, fo
 import { PrismaService } from '../prisma/prisma.service';
 import { JobStatus, BackgroundJob } from '@prisma/client';
 import { JobTaskBridgeService } from './job-task-bridge.service';
+import { JobHandlerRegistry } from './job-handler.registry';
 
 export const DEFAULT_JOB_TIMEOUT_MS = 60_000;
 export const MAX_JOB_TIMEOUT_MS = 300_000;
@@ -13,17 +14,16 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   private timer: NodeJS.Timeout;
   private isPolling = false;
   private isProcessing = false;
-
   constructor(
     private readonly prisma: PrismaService,
     @Optional()
     @Inject(forwardRef(() => JobTaskBridgeService))
     private readonly taskBridge?: JobTaskBridgeService,
-    workerId?: string,
+    @Optional() workerId?: string,
+    @Optional() private readonly registry?: JobHandlerRegistry,
   ) {
     if (workerId) this.workerId = workerId;
   }
-
   getWorkerId(): string {
     return this.workerId;
   }
@@ -128,7 +128,9 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       this.logger.debug(`Executing job logic for type: ${job.type}`);
 
       // A type with no handler must not be reported as done: fail it terminally instead of a silent COMPLETED.
-      if (job.type !== 'TASK_EXECUTION' || !this.taskBridge) {
+      const registered = this.registry?.get(job.type);
+      const isTask = job.type === 'TASK_EXECUTION' && !!this.taskBridge;
+      if (!isTask && !registered) {
         await this.prisma.backgroundJob.updateMany({
           where: { id: job.id, status: JobStatus.PROCESSING, workerId: this.workerId },
           data: {
@@ -156,7 +158,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
 
       try {
         await Promise.race([
-          this.taskBridge.executeTaskJob(job),
+          isTask ? this.taskBridge!.executeTaskJob(job) : registered!(job),
           timeoutPromise,
         ]);
       } finally {

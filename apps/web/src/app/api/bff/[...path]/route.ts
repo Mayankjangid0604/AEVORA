@@ -19,6 +19,7 @@ interface RouteRule {
   project?: Projection;
   /** The first capture group is a company id in the path; it must equal the explicit company header. */
   pathCompany?: true;
+  backendPath?: (path: string) => string;
 }
 
 const ID = '[A-Za-z0-9_-]{1,64}';
@@ -26,7 +27,7 @@ const ROUTES: RouteRule[] = [
   { pattern: /^auth\/(me|companies|capabilities)$/ },
   { pattern: /^groups$/ },
   { pattern: new RegExp(`^groups/${ID}$`) },
-  { pattern: new RegExp(`^companies/${ID}$`) },
+  { pattern: new RegExp(`^companies/${ID}$`), project: projections.companyRecord },
   // Slice 2: Chairman Home (ChairmanController, CHAIRMAN-only, getCompanyForChairman).
   { pattern: /^chairman\/(overview|activity)$/, company: true },
   { pattern: /^chairman\/alerts$/, company: true, project: projections.alerts },
@@ -79,16 +80,42 @@ const ROUTES: RouteRule[] = [
   { pattern: new RegExp(`^inquiries/${ID}$`), company: true, project: projections.inquiry },
   { pattern: /^job$/, company: true, project: projections.jobs },
   { pattern: new RegExp(`^job/${ID}$`), company: true, project: projections.job },
+  // Pipeline: opportunities -> proposals -> projects (tenant = req.user.companyId on the backend; foreign ids 404).
+  { pattern: /^opportunity$/, company: true, project: projections.pipelineOpportunities },
+  { pattern: new RegExp(`^proposal/${ID}$`), company: true, project: projections.pipelineProposal },
+  { pattern: /^delivery-projects$/, company: true, backendPath: () => 'project', project: projections.deliveryProjects },
+  { pattern: new RegExp(`^delivery-projects/${ID}$`), company: true, backendPath: (p) => p.replace(/^delivery-projects/, 'project'), project: projections.deliveryProject },
+  { pattern: new RegExp(`^delivery-projects/${ID}/history$`), company: true, backendPath: (p) => p.replace(/^delivery-projects/, 'project'), project: projections.deliveryHistory },
+  { pattern: new RegExp(`^inquiries/${ID}/automation$`), company: true, project: projections.automationStatus },
+  { pattern: /^system\/email-status$/, company: true, project: projections.emailStatus },
+  { pattern: /^automation\/workflows$/ },
+  { pattern: new RegExp(`^automation/workflows/${ID}$`) },
+  { pattern: /^automation\/n8n\/status$/ },
 ];
 
 /**
  * State-changing routes reachable from the browser. Same-origin only, explicit company, JSON body re-built from
  * known fields (nothing else is forwarded). The backend enforces role + tenant on each.
  */
-const MUTATIONS: { pattern: RegExp; fields: string[]; project: Projection }[] = [
+const MUTATIONS: { pattern: RegExp; fields: string[]; max?: number; project: Projection; backendPath?: (path: string) => string; companyOptional?: boolean }[] = [
+  { pattern: /^companies$/, fields: ['name', 'legalName', 'description', 'groupId'], companyOptional: true, project: projections.companyRecord },
+  { pattern: new RegExp(`^companies/${ID}/update$`), fields: ['name', 'legalName', 'description'], project: projections.companyRecord },
   { pattern: new RegExp(`^inquiries/${ID}/transition$`), fields: ['from', 'to'], project: projections.inquiry },
   { pattern: new RegExp(`^inquiries/${ID}/notes$`), fields: ['note'], project: projections.inquiry },
   { pattern: new RegExp(`^job/${ID}/(pause|resume|replay)$`), fields: [], project: projections.job },
+  { pattern: new RegExp(`^inquiries/${ID}/automation/retry$`), fields: [], project: projections.automationStatus },
+  { pattern: new RegExp(`^opportunity/${ID}/proposals$`), fields: ['force'], project: projections.pipelineGenerated },
+  { pattern: new RegExp(`^proposal/${ID}/update$`), fields: ['title', 'scope', 'deliverables', 'assumptions', 'exclusions', 'paymentTerms', 'currency', 'quantity', 'unitPrice', 'discount', 'tax', 'estimatedTimeline', 'validityPeriod', 'internalEstimatedCost'], max: 5000, project: projections.pipelineProposal },
+  { pattern: new RegExp(`^proposal/${ID}/(submit|mark-sent)$`), fields: [], project: projections.pipelineProposal },
+  { pattern: new RegExp(`^proposal/${ID}/decision$`), fields: ['decision', 'reason'], project: projections.pipelineProposal },
+  { pattern: new RegExp(`^proposal/${ID}/customer-response$`), fields: ['response'], project: projections.pipelineProposal },
+  { pattern: new RegExp(`^proposal/${ID}/project$`), fields: [], project: projections.projectCreated },
+  { pattern: new RegExp(`^delivery-projects/${ID}/status$`), backendPath: (p) => p.replace(/^delivery-projects/, 'project'), fields: ['from', 'to'], project: projections.deliveryProject },
+  { pattern: new RegExp(`^delivery-projects/${ID}/tasks$`), backendPath: (p) => p.replace(/^delivery-projects/, 'project'), fields: ['title', 'description', 'priority', 'assignedEmployeeId', 'dueAt', 'estimatedEffort'], project: projections.createdFlag },
+  { pattern: new RegExp(`^delivery-projects/${ID}/tasks/${ID}/status$`), backendPath: (p) => p.replace(/^delivery-projects/, 'project'), fields: ['from', 'to'], project: projections.deliveryProject },
+  { pattern: new RegExp(`^delivery-projects/${ID}/tasks/${ID}/assign$`), backendPath: (p) => p.replace(/^delivery-projects/, 'project'), fields: ['employeeId'], project: projections.deliveryProject },
+  { pattern: new RegExp(`^automation/workflows/${ID}/execute$`), fields: ['category', 'location', 'radiusMeters', 'maxResults', 'variant'], project: (v) => (typeof v === 'object' && v !== null ? v : undefined) },
+  { pattern: new RegExp(`^automation/workflows/${ID}/deploy$`), fields: ['activate'], project: (v) => (typeof v === 'object' && v !== null ? v : undefined) },
 ];
 
 const noStore = { 'Cache-Control': 'no-store' };
@@ -107,7 +134,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ path: strin
   if (!token) return NextResponse.json({ message: 'Not authenticated' }, { status: 401 });
 
   // Query strings are not forwarded: no consumer needs them, and allowlisted paths stay exact.
-  const r = await backendFetch<unknown>(path, { companyId, token, signal: req.signal });
+  const targetPath = rule.backendPath ? rule.backendPath(path) : path;
+  const r = await backendFetch<unknown>(targetPath, { companyId, token, signal: req.signal });
   let res: NextResponse;
   if (!r.ok) {
     res = NextResponse.json(r.error, { status: r.status, headers: noStore });
@@ -128,13 +156,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ path: stri
   if (!rule) return NextResponse.json({ message: 'Not available' }, { status: 404 });
 
   const companyId = req.headers.get(COMPANY_HEADER) ?? undefined;
-  if (!companyId || !isSafeId(companyId)) return NextResponse.json({ message: 'Company context required' }, { status: 400 });
+  if (companyId !== undefined && !isSafeId(companyId)) return NextResponse.json({ message: 'Invalid company context' }, { status: 400 });
+  if (!rule.companyOptional && (!companyId || !isSafeId(companyId))) return NextResponse.json({ message: 'Company context required' }, { status: 400 });
   const token = await readSessionToken();
   if (!token) return NextResponse.json({ message: 'Not authenticated' }, { status: 401 });
 
   const raw = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const body = Object.fromEntries(rule.fields.filter((k) => typeof raw?.[k] === 'string').map((k) => [k, (raw[k] as string).slice(0, 2000)]));
-  const r = await backendFetch<unknown>(path, { method: 'POST', body, companyId, token, signal: req.signal });
+  const body = Object.fromEntries(rule.fields.filter((k) => typeof raw?.[k] === 'string').map((k) => [k, (raw[k] as string).slice(0, rule.max ?? 2000)]));
+  const targetPath = rule.backendPath ? rule.backendPath(path) : path;
+  const r = await backendFetch<unknown>(targetPath, { method: 'POST', body, companyId, token, signal: req.signal });
   const res = r.ok
     ? NextResponse.json(rule.project(r.data, companyId) ?? { message: 'Not found' }, { status: r.status, headers: noStore })
     : NextResponse.json(r.error, { status: r.status, headers: noStore });

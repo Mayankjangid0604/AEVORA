@@ -3,6 +3,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WorldStateEventService } from '../world-state-gateway/world-state-event.service';
 import { V12EntityType, V12EventType } from '@aevora/shared';
 
+/**
+ * Payload marker on PERSON events emitted by the capacity reconciler itself. SpatialService ignores
+ * these for reconciliation triggers, otherwise reconcile -> event -> reconcile loops forever.
+ */
+export const HQ_CAPACITY_RECONCILE_ORIGIN = 'HQ_CAPACITY_RECONCILE';
+
 export interface HqCapacityPolicy {
   /** Maximum number of workspaces (desks) configured per department room */
   workspacesPerDepartmentRoom: number;
@@ -739,6 +745,7 @@ export class HqCapacityService {
           spatialState: 'UNAVAILABLE',
           isOccupied: false,
           statusChanged: 'TERMINATED',
+          origin: HQ_CAPACITY_RECONCILE_ORIGIN,
         });
       }
     }
@@ -879,6 +886,7 @@ export class HqCapacityService {
             buildingId: assignedWs.buildingId,
             currentActivity: emp.activity || 'WORKING',
             spatialState: 'AT_WORKSPACE',
+            origin: HQ_CAPACITY_RECONCILE_ORIGIN,
           },
           company.id,
         );

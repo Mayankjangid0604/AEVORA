@@ -94,6 +94,7 @@ export class CompanyController {
 
   @Roles('CHAIRMAN')
   @Patch(':id')
+  @Post(':id/update')
   async update(
     @Param('id') id: string,
     @Body() body: { name?: string; legalName?: string; description?: string },

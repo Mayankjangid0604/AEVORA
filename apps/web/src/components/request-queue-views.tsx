@@ -9,12 +9,13 @@ import { Timestamp } from './intelligence-views';
 import { QueryError, SectionSkeleton } from './query-state';
 import { StatusBadge } from './status-badge';
 import { SystemState } from './system-state';
+import { AutomationLine } from './pipeline-views';
 
 /** Must match TRANSITIONS in apps/api/src/inquiry/intake.ts (the API enforces it; this only offers valid buttons). */
 const NEXT: Record<string, { to: string; label: string }[]> = {
   NEW: [{ to: 'UNDER_REVIEW', label: 'Start review' }, { to: 'REJECTED', label: 'Reject' }],
   UNDER_REVIEW: [{ to: 'QUALIFIED', label: 'Qualify' }, { to: 'REJECTED', label: 'Reject' }],
-  QUALIFIED: [{ to: 'CONVERTED', label: 'Mark converted' }, { to: 'REJECTED', label: 'Reject' }],
+  QUALIFIED: [{ to: 'CONVERTED', label: 'Convert to client + opportunity' }, { to: 'REJECTED', label: 'Reject' }],
   REJECTED: [{ to: 'UNDER_REVIEW', label: 'Reopen' }],
   CONVERTED: [],
 };
@@ -92,6 +93,7 @@ function RequestDetail({ companyId, id }: { companyId: string; id: string }) {
         <dt className="text-muted">Source</dt><dd>{r.source ?? '—'}</dd>
       </dl>
       <p className="whitespace-pre-wrap">{r.description}</p>
+      <AutomationLine companyId={companyId} inquiryId={id} />
       <div className="flex flex-wrap gap-2">
         {(NEXT[r.status] ?? []).map((t) => (
           <button key={t.to} type="button" className={btn} disabled={move.isPending} onClick={() => move.mutate({ from: r.status, to: t.to })}>{t.label}</button>

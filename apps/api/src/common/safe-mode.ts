@@ -25,7 +25,24 @@ export function blockedInSafeMode(kind: string, log: (line: string) => void = co
 }
 
 export function isAllowedInSafeMode(url: string): boolean {
-  try { return LOCAL_HOSTS.has(new URL(url).hostname); } catch { return false; }
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase().replace(/\.$/, '');
+    if (LOCAL_HOSTS.has(hostname)) return true;
+    const allowedEnv = process.env.SAFE_MODE_ALLOWED_HOSTS;
+    if (allowedEnv) {
+      const allowedSet = new Set(
+        allowedEnv
+          .split(',')
+          .map((s) => s.trim().toLowerCase().replace(/\.$/, ''))
+          .filter(Boolean)
+      );
+      if (allowedSet.has(hostname)) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 export function installSafeModeNetworkGuard(log: (line: string) => void = console.warn) {

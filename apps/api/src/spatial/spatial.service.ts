@@ -7,7 +7,7 @@ import { NavigationService } from './navigation.service';
 import { V12EventType } from '@aevora/shared';
 import { deriveEmployeeSpatialState, EmployeeSpatialState } from '@aevora/shared';
 
-import { HqCapacityService } from './hq-capacity.service';
+import { HqCapacityService, HQ_CAPACITY_RECONCILE_ORIGIN } from './hq-capacity.service';
 
 export interface DigitalHumanEmbodiment {
   employeeId: string;
@@ -39,6 +39,8 @@ export class SpatialService implements OnModuleInit, OnModuleDestroy {
     this.sub = this.worldStateEventService.getGlobalStream().subscribe(({ companyId, event }) => {
       try {
         if (event.entityType === V12EntityType.PERSON) {
+          // Events the capacity reconciler emitted itself must not trigger another reconcile (feedback loop).
+          if (event.payload?.origin === HQ_CAPACITY_RECONCILE_ORIGIN) return;
           const empId = event.entityId.replace(/^(v12_person_|spatial_person_|person_)/, '');
           this.triggerEmployeeReconciliation(empId);
           this.handlePersonActivityChange(empId, event);

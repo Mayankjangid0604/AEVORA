@@ -1,0 +1,151 @@
+{
+  "name": "Enrich Company Data and Dual-Path Qualification - Aevora",
+  "nodes": [
+    {
+      "id": "f53b19c5-dcb9-4239-8be8-122a9e479a55",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "webhookId": "aevora-enrichment-trigger",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aevora-enrichment-trigger",
+        "responseMode": "onReceived",
+        "responseData": "firstEntryJson",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "eQMpPTdYlqA3dAdw",
+          "name": "Aevora Integration Header Auth"
+        }
+      }
+    },
+    {
+      "id": "1a2b3c4d-5e6f-4a0b-9c1d-2e3f4a5b6c7d",
+      "name": "When clicking \"Execute Workflow\"",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        260,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "62d84f70-43a2-43aa-815e-56842230c9b1",
+      "name": "Prepare Enrichment Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        100
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first()?.json || {};\nconst companyId = item.companyId || item.body?.companyId || '';\nconst limit = item.limit || item.body?.limit || 10;\nconst leadIds = item.leadIds || item.body?.leadIds || [];\nconst forceRefresh = !!(item.forceRefresh || item.body?.forceRefresh);\nconst apiUrl = item.apiUrl || item.body?.apiUrl || 'http://127.0.0.1:13000';\n\nreturn [{\n  json: {\n    companyId,\n    limit,\n    leadIds,\n    forceRefresh,\n    apiUrl,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      }
+    },
+    {
+      "id": "e451cc56-0cef-4bd8-b13e-210d5ddf3001",
+      "name": "Execute AEVORA Dual-Path Lead Enrichment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        820,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.apiUrl }}/automation/webhook/enrichment",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-company-id",
+              "value": "={{ $json.companyId }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"leadIds\": {{ JSON.stringify($json.leadIds) }},\n  \"limit\": {{ $json.limit }},\n  \"forceRefresh\": {{ $json.forceRefresh }}\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "eQMpPTdYlqA3dAdw",
+          "name": "Aevora Integration Header Auth"
+        }
+      }
+    },
+    {
+      "id": "78ae2393-3744-445a-bf28-6dab1f4a8aec",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -180
+      ],
+      "parameters": {
+        "width": 420,
+        "height": 480,
+        "content": "# AEVORA Automation #2: Lead Enrichment & Verification\n\nThis workflow receives lead enrichment requests from AEVORA, connects to the AEVORA lead enrichment engine, evaluates website reachability (SSRF-guarded), performs native DNS/MX verification, and extracts business facts using local Ollama.\n\n- Zero-Cost Local Inference: Ollama qwen2.5:7b\n- Native Node.js DNS/MX checks\n- Company Isolation: Verified at API boundary\n- Persistence: Saved to SalesLead.metadata.enrichment and LeadGenAudit"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Enrichment Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking \"Execute Workflow\"": {
+      "main": [
+        [
+          {
+            "node": "Prepare Enrichment Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Enrichment Request": {
+      "main": [
+        [
+          {
+            "node": "Execute AEVORA Dual-Path Lead Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  }
+}

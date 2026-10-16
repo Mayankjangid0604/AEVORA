@@ -1,6 +1,8 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, BadRequestException, SetMetadata } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, BadRequestException, SetMetadata, Optional } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { IS_PUBLIC_KEY } from './jwt-auth.guard';
 
 export const INTEGRATION_AUTH_KEY = 'integrationAuth';
 export const IntegrationAuth = () => SetMetadata(INTEGRATION_AUTH_KEY, true);
@@ -14,13 +16,24 @@ export const IntegrationAuth = () => SetMetadata(INTEGRATION_AUTH_KEY, true);
  */
 @Injectable()
 export class IntegrationApiKeyGuard implements CanActivate {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly reflector?: Reflector,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (context.getType() !== 'http') return true;
     const request = context.switchToHttp().getRequest();
 
     if (request.user) return true;
+
+    if (this.reflector && typeof context.getHandler === 'function') {
+      const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+        context.getHandler(),
+        typeof context.getClass === 'function' ? context.getClass() : null as any,
+      ]);
+      if (isPublic) return true;
+    }
 
     const key = request.headers['x-integration-key'];
     if (!key || typeof key !== 'string') {
